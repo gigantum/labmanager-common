@@ -16,6 +16,32 @@ The class loads configuration information found in a configuration file in this 
 The configuration file is YAML based and should be used for all parameter storage. Parameters should be broken into 
 sections based on the component.
 
+### logging
+
+A pre-configured logger is available from the class from lmcommon.logging.LMLogger. 
+
+It loads logger configuration from a configuration json file in this order:
+
+1. Explicity passed into the constructor
+2. A file in the "installed" locations (`/etc/gigantum/logging.json`)
+3. The default file in the package (`/logging/logging.json.default`)
+
+If the default file is loaded, it is assumed that the log file location will not be available and a temporary file is 
+automatically used.
+
+The current configuration logs `INFO` messages and higher. If you wish to log debug messages, you must set the log level
+to `DEBUG`. The python logger used is named `labmanager`.
+
+Example usage:
+
+```
+lmlog = LMLogger().logger
+
+lmlog.info("This is my info message")
+lmlog.warning("This is my warning message")
+lmlog.error("This is my error message")
+```
+
 
 ## Testing
 
