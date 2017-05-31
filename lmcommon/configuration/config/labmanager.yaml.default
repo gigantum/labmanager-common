@@ -1,0 +1,9 @@
+# Configuration File for the Gigantum LabManager
+
+# Core configuration
+core:
+  team_mode: false # Should the LabManager run in Team Mode (multi-user)
+
+# Git Configuration
+git:
+  working_directory: "~/gigantum"
