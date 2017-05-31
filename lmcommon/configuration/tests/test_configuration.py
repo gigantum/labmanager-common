@@ -20,7 +20,6 @@
 
 import pytest
 import tempfile
-import yaml
 from unittest.mock import PropertyMock, patch
 from lmcommon.configuration import Configuration
 
