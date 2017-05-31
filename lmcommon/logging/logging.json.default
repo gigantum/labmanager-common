@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "loggers": {
+    "labmanager": {
+      "level": "INFO",
+      "handlers": ["fileHandler", "consoleHandler"],
+      "propagate": 0
+    }
+  },
+  "handlers": {
+    "consoleHandler": {
+      "class": "logging.StreamHandler",
+      "level": "DEBUG",
+      "formatter": "labmanagerFormatter",
+      "stream":  "ext://sys.stdout"
+    },
+    "fileHandler": {
+      "class": "logging.handlers.RotatingFileHandler",
+      "formatter": "labmanagerFormatter",
+      "filename": "/var/log/gigantum/labmanager.log",
+      "maxBytes": 2048,
+      "backupCount": 20
+    }
+  },
+  "formatters": {
+    "labmanagerFormatter": {
+      "format": "%(levelname)s - %(asctime)s - %(message)s"
+    }
+  }
+}

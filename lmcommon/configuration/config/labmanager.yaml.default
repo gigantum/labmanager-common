@@ -3,6 +3,7 @@
 # Core configuration
 core:
   team_mode: false # Should the LabManager run in Team Mode (multi-user)
+  logging_config: "/etc/gigantum/logging.json" # Location of configuration file for the LabManager logger
 
 # Git Configuration
 git:
