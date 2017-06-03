@@ -24,7 +24,7 @@ import importlib
 # Dictionary of supported implementations.
 # Key is the value to put in the config_dict["backend"].
 # Value is a list with the first entry being the module and the second the class
-SUPPORTED_GIT_INTERFACES = {'filesystem': ["lmcommon.gitlib.git_local", "GitFilesystem"]}
+SUPPORTED_GIT_INTERFACES = {'filesystem': ["lmcommon.gitlib.git_fs", "GitFilesystem"]}
 
 
 def get_git_interface(config_dict):
@@ -66,6 +66,15 @@ class GitRepoInterface(metaclass=abc.ABCMeta):
         """
         self.config = config_dict
         self.current_branch = None
+
+    @abc.abstractmethod
+    def get_current_branch_name(self):
+        """Method to get the current branch name
+
+        Returns:
+            str
+        """
+        raise NotImplemented
 
     # CREATE METHODS
     @abc.abstractmethod

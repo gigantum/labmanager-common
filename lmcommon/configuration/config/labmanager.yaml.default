@@ -7,4 +7,5 @@ core:
 
 # Git Configuration
 git:
+  backend: "filesystem"
   working_directory: "~/gigantum"
