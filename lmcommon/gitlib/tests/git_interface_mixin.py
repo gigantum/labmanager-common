@@ -22,6 +22,7 @@ import tempfile
 import os
 import shutil
 import uuid
+import datetime
 from ...gitlib import GitFilesystem, GitAuthor
 from git import Repo
 
@@ -104,6 +105,22 @@ class GitInterfaceMixin(object):
         git.clone('https://github.com/gigantum/gigantum.github.io.git')
         assert git.get_current_branch_name() == "master"
         assert os.path.isfile(os.path.join(mock_config["working_directory"], "index.html")) is True
+
+    def test_author_invalid(self, mock_initialized):
+        """Test changing the git author info"""
+        git = mock_initialized[0]
+
+        with pytest.raises(ValueError):
+            git.update_author('Test User')
+
+        with pytest.raises(ValueError):
+            git.update_author('Test User 1', committer='Test User 2')
+
+        with pytest.raises(ValueError):
+            git.update_author('Test User 1', committer=GitAuthor("Author", "a@test.com"))
+
+        with pytest.raises(ValueError):
+            git.update_author(GitAuthor("Author", "a@test.com"), committer="Test User 2")
 
     def test_author(self, mock_initialized):
         """Test changing the git author info"""
@@ -426,7 +443,7 @@ class GitInterfaceMixin(object):
         git = mock_initialized[0]
         working_directory = mock_initialized[1]
 
-        # Create files
+        # Create file
         with open(os.path.join(working_directory, "test.txt"), 'wt') as dt:
             dt.write("Line Top\n")
             for val in range(0, 30):
@@ -457,3 +474,262 @@ class GitInterfaceMixin(object):
         assert len(diff_info.keys()) == 1
         assert "test.txt" in diff_info
         assert len(diff_info["test.txt"]) == 2
+
+    def test_diff_commits(self, mock_initialized):
+        """Test getting the diff between commits in a branch"""
+        git = mock_initialized[0]
+        working_directory = mock_initialized[1]
+
+        # Create files
+        with open(os.path.join(working_directory, "test1.txt"), 'wt') as dt:
+            dt.write("File number 1\n")
+        with open(os.path.join(working_directory, "test2.txt"), 'wt') as dt:
+            dt.write("File number 2\n")
+        git.add(os.path.join(working_directory, "test1.txt"))
+        git.add(os.path.join(working_directory, "test2.txt"))
+        git.repo.index.commit("commit 1")
+        commit1 = git.repo.head.commit
+
+        # Edit file 1 - Add a line
+        with open(os.path.join(working_directory, "test1.txt"), 'wt') as dt:
+            dt.write("File 1 has changed\n")
+        git.add(os.path.join(working_directory, "test1.txt"))
+        git.repo.index.commit("commit 2")
+        commit2 = git.repo.head.commit
+
+        # Edit file 2
+        with open(os.path.join(working_directory, "test2.txt"), 'wt') as dt:
+            dt.write("File number 2 changed\n")
+        git.add(os.path.join(working_directory, "test2.txt"))
+        git.repo.index.commit("commit 3")
+        commit3 = git.repo.head.commit
+
+        # Create another file
+        with open(os.path.join(working_directory, "test3.txt"), 'wt') as dt:
+            dt.write("File number 3\n")
+        git.add(os.path.join(working_directory, "test3.txt"))
+        git.repo.index.commit("commit 4")
+        commit4 = git.repo.head.commit
+
+        # Diff with defaults (HEAD compared to previous commit)
+        diff_info = git.diff_commits()
+
+        assert len(diff_info.keys()) == 1
+        assert "test3.txt" in diff_info
+        assert len(diff_info["test3.txt"]) == 1
+
+        # Diff HEAD with first commit
+        diff_info = git.diff_commits(commit_a=commit1.hexsha)
+
+        assert len(diff_info.keys()) == 3
+        assert "test1.txt" in diff_info
+        assert "test2.txt" in diff_info
+        assert "test3.txt" in diff_info
+        assert len(diff_info["test1.txt"]) == 1
+        assert len(diff_info["test2.txt"]) == 1
+        assert len(diff_info["test3.txt"]) == 1
+
+        # Diff two middle commits
+        diff_info = git.diff_commits(commit_a=commit2.hexsha, commit_b=commit3.hexsha)
+
+        assert len(diff_info.keys()) == 1
+        assert "test2.txt" in diff_info
+        assert len(diff_info["test2.txt"]) == 1
+
+    def test_commit(self, mock_initialized):
+        """Test making a commit"""
+        git = mock_initialized[0]
+        working_directory = mock_initialized[1]
+
+        # Create files
+        with open(os.path.join(working_directory, "test1.txt"), 'wt') as dt:
+            dt.write("File number 1\n")
+        subdir = os.path.join(working_directory, "subdir")
+        os.makedirs(subdir)
+        with open(os.path.join(subdir, "subdir_file.txt"), 'wt') as dt:
+            dt.write("entry subdir")
+        git.add("test1.txt")
+        git.add(os.path.join("subdir", "subdir_file.txt"))
+        with open(os.path.join(working_directory, "untracked.txt"), 'wt') as dt:
+            dt.write("Untracked File\n")
+
+        status = git.status()
+        assert len(status["staged"]) == 2
+        assert len(status["unstaged"]) == 0
+        assert len(status["untracked"]) == 1
+        assert status["untracked"] == ["untracked.txt"]
+        assert status["staged"][1] == ("test1.txt", "added")
+        assert status["staged"][0] == (os.path.join("subdir", "subdir_file.txt"), "added")
+
+        # Make commit
+        git.commit("commit 1")
+
+        # Verify
+        status = git.status()
+        assert len(status["staged"]) == 0
+        assert len(status["unstaged"]) == 0
+        assert len(status["untracked"]) == 1
+        assert status["untracked"] == ["untracked.txt"]
+
+        assert git.repo.head.commit.message == "commit 1"
+        assert git.repo.head.commit.author.name == "Gigantum AutoCommit"
+        assert git.repo.head.commit.author.email == "noreply@gigantum.io"
+
+    def test_commit_with_author(self, mock_initialized):
+        """Test making a commit"""
+        git = mock_initialized[0]
+        working_directory = mock_initialized[1]
+
+        # Create files
+        with open(os.path.join(working_directory, "test1.txt"), 'wt') as dt:
+            dt.write("File number 1\n")
+        git.add("test1.txt")
+
+        status = git.status()
+        assert len(status["staged"]) == 1
+        assert len(status["unstaged"]) == 0
+        assert len(status["untracked"]) == 0
+        assert status["staged"][0] == ("test1.txt", "added")
+
+        # Make commit
+        git.commit("commit message test",
+                   author=GitAuthor("Test User 1", "user@gigantum.io"),
+                   committer=GitAuthor("Test User 2", "user2@gigantum.io"))
+
+        # Verify
+        status = git.status()
+        assert len(status["staged"]) == 0
+        assert len(status["unstaged"]) == 0
+        assert len(status["untracked"]) == 0
+
+        assert git.repo.head.commit.message == "commit message test"
+        assert git.repo.head.commit.author.name == "Test User 1"
+        assert git.repo.head.commit.author.email == "user@gigantum.io"
+        assert git.repo.head.commit.committer.name == "Test User 2"
+        assert git.repo.head.commit.committer.email == "user2@gigantum.io"
+        assert git.author.__dict__ == GitAuthor("Test User 1", "user@gigantum.io").__dict__
+        assert git.committer.__dict__ == GitAuthor("Test User 2", "user2@gigantum.io").__dict__
+
+    def test_log(self, mock_initialized):
+        """Test getting commit history"""
+        git = mock_initialized[0]
+        working_directory = mock_initialized[1]
+
+        # Create files
+        commit_list = []
+        with open(os.path.join(working_directory, "test1.txt"), 'wt') as dt:
+            dt.write("File number 1\n")
+        git.add(os.path.join(working_directory, "test1.txt"))
+        git.repo.index.commit("commit 1")
+        commit_list.append(git.repo.head.commit)
+
+        with open(os.path.join(working_directory, "test2.txt"), 'wt') as dt:
+            dt.write("File number 2\n")
+        git.add(os.path.join(working_directory, "test2.txt"))
+        git.repo.index.commit("commit 2")
+        commit_list.append(git.repo.head.commit)
+
+        # Edit file 1 - Add a line
+        with open(os.path.join(working_directory, "test1.txt"), 'wt') as dt:
+            dt.write("File 1 has changed\n")
+        git.add(os.path.join(working_directory, "test1.txt"))
+        git.repo.index.commit("commit 3")
+        commit_list.append(git.repo.head.commit)
+
+        # Edit file 2
+        with open(os.path.join(working_directory, "test2.txt"), 'wt') as dt:
+            dt.write("File number 2 changed\n")
+        git.add(os.path.join(working_directory, "test2.txt"))
+        git.repo.index.commit("commit 4")
+        commit_list.append(git.repo.head.commit)
+
+        # Create another file
+        with open(os.path.join(working_directory, "test3.txt"), 'wt') as dt:
+            dt.write("File number 3\n")
+        git.add(os.path.join(working_directory, "test3.txt"))
+        git.commit("commit 5", author=GitAuthor("U1", "test@gigantum.io"),
+                   committer=GitAuthor("U2", "test2@gigantum.io"))
+        commit_list.append(git.repo.head.commit)
+
+        # Get history
+        log_info = git.log()
+
+        assert len(log_info) == 6
+        # Check, reverse commit_list and drop last commit from log (which was the initial commit in the
+        # setup fixture). This orders from most recent to least and checks
+        for truth, log in zip(reversed(commit_list), log_info[:-1]):
+            assert log["author"] == {"name": truth.author.name, "email": truth.author.email}
+            assert log["committer"] == {"name": truth.committer.name, "email": truth.committer.email}
+            assert log["message"] == truth.message
+            assert log["commit"] == truth.hexsha
+
+        # Get history for a single file
+        log_info = git.log(filename="test2.txt")
+
+        assert len(log_info) == 2
+        log_info[0]["message"] = "commit 4"
+        log_info[1]["message"] = "commit 2"
+
+    def test_log_filter(self, mock_initialized):
+        """Test getting commit history with some filtering"""
+        git = mock_initialized[0]
+        working_directory = mock_initialized[1]
+
+        # Create files
+        commit_list = []
+        with open(os.path.join(working_directory, "test1.txt"), 'wt') as dt:
+            dt.write("File number 1\n")
+        git.add(os.path.join(working_directory, "test1.txt"))
+        git.repo.index.commit("commit 1")
+        commit_list.append(git.repo.head.commit)
+
+        with open(os.path.join(working_directory, "test2.txt"), 'wt') as dt:
+            dt.write("File number 2\n")
+        git.add(os.path.join(working_directory, "test2.txt"))
+        git.repo.index.commit("commit 2")
+        commit_list.append(git.repo.head.commit)
+
+        # Edit file 1 - Add a line
+        with open(os.path.join(working_directory, "test1.txt"), 'wt') as dt:
+            dt.write("File 1 has changed\n")
+        git.add(os.path.join(working_directory, "test1.txt"))
+        git.repo.index.commit("commit 3")
+        commit_list.append(git.repo.head.commit)
+
+        # Edit file 2
+        with open(os.path.join(working_directory, "test2.txt"), 'wt') as dt:
+            dt.write("File number 2 changed\n")
+        git.add(os.path.join(working_directory, "test2.txt"))
+        git.repo.index.commit("commit 4")
+        commit_list.append(git.repo.head.commit)
+
+        # Create another file
+        with open(os.path.join(working_directory, "test3.txt"), 'wt') as dt:
+            dt.write("File number 3\n")
+        git.add(os.path.join(working_directory, "test3.txt"))
+        git.commit("commit 5", author=GitAuthor("U1", "test@gigantum.io"),
+                   committer=GitAuthor("U2", "test2@gigantum.io"))
+        commit_list.append(git.repo.head.commit)
+
+        # Get history, limit to 2
+        log_info = git.log(max_count=2)
+
+        assert len(log_info) == 2
+        log_info[0]["message"] = "commit 5"
+        log_info[1]["message"] = "commit 4"
+
+        # Get history, limit to 2 and skip 2
+        log_info = git.log(max_count=2, skip=2)
+
+        assert len(log_info) == 2
+        log_info[0]["message"] = "commit 3"
+        log_info[1]["message"] = "commit 2"
+
+        # Get history, limit to 1 day in the future
+        log_info = git.log(since=datetime.datetime.now() + datetime.timedelta(days=1))
+        assert len(log_info) == 0
+
+        # Get history, limit to U1 author
+        log_info = git.log(author="U1")
+        assert len(log_info) == 1
+        log_info[0]["message"] = "commit 5"

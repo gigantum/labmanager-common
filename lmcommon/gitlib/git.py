@@ -37,6 +37,9 @@ def get_git_interface(config_dict):
 
         Args:
             config_dict(dict): Dictionary of configuration information
+
+        Returns:
+            (GitRepoInterface)
         """
 
         if "backend" not in config_dict:
@@ -101,11 +104,15 @@ class GitRepoInterface(metaclass=abc.ABCMeta):
             None
         """
         if author:
+            if type(author) != GitAuthor:
+                raise ValueError("Must provide a GitAuthor instance to specify the author")
             self.author = author
         else:
             self.author = GitAuthor("Gigantum AutoCommit", "noreply@gigantum.io")
 
         if committer:
+            if type(committer) != GitAuthor:
+                raise ValueError("Must provide a GitAuthor instance to specify the committer")
             self.committer = committer
         else:
             self.committer = self.author
@@ -230,41 +237,68 @@ class GitRepoInterface(metaclass=abc.ABCMeta):
         raise NotImplemented
 
     @abc.abstractmethod
-    def commit(self, message, all=False, author=None, amend=False):
+    def diff_commits(self, commit_a='HEAD~1', commit_b='HEAD', ignore_white_space=True):
+        """Method to return the diff between two commits
+
+        Returns a dictionary of the format:
+
+            {
+                "<filename>": [(<line_string>, <change_string>), ...],
+                ...
+            }
+
+        Args:
+            commit_a(str): Commit hash for the first commit
+            commit_b(str): Commit hash for the second commit
+            ignore_white_space (bool): If True, ignore whitespace during diff. True if omitted
+
+        Returns:
+            dict
+        """
+        raise NotImplemented
+
+    @abc.abstractmethod
+    def commit(self, message, author=None, committer=None):
         """Method to perform a commit operation
+
+        Commit operation should use self.author and self.committer. If author/committer provided
+        the implementation should update self.author and self.committer
 
         Args:
             message(str): Commit message
-            all(bool): If True, commit all changes in tracked files
-            author(str): If set, replace the author with the provided string
-            amend(bool): If True, ammend the previous commit (typically used to fix a commit message)
+            author(GitAuthor): User info for the author, if omitted, assume the "system"
+            committer(GitAuthor): User info for the committer. If omitted, set to the author
 
         Returns:
-
+            None
         """
         raise NotImplemented
     # LOCAL CHANGE METHODS
 
     # HISTORY METHODS
     @abc.abstractmethod
-    def log(self, filename=None):
-        """Method to get the commit history, optionally for a single file
+    def log(self, max_count=10, filename=None, skip=None, since=None, author=None):
+        """Method to get the commit history, optionally for a single file, with pagination support
 
         Returns an ordered list of dictionaries, one entry per commit. Dictionary format:
 
             {
-                "commit": <commit>,
-                "author": <author>,
-                "datetime": <datetime>,
-                "message: <commit message>
+                "commit": <commit hash (str)>,
+                "author": {"name": <name (str)>, "email": <email (str)>},
+                "committer": {"name": <name (str)>, "email": <email (str)>},
+                "committed_on": <commit datetime (datetime.datetime)>,
+                "message: <commit message (str)>
             }
-
 
         Args:
             filename(str): Optional filename to filter on
+            max_count(int): Optional number of commit records to return
+            skip(int): Optional number of commit records to skip (supports building pagination)
+            since(datetime.datetime): Optional *date* to limit on
+            author(str): Optional filter based on author name
 
         Returns:
-            list(dict)
+            (list(dict))
         """
         raise NotImplemented
 

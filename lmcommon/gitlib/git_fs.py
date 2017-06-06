@@ -180,28 +180,7 @@ class GitFilesystem(GitRepoInterface):
 
         # TODO: DMK look into if force option is needed
 
-    def diff_file(self, filename, revision="HEAD"):
-        """Method to return the diff for a file, optionally compared to a specific commit
-
-        Args:
-            filename(str): relative file path
-            revision (str): Optional commit hash. If omitted, the current HEAD will be used
-
-        Returns:
-            str
-        """
-        commit = self.repo.commit(rev=revision)
-        # Git ignore white space at the end of line, empty lines,
-        # renamed files and also copied files
-        diff_index = commit.diff(revision + '~1', create_patch=True, ignore_blank_lines=True,
-                                 ignore_space_at_eol=True, diff_filter='cr')
-
-        #print(reduce(lambda x, y: str(x) + str(y), diff_index))
-
-        tree_obj = self.repo.head.commit.tree
-        self.repo.git.diff(tree_obj)
-
-    # todo diff branches, commits
+    # todo diff branches
     @staticmethod
     def _parse_diff_strings(value):
         """Method to parse diff strings into chunks
@@ -250,7 +229,10 @@ class GitFilesystem(GitRepoInterface):
         result = {}
         for change in changes:
             detail = self._parse_diff_strings(change.diff)
-            result[change.b_path] = detail
+            if not change.b_path:
+                result[change.a_path] = detail
+            else:
+                result[change.b_path] = detail
 
         return result
 
@@ -278,46 +260,117 @@ class GitFilesystem(GitRepoInterface):
         result = {}
         for change in changes:
             detail = self._parse_diff_strings(change.diff)
-            result[change.b_path] = detail
+            if not change.b_path:
+                result[change.a_path] = detail
+            else:
+                result[change.b_path] = detail
 
         return result
 
-    def commit(self, message, all=False, author=None, amend=False):
+    def diff_commits(self, commit_a='HEAD~1', commit_b='HEAD', ignore_white_space=True):
+        """Method to return the diff between two commits
+
+        If params are omitted, it compares the current HEAD tree with the previous commit tree
+
+        Returns a dictionary of the format:
+
+            {
+                "<filename>": [(<line_string>, <change_string>), ...],
+                ...
+            }
+
+        Args:
+            commit_a(str): Commit hash for the first commit, defaults to the previous commit
+            commit_b(str): Commit hash for the second commit, defaults to the current HEAD
+            ignore_white_space (bool): If True, ignore whitespace during diff. True if omitted
+
+        Returns:
+            dict
+        """
+        commit_obj = self.repo.commit(commit_a)
+
+        changes = commit_obj.diff(commit_b, create_patch=True,
+                                  ignore_blank_lines=ignore_white_space,
+                                  ignore_space_at_eol=ignore_white_space,
+                                  diff_filter='cr')
+        result = {}
+        for change in changes:
+            detail = self._parse_diff_strings(change.diff)
+            if not change.b_path:
+                result[change.a_path] = detail
+            else:
+                result[change.b_path] = detail
+
+        return result
+
+    def commit(self, message, author=None, committer=None):
         """Method to perform a commit operation
 
         Args:
             message(str): Commit message
-            all(bool): If True, commit all changes in tracked files
-            author(str): If set, replace the author with the provided string
-            amend(bool): If True, ammend the previous commit (typically used to fix a commit message)
+            author(GitAuthor): User info for the author, if omitted, assume the "system"
+            committer(GitAuthor): User info for the committer. If omitted, set to the author
 
         Returns:
-
+            None
         """
-        raise NotImplemented
+        if author:
+            self.update_author(author, committer=committer)
+
+        self.repo.index.commit(message, author=self.author, committer=self.committer)
     # LOCAL CHANGE METHODS
 
     # HISTORY METHODS
-    def log(self, filename=None):
-        """Method to get the commit history, optionally for a single file
+    def log(self, max_count=10, filename=None, skip=None, since=None, author=None):
+        """Method to get the commit history, optionally for a single file, with pagination support
 
         Returns an ordered list of dictionaries, one entry per commit. Dictionary format:
 
             {
-                "commit": <commit>,
-                "author": <author>,
-                "datetime": <datetime>,
-                "message: <commit message>
+                "commit": <commit hash (str)>,
+                "author": {"name": <name (str)>, "email": <email (str)>},
+                "committer": {"name": <name (str)>, "email": <email (str)>},
+                "committed_on": <commit datetime (datetime.datetime)>,
+                "message: <commit message (str)>
             }
-
 
         Args:
             filename(str): Optional filename to filter on
+            max_count(int): Optional number of commit records to return
+            skip(int): Optional number of commit records to skip (supports building pagination)
+            since(datetime.datetime): Optional *date* to limit on
+            author(str): Optional filter based on author name
 
         Returns:
-            list(dict)
+            (list(dict))
         """
-        raise NotImplemented
+        kwargs = {"max_count": max_count}
+
+        if filename:
+            kwargs["paths"] = [filename]
+
+        if skip:
+            kwargs["skip"] = skip
+
+        if since:
+            kwargs["since"] = since.strftime("%B %d %Y")
+
+        if author:
+            kwargs["author"] = author
+
+        commits = list(self.repo.iter_commits(self.get_current_branch_name(), **kwargs))
+
+        result = []
+        for c in commits:
+            result.append({
+                            "commit": c.hexsha,
+                            "author":  {"name": c.author.name, "email": c.author.email},
+                            "committer": {"name": c.committer.name, "email": c.committer.email},
+                            "committed_on": c.committed_datetime,
+                            "message": c.message
+                          })
+
+        return result
 
     def blame(self, filename):
         """Method to get the revision and author for each line of a file
