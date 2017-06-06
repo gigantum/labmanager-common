@@ -22,12 +22,13 @@ import tempfile
 import os
 import shutil
 import uuid
-from ...gitlib import GitFilesystem
+from ...gitlib import GitFilesystem, GitAuthor
 from git import Repo
 
 
 # Required Fixtures:
 #   - mock_config: a standard config with an empty working dir
+#   - mock_initialized: a gitlib instance initialized with an empty repo
 
 # GitFilesystem Fixtures
 @pytest.fixture()
@@ -39,6 +40,29 @@ def mock_config_filesystem():
     config = {"backend": "filesystem", "working_directory": working_dir}
 
     yield config  # provide the fixture value
+
+    # Force delete the directory
+    shutil.rmtree(working_dir)
+
+
+@pytest.fixture()
+def mock_initialized_filesystem():
+    """Create an initialized git lib instance
+
+    Returns:
+        (gitlib.git.GitRepoInterface, str): the instance, the working dir
+    """
+    # Create temporary working directory
+    working_dir = os.path.join(tempfile.gettempdir(), uuid.uuid4().hex)
+    os.makedirs(working_dir)
+
+    config = {"backend": "filesystem", "working_directory": working_dir}
+
+    # Init the empty repo
+    create_dummy_repo(working_dir)
+    git = GitFilesystem(config)
+
+    yield git, working_dir  # provide the fixture value
 
     # Force delete the directory
     shutil.rmtree(working_dir)
@@ -80,6 +104,31 @@ class GitInterfaceMixin(object):
         git.clone('https://github.com/gigantum/gigantum.github.io.git')
         assert git.get_current_branch_name() == "master"
         assert os.path.isfile(os.path.join(mock_config["working_directory"], "index.html")) is True
+
+    def test_author(self, mock_initialized):
+        """Test changing the git author info"""
+        git = mock_initialized[0]
+
+        # Test defaults
+        assert git.author == git.committer
+        assert git.author.name == "Gigantum AutoCommit"
+        assert git.author.email == "noreply@gigantum.io"
+        assert git.committer.name == "Gigantum AutoCommit"
+        assert git.committer.email == "noreply@gigantum.io"
+
+        # Test updating just author
+        git.update_author(GitAuthor("New Name", "test@test.com"))
+        assert git.author.name == "New Name"
+        assert git.author.email == "test@test.com"
+        assert git.committer.name == "New Name"
+        assert git.committer.email == "test@test.com"
+
+        # Test updating both
+        git.update_author(GitAuthor("Author", "a@test.com"), GitAuthor("Committer", "c@test.com"))
+        assert git.author.name == "Author"
+        assert git.author.email == "a@test.com"
+        assert git.committer.name == "Committer"
+        assert git.committer.email == "c@test.com"
 
     def test_status(self, mock_config):
         """Test getting the status of a repo as it is manipulated"""
@@ -140,10 +189,10 @@ class GitInterfaceMixin(object):
         status = git.status()
 
         assert "staged" in status
-        assert status["staged"][0] == ('staged.txt', 'new')
+        assert status["staged"][0] == ('staged.txt', 'added')
         assert status["staged"][1] == ('staged_edited.txt', 'modified')
-        assert status["staged"][2] == ('subdir/subdir_file.txt', 'new')
-        assert status["staged"][3] == ('unstaged_edited.txt', 'new')
+        assert status["staged"][2] == ('subdir/subdir_file.txt', 'added')
+        assert status["staged"][3] == ('unstaged_edited.txt', 'added')
 
         assert "unstaged" in status
         assert status["unstaged"][0] == ('deleted.txt', 'deleted')
@@ -156,4 +205,255 @@ class GitInterfaceMixin(object):
         assert len(status["unstaged"]) == 2
         assert len(status["untracked"]) == 1
 
-    
+    def test_add(self, mock_initialized):
+        """Test adding a file to a repository"""
+        git = mock_initialized[0]
+        working_directory = mock_initialized[1]
+
+        # Create file
+        with open(os.path.join(working_directory, "add.txt"), 'wt') as dt:
+            dt.write("entry asdf")
+
+        # Verify untracked
+        status = git.status()
+
+        assert len(status["staged"]) == 0
+        assert len(status["unstaged"]) == 0
+        assert len(status["untracked"]) == 1
+        assert status["untracked"] == ["add.txt"]
+
+        # Add file
+        git.add(os.path.join(working_directory, "add.txt"))
+
+        # Verify untracked
+        status = git.status()
+
+        assert len(status["staged"]) == 1
+        assert len(status["unstaged"]) == 0
+        assert len(status["untracked"]) == 0
+        assert status["staged"][0] == ("add.txt", 'added')
+
+    def test_remove_staged_file(self, mock_initialized):
+        """Test removing files from a repository"""
+        git = mock_initialized[0]
+        working_directory = mock_initialized[1]
+
+        # Create file
+        with open(os.path.join(working_directory, "staged.txt"), 'wt') as dt:
+            dt.write("entry asdf")
+        git.add(os.path.join(working_directory, "staged.txt"))
+
+        # Verify staged
+        status = git.status()
+        assert len(status["staged"]) == 1
+        assert len(status["unstaged"]) == 0
+        assert len(status["untracked"]) == 0
+        assert status["staged"][0] == ("staged.txt", 'added')
+
+        # Remove
+        git.remove(os.path.join(working_directory, "staged.txt"))
+        # Verify removed
+        status = git.status()
+        assert len(status["staged"]) == 0
+        assert len(status["unstaged"]) == 0
+        assert len(status["untracked"]) == 1
+        assert status["untracked"] == ["staged.txt"]
+
+    def test_remove_committed_file(self, mock_initialized):
+        """Test removing files from a repository"""
+        git = mock_initialized[0]
+        working_directory = mock_initialized[1]
+
+        # Create file
+        with open(os.path.join(working_directory, "staged.txt"), 'wt') as dt:
+            dt.write("entry asdf")
+        git.add(os.path.join(working_directory, "staged.txt"))
+        git.repo.index.commit("Test commit")
+
+        # Verify nothing staged
+        status = git.status()
+        assert len(status["staged"]) == 0
+        assert len(status["unstaged"]) == 0
+        assert len(status["untracked"]) == 0
+
+        # Remove
+        git.remove(os.path.join(working_directory, "staged.txt"))
+        # Verify removed
+        status = git.status()
+        assert len(status["staged"]) == 1
+        assert len(status["unstaged"]) == 0
+        assert len(status["untracked"]) == 1
+        assert status["untracked"] == ["staged.txt"]
+        assert status["staged"][0] == ("staged.txt", "deleted")
+
+    def test_remove_committed_file_delete(self, mock_initialized):
+        """Test removing file from a repository and delete it"""
+        git = mock_initialized[0]
+        working_directory = mock_initialized[1]
+
+        # Create file
+        with open(os.path.join(working_directory, "staged.txt"), 'wt') as dt:
+            dt.write("entry asdf")
+        git.add(os.path.join(working_directory, "staged.txt"))
+        git.repo.index.commit("Test commit")
+
+        # Verify nothing staged
+        status = git.status()
+        assert len(status["staged"]) == 0
+        assert len(status["unstaged"]) == 0
+        assert len(status["untracked"]) == 0
+
+        # Remove
+        git.remove(os.path.join(working_directory, "staged.txt"), keep_file=False)
+        # Verify removed
+        status = git.status()
+        assert len(status["staged"]) == 1
+        assert len(status["unstaged"]) == 0
+        assert len(status["untracked"]) == 0
+        assert status["staged"][0] == ("staged.txt", "deleted")
+
+    def test_diff_unstaged(self, mock_initialized):
+        """Test getting the diff for unstaged changes"""
+        git = mock_initialized[0]
+        working_directory = mock_initialized[1]
+
+        # Create files
+        with open(os.path.join(working_directory, "test.txt"), 'wt') as dt:
+            dt.write("Line Top\n")
+            for val in range(0, 30):
+                dt.write("Line {}\n".format(val))
+            dt.write("Line Bottom\n")
+        with open(os.path.join(working_directory, "test2.txt"), 'wt') as dt:
+            dt.write("File number 2\n")
+        git.add(os.path.join(working_directory, "test.txt"))
+        git.add(os.path.join(working_directory, "test2.txt"))
+        git.repo.index.commit("commit 1")
+
+        # Edit file 1 - Add a line
+        with open(os.path.join(working_directory, "test.txt"), 'wt') as dt:
+            dt.write("Line Top Has Changed\n")
+            for val in range(0, 30):
+                dt.write("Line {}\n".format(val))
+            dt.write("Line Bottom Has Changed\n")
+
+        # Edit file 2
+        with open(os.path.join(working_directory, "test2.txt"), 'wt') as dt:
+            dt.write("File number 2 changed\n")
+
+        diff_info = git.diff_unstaged()
+
+        assert len(diff_info.keys()) == 2
+        assert "test.txt" in diff_info
+        assert len(diff_info["test.txt"]) == 2
+        assert "test2.txt" in diff_info
+        assert len(diff_info["test2.txt"]) == 1
+
+    def test_diff_unstaged_file(self, mock_initialized):
+        """Test getting the diff of a file that has been changed"""
+        git = mock_initialized[0]
+        working_directory = mock_initialized[1]
+
+        # Create files
+        with open(os.path.join(working_directory, "test.txt"), 'wt') as dt:
+            dt.write("Line Top\n")
+            for val in range(0, 30):
+                dt.write("Line {}\n".format(val))
+            dt.write("Line Bottom\n")
+        with open(os.path.join(working_directory, "test2.txt"), 'wt') as dt:
+            dt.write("File number 2\n")
+        git.add(os.path.join(working_directory, "test.txt"))
+        git.add(os.path.join(working_directory, "test2.txt"))
+        git.repo.index.commit("commit 1")
+
+        # Edit file 1 - Add a line
+        with open(os.path.join(working_directory, "test.txt"), 'wt') as dt:
+            dt.write("Line Top Has Changed\n")
+            for val in range(0, 30):
+                dt.write("Line {}\n".format(val))
+            dt.write("Line Bottom Has Changed\n")
+
+        # Edit file 2
+        with open(os.path.join(working_directory, "test2.txt"), 'wt') as dt:
+            dt.write("File number 2 changed\n")
+
+        diff_info = git.diff_unstaged("test.txt")
+
+        assert len(diff_info.keys()) == 1
+        assert "test.txt" in diff_info
+        assert len(diff_info["test.txt"]) == 2
+
+    def test_diff_staged(self, mock_initialized):
+        """Test getting the diff for staged changes"""
+        git = mock_initialized[0]
+        working_directory = mock_initialized[1]
+
+        # Create files
+        with open(os.path.join(working_directory, "test.txt"), 'wt') as dt:
+            dt.write("Line Top\n")
+            for val in range(0, 30):
+                dt.write("Line {}\n".format(val))
+            dt.write("Line Bottom\n")
+        with open(os.path.join(working_directory, "test2.txt"), 'wt') as dt:
+            dt.write("File number 2\n")
+        git.add(os.path.join(working_directory, "test.txt"))
+        git.add(os.path.join(working_directory, "test2.txt"))
+        git.repo.index.commit("commit 1")
+
+        # Edit file 1 - Add a line
+        with open(os.path.join(working_directory, "test.txt"), 'wt') as dt:
+            dt.write("Line Top Has Changed\n")
+            for val in range(0, 30):
+                dt.write("Line {}\n".format(val))
+            dt.write("Line Bottom Has Changed\n")
+
+        # Edit file 2
+        with open(os.path.join(working_directory, "test2.txt"), 'wt') as dt:
+            dt.write("File number 2 changed\n")
+
+        git.add(os.path.join(working_directory, "test.txt"))
+        git.add(os.path.join(working_directory, "test2.txt"))
+
+        diff_info = git.diff_staged()
+
+        assert len(diff_info.keys()) == 2
+        assert "test.txt" in diff_info
+        assert len(diff_info["test.txt"]) == 2
+        assert "test2.txt" in diff_info
+        assert len(diff_info["test2.txt"]) == 1
+
+    def test_diff_staged_file(self, mock_initialized):
+        """Test getting the diff of a file that has been changed and staged"""
+        git = mock_initialized[0]
+        working_directory = mock_initialized[1]
+
+        # Create files
+        with open(os.path.join(working_directory, "test.txt"), 'wt') as dt:
+            dt.write("Line Top\n")
+            for val in range(0, 30):
+                dt.write("Line {}\n".format(val))
+            dt.write("Line Bottom\n")
+        with open(os.path.join(working_directory, "test2.txt"), 'wt') as dt:
+            dt.write("File number 2\n")
+        git.add(os.path.join(working_directory, "test.txt"))
+        git.add(os.path.join(working_directory, "test2.txt"))
+        git.repo.index.commit("commit 1")
+
+        # Edit file 1 - Add a line
+        with open(os.path.join(working_directory, "test.txt"), 'wt') as dt:
+            dt.write("Line Top Has Changed\n")
+            for val in range(0, 30):
+                dt.write("Line {}\n".format(val))
+            dt.write("Line Bottom Has Changed\n")
+
+        # Edit file 2
+        with open(os.path.join(working_directory, "test2.txt"), 'wt') as dt:
+            dt.write("File number 2 changed\n")
+
+        git.add(os.path.join(working_directory, "test.txt"))
+        git.add(os.path.join(working_directory, "test2.txt"))
+
+        diff_info = git.diff_staged("test.txt")
+
+        assert len(diff_info.keys()) == 1
+        assert "test.txt" in diff_info
+        assert len(diff_info["test.txt"]) == 2

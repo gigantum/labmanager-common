@@ -20,11 +20,13 @@
 from .git import GitRepoInterface
 from git import Repo
 from git import InvalidGitRepositoryError
+import os
+import re
 
 
 class GitFilesystem(GitRepoInterface):
 
-    def __init__(self, config_dict):
+    def __init__(self, config_dict, author=None, committer=None):
         """Constructor
 
         config_dict should contain any custom params needed for the backend. For example, the working directory
@@ -39,6 +41,8 @@ class GitFilesystem(GitRepoInterface):
 
         Args:
             config_dict(dict): Configuration details for the interface
+            author(GitAuthor): User info for the author, if omitted, assume the "system"
+            committer(GitAuthor): User info for the committer. If omitted, set to the author
 
         Attributes:
             config(dict): Configuration details
@@ -46,7 +50,7 @@ class GitFilesystem(GitRepoInterface):
             repo(Repo): A GitPython Repo instance loaded at the
         """
         # Call super constructor
-        GitRepoInterface.__init__(self, config_dict)
+        GitRepoInterface.__init__(self, config_dict, author=author, committer=committer)
 
         # Check to see if the working dir is already a repository
         try:
@@ -117,8 +121,8 @@ class GitFilesystem(GitRepoInterface):
         for f in self.repo.index.diff("HEAD"):
             if f.change_type == "D":
                 # delete and new are flipped here, due to how comparison is done
-                staged.append((f.b_path, "new"))
-            elif f.change_type == "N":
+                staged.append((f.b_path, "added"))
+            elif f.change_type == "A":
                 staged.append((f.b_path, "deleted"))
             elif f.change_type == "M":
                 staged.append((f.b_path, "modified"))
@@ -133,8 +137,8 @@ class GitFilesystem(GitRepoInterface):
             if f.change_type == "D":
                 # delete and new are flipped here, due to how comparison is done
                 unstaged.append((f.b_path, "deleted"))
-            elif f.change_type == "N":
-                unstaged.append((f.b_path, "new"))
+            elif f.change_type == "A":
+                unstaged.append((f.b_path, "added"))
             elif f.change_type == "M":
                 unstaged.append((f.b_path, "modified"))
             elif f.change_type == "R":
@@ -156,45 +160,127 @@ class GitFilesystem(GitRepoInterface):
         Returns:
             None
         """
-        raise NotImplemented
+        self.repo.index.add([filename])
 
     def remove(self, filename, force=False, keep_file=True):
         """Remove a file from tracking
 
         Args:
-            filename(str): Filename to add. Should support `.` to add all files
+            filename(str): Filename to remove.
             force(bool): Force removal
             keep_file(bool): If true, don't delete the file (e.g. use the --cached flag)
 
         Returns:
             None
         """
-        raise NotImplemented
+        self.repo.index.remove([filename])
 
-    def diff_file(self, filename, commit=None):
+        if not keep_file:
+            os.remove(filename)
+
+        # TODO: DMK look into if force option is needed
+
+    def diff_file(self, filename, revision="HEAD"):
         """Method to return the diff for a file, optionally compared to a specific commit
 
         Args:
             filename(str): relative file path
-            commit (str): Optional commit. If omitted, the current HEAD will be used
+            revision (str): Optional commit hash. If omitted, the current HEAD will be used
 
         Returns:
             str
         """
-        raise NotImplemented
+        commit = self.repo.commit(rev=revision)
+        # Git ignore white space at the end of line, empty lines,
+        # renamed files and also copied files
+        diff_index = commit.diff(revision + '~1', create_patch=True, ignore_blank_lines=True,
+                                 ignore_space_at_eol=True, diff_filter='cr')
 
-    def diff_commits(self, src_commit, target_commit, filename=None):
-        """Method to return the diff between two commits, optionally for a specific file
+        #print(reduce(lambda x, y: str(x) + str(y), diff_index))
+
+        tree_obj = self.repo.head.commit.tree
+        self.repo.git.diff(tree_obj)
+
+    # todo diff branches, commits
+    @staticmethod
+    def _parse_diff_strings(value):
+        """Method to parse diff strings into chunks
 
         Args:
-            src_commit(str): The source commit
-            target_commit (str): The target commit
-            filename (str): An optional file to diff
+            value(str): Diff string from the diff command
 
         Returns:
-            str
+            list((str, str)): a list of (line string, diff str)
         """
-        raise NotImplemented
+        value = str(value, 'utf-8')
+
+        split_str = re.split('(@{2}\s-?\+?\d+,?\s?\d+\s-?\+?\d+,?\s?\d+\s@{2})', value)
+        if len(split_str) == 1:
+            split_value = value.split("@@")
+            line_info = ["@@{}@@".format(split_value[1])]
+            change_info = [split_value[2]]
+        else:
+            split_str = split_str[1:]
+            line_info = split_str[::2]
+            change_info = split_str[1::2]
+
+        return [(x, y) for x, y in zip(line_info, change_info)]
+
+    def diff_unstaged(self, filename=None, ignore_white_space=True):
+        """Method to return the diff for unstaged files, optionally for a specific file
+
+        Returns a dictionary of the format:
+
+            {
+                "<filename>": [(<line_string>, <change_string>), ...],
+                ...
+            }
+
+        Args:
+            filename(str): Optional filename to filter diff. If omitted all files will be diffed
+            ignore_white_space (bool): If True, ignore whitespace during diff. True if omitted
+
+        Returns:
+            dict
+        """
+        changes = self.repo.index.diff(None, paths=filename, create_patch=True,
+                                       ignore_blank_lines=ignore_white_space,
+                                       ignore_space_at_eol=ignore_white_space,
+                                       diff_filter='cr')
+        result = {}
+        for change in changes:
+            detail = self._parse_diff_strings(change.diff)
+            result[change.b_path] = detail
+
+        return result
+
+    def diff_staged(self, filename=None, ignore_white_space=True):
+        """Method to return the diff for unstaged files, optionally for a specific file
+
+        Returns a dictionary of the format:
+
+            {
+                "<filename>": [(<line_string>, <change_string>), ...],
+                ...
+            }
+
+        Args:
+            filename(str): Optional filename to filter diff. If omitted all files will be diffed
+            ignore_white_space (bool): If True, ignore whitespace during diff. True if omitted
+
+        Returns:
+            dict
+        """
+        changes = self.repo.index.diff("HEAD", paths=filename, create_patch=True,
+                                       ignore_blank_lines=ignore_white_space,
+                                       ignore_space_at_eol=ignore_white_space,
+                                       diff_filter='cr', R=True)
+        result = {}
+        for change in changes:
+            detail = self._parse_diff_strings(change.diff)
+            result[change.b_path] = detail
+
+        return result
 
     def commit(self, message, all=False, author=None, amend=False):
         """Method to perform a commit operation

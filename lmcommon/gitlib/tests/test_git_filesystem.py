@@ -20,6 +20,7 @@
 import pytest
 from .git_interface_mixin import GitInterfaceMixin
 from .git_interface_mixin import mock_config_filesystem as mock_config
+from .git_interface_mixin import mock_initialized_filesystem as mock_initialized
 
 
 @pytest.mark.usefixtures("mock_config")

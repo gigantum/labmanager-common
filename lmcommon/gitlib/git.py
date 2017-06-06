@@ -53,9 +53,26 @@ def get_git_interface(config_dict):
         return backend_class(config_dict)
 
 
+class GitAuthor(object):
+    """Simple Class to store user information for author/committer"""
+
+    def __init__(self, name, email):
+        """
+
+        Args:
+            name(str): User's first and last name
+            email(str): User's email address
+        """
+        self.name = name
+        self.email = email
+
+    def __str__(self):
+        return "{} - {}".format(self.name, self.email)
+
+
 class GitRepoInterface(metaclass=abc.ABCMeta):
 
-    def __init__(self, config_dict):
+    def __init__(self, config_dict, author=None, committer=None):
         """Constructor
 
         config_dict should contain any custom params needed for the backend. For example, the working directory
@@ -63,9 +80,35 @@ class GitRepoInterface(metaclass=abc.ABCMeta):
 
         Args:
             config_dict(dict): Configuration details for the interface
+            author(GitAuthor): User info for the author, if omitted, assume the "system"
+            committer(GitAuthor): User info for the committer. If omitted, set to the author
         """
         self.config = config_dict
         self.current_branch = None
+        self.author = None
+        self.committer = None
+
+        self.update_author(author=author, committer=committer)
+
+    def update_author(self, author, committer=None):
+        """Method to get the current branch name
+
+        Args:
+            author(GitAuthor): User info for the author, if omitted, assume the "system"
+            committer(GitAuthor): User info for the committer. If omitted, set to the author
+
+        Returns:
+            None
+        """
+        if author:
+            self.author = author
+        else:
+            self.author = GitAuthor("Gigantum AutoCommit", "noreply@gigantum.io")
+
+        if committer:
+            self.committer = committer
+        else:
+            self.committer = self.author
 
     @abc.abstractmethod
     def get_current_branch_name(self):
@@ -125,7 +168,7 @@ class GitRepoInterface(metaclass=abc.ABCMeta):
         """Add a file to a commit
 
         Args:
-            filename(str): Filename to add. Should support `.` to add all files
+            filename(str): Filename to add.
 
         Returns:
             None
@@ -147,29 +190,42 @@ class GitRepoInterface(metaclass=abc.ABCMeta):
         raise NotImplemented
 
     @abc.abstractmethod
-    def diff_file(self, filename, commit=None):
-        """Method to return the diff for a file, optionally compared to a specific commit
+    def diff_unstaged(self, filename=None, ignore_white_space=True):
+        """Method to return the diff for unstaged files, optionally for a specific file
+
+        Returns a dictionary of the format:
+
+            {
+                "<filename>": [(<line_string>, <change_string>), ...],
+                ...
+            }
 
         Args:
-            filename(str): relative file path
-            commit (str): Optional commit. If omitted, the current HEAD will be used
+            filename(str): Optional filename to filter diff. If omitted all files will be diffed
+            ignore_white_space (bool): If True, ignore whitespace during diff. True if omitted
 
         Returns:
-            str
+            dict
         """
         raise NotImplemented
 
     @abc.abstractmethod
-    def diff_commits(self, src_commit, target_commit, filename=None):
-        """Method to return the diff between two commits, optionally for a specific file
+    def diff_staged(self, filename=None, ignore_white_space=True):
+        """Method to return the diff for staged files, optionally for a specific file
+
+        Returns a dictionary of the format:
+
+            {
+                "<filename>": [(<line_string>, <change_string>), ...],
+                ...
+            }
 
         Args:
-            src_commit(str): The source commit
-            target_commit (str): The target commit
-            filename (str): An optional file to diff
+            filename(str): Optional filename to filter diff. If omitted all files will be diffed
+            ignore_white_space (bool): If True, ignore whitespace during diff. True if omitted
 
         Returns:
-            str
+            dict
         """
         raise NotImplemented
 
