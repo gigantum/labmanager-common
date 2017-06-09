@@ -30,6 +30,7 @@ from git import Repo
 # Required Fixtures:
 #   - mock_config: a standard config with an empty working dir
 #   - mock_initialized: a gitlib instance initialized with an empty repo
+#   - mock_initialized_remote: a gitlib instance initialized with an empty repo and create bare repo
 
 # GitFilesystem Fixtures
 @pytest.fixture()
@@ -69,6 +70,68 @@ def mock_initialized_filesystem():
     shutil.rmtree(working_dir)
 
 
+@pytest.fixture()
+def mock_initialized_filesystem_with_remote():
+    """Create an initialized git lib instance and also create a bare initialized repo
+
+        returns a clone of the repo on master, the working dir for that repo, the bare repo, and the working bare dir
+
+    Returns:
+        (gitlib.git.GitRepoInterface, str, gitlib.git.GitRepoInterface, str)
+    """
+    # Create temporary working directory for the bare repo
+    bare_working_dir = os.path.join(tempfile.gettempdir(), uuid.uuid4().hex)
+    os.makedirs(bare_working_dir)
+    bare_repo = Repo.init(bare_working_dir, bare=True)
+    populate_bare_repo(bare_working_dir)
+
+    # Create temporary working directory
+    working_dir = os.path.join(tempfile.gettempdir(), uuid.uuid4().hex)
+    os.makedirs(working_dir)
+
+    config = {"backend": "filesystem", "working_directory": working_dir}
+
+    # Init the empty repo
+    git = GitFilesystem(config)
+    git.clone(bare_working_dir)
+
+    yield git, working_dir, bare_repo, bare_working_dir  # provide the fixture value
+
+    # Force delete the directory
+    shutil.rmtree(bare_working_dir)
+    shutil.rmtree(working_dir)
+
+
+def populate_bare_repo(working_dir):
+    """Method to populate the bare repo with a branch, files, and tag"""
+    # Create a local repo so we can manipulate the remote
+    scratch_working_dir = os.path.join(tempfile.gettempdir(), uuid.uuid4().hex)
+    os.makedirs(scratch_working_dir)
+    config = {"backend": "filesystem", "working_directory": scratch_working_dir}
+
+    # Init the empty repo
+    git = GitFilesystem(config)
+    git.clone(working_dir)
+
+    # Add a file to master and commit
+    write_file(git, "test1.txt", "Original Content", commit_msg="initial commit")
+    git.repo.remotes.origin.push()
+
+    # Create a branch from master
+    new_branch = git.repo.create_head("test_branch", git.repo.refs.master)
+    git.repo.head.set_reference(new_branch)
+    write_file(git, "test2.txt", "Original Content", commit_msg="second commit")
+    git.repo.remotes.origin.push("test_branch")
+
+    # Tag
+    git.repo.create_tag("test_tag_1", message="a test tag")
+
+    # Check master back out
+    git.repo.heads.master.checkout()
+
+    # Delete temp dir
+    shutil.rmtree(scratch_working_dir)
+
 def create_dummy_repo(working_dir):
     """Helper method to create a dummy repo with a file in it"""
     filename = "dummy.txt"
@@ -78,6 +141,29 @@ def create_dummy_repo(working_dir):
 
     repo.index.add([os.path.join(working_dir, filename)])
     repo.index.commit("initial commit")
+
+
+def write_file(git_instance, filename, content, add=True, commit_msg=None):
+    """Write content to a file
+
+    Args:
+        filename(str): The relative file path from the working dir
+        content(str): What to write
+        add(bool): If true, ddd to git repo
+        commit_msg (str): If not none, commit file with this message
+
+    Returns:
+
+    """
+    working_dir = git_instance.config["working_directory"]
+    with open(os.path.join(working_dir, filename), 'wt') as dt:
+        dt.write(content)
+
+    if add:
+        git_instance.add(os.path.join(working_dir, filename))
+
+    if commit_msg:
+        git_instance.commit(commit_msg)
 
 
 class GitInterfaceMixin(object):
@@ -98,13 +184,25 @@ class GitInterfaceMixin(object):
         assert type(git) is GitFilesystem
         assert type(git.repo) is Repo
 
-    def test_clone_repo(self, mock_config):
+    def test_clone_repo(self, mock_initialized_remote):
         """Test trying to clone an existing repo dir"""
-        git = GitFilesystem(mock_config)
+        scratch_working_dir = os.path.join(tempfile.gettempdir(), uuid.uuid4().hex)
+        os.makedirs(scratch_working_dir)
+        config = {"backend": "filesystem", "working_directory": scratch_working_dir}
 
-        git.clone('https://github.com/gigantum/gigantum.github.io.git')
-        assert git.get_current_branch_name() == "master"
-        assert os.path.isfile(os.path.join(mock_config["working_directory"], "index.html")) is True
+        git = GitFilesystem(config)
+        git.clone(mock_initialized_remote[3])
+
+        assert len(git.repo.heads) == 1
+        assert len(git.repo.remotes["origin"].fetch()) == 2
+        assert len(git.repo.refs) == 4
+
+        # Make sure only master content
+        assert os.path.isfile(os.path.join(scratch_working_dir, 'test1.txt')) is True
+        assert os.path.isfile(os.path.join(scratch_working_dir, 'test2.txt')) is False
+
+        # Delete temp dir
+        shutil.rmtree(scratch_working_dir)
 
     def test_author_invalid(self, mock_initialized):
         """Test changing the git author info"""
@@ -158,49 +256,30 @@ class GitInterfaceMixin(object):
         # Create a complex repo with all possible states to check
 
         # Add a normal committed file
-        with open(os.path.join(mock_config["working_directory"], "committed.txt"), 'wt') as dt:
-            dt.write("entry asdf")
-        git.repo.index.add([os.path.join(mock_config["working_directory"], "committed.txt")])
-        git.repo.index.commit("initial commit")
+        write_file(git, "committed.txt", "File number 1\n", commit_msg="initial commit")
 
         # Add a deleted file
-        with open(os.path.join(mock_config["working_directory"], "deleted.txt"), 'wt') as dt:
-            dt.write("entry sadfasdf")
-        git.repo.index.add([os.path.join(mock_config["working_directory"], "deleted.txt")])
-        git.repo.index.commit("delete file commit")
+        write_file(git, "deleted.txt", "File number 2\n", commit_msg="delete file commit")
         os.remove(os.path.join(mock_config["working_directory"], "deleted.txt"))
 
         # Add a staged and edited file
-        with open(os.path.join(mock_config["working_directory"], "staged_edited.txt"), 'wt') as dt:
-            dt.write("entry 1")
-        git.repo.index.add([os.path.join(mock_config["working_directory"], "staged_edited.txt")])
-        git.repo.index.commit("edited initial")
-        with open(os.path.join(mock_config["working_directory"], "staged_edited.txt"), 'wt') as dt:
-            dt.write("entry edited")
-        git.repo.index.add([os.path.join(mock_config["working_directory"], "staged_edited.txt")])
+        write_file(git, "staged_edited.txt", "entry 1", commit_msg="edited initial")
+        write_file(git, "staged_edited.txt", "entry edited")
 
         # Add a staged file
-        with open(os.path.join(mock_config["working_directory"], "staged.txt"), 'wt') as dt:
-            dt.write("entry staged")
-        git.repo.index.add([os.path.join(mock_config["working_directory"], "staged.txt")])
+        write_file(git, "staged.txt", "entry staged")
 
         # Add an unstaged edited file
-        with open(os.path.join(mock_config["working_directory"], "unstaged_edited.txt"), 'wt') as dt:
-            dt.write("entry 2")
-        git.repo.index.add([os.path.join(mock_config["working_directory"], "unstaged_edited.txt")])
-        with open(os.path.join(mock_config["working_directory"], "unstaged_edited.txt"), 'wt') as dt:
-            dt.write("entry 2 edited")
+        write_file(git, "unstaged_edited.txt", "entry 2")
+        write_file(git, "unstaged_edited.txt", "entry 2 edited", add=False)
 
         # Add an untracked file
-        with open(os.path.join(mock_config["working_directory"], "untracked.txt"), 'wt') as dt:
-            dt.write("entry untracked")
+        write_file(git, "untracked.txt", "entry untracked", add=False)
 
         # Stage a file in a sub-directory
         subdir = os.path.join(mock_config["working_directory"], "subdir")
         os.makedirs(subdir)
-        with open(os.path.join(subdir, "subdir_file.txt"), 'wt') as dt:
-            dt.write("entry subdir")
-        git.repo.index.add([os.path.join(subdir, "subdir_file.txt")])
+        write_file(git, os.path.join(subdir, "subdir_file.txt"), "entry subdir")
 
         # Check status clean
         status = git.status()
@@ -228,8 +307,7 @@ class GitInterfaceMixin(object):
         working_directory = mock_initialized[1]
 
         # Create file
-        with open(os.path.join(working_directory, "add.txt"), 'wt') as dt:
-            dt.write("entry asdf")
+        write_file(git, "add.txt", "entry 1", add=False)
 
         # Verify untracked
         status = git.status()
@@ -256,9 +334,7 @@ class GitInterfaceMixin(object):
         working_directory = mock_initialized[1]
 
         # Create file
-        with open(os.path.join(working_directory, "staged.txt"), 'wt') as dt:
-            dt.write("entry asdf")
-        git.add(os.path.join(working_directory, "staged.txt"))
+        write_file(git, "staged.txt", "entry 1")
 
         # Verify staged
         status = git.status()
@@ -282,10 +358,7 @@ class GitInterfaceMixin(object):
         working_directory = mock_initialized[1]
 
         # Create file
-        with open(os.path.join(working_directory, "staged.txt"), 'wt') as dt:
-            dt.write("entry asdf")
-        git.add(os.path.join(working_directory, "staged.txt"))
-        git.repo.index.commit("Test commit")
+        write_file(git, "staged.txt", "entry 1", commit_msg="Test commit")
 
         # Verify nothing staged
         status = git.status()
@@ -309,10 +382,7 @@ class GitInterfaceMixin(object):
         working_directory = mock_initialized[1]
 
         # Create file
-        with open(os.path.join(working_directory, "staged.txt"), 'wt') as dt:
-            dt.write("entry asdf")
-        git.add(os.path.join(working_directory, "staged.txt"))
-        git.repo.index.commit("Test commit")
+        write_file(git, "staged.txt", "entry 1", commit_msg="Test commit")
 
         # Verify nothing staged
         status = git.status()
@@ -481,34 +551,20 @@ class GitInterfaceMixin(object):
         working_directory = mock_initialized[1]
 
         # Create files
-        with open(os.path.join(working_directory, "test1.txt"), 'wt') as dt:
-            dt.write("File number 1\n")
-        with open(os.path.join(working_directory, "test2.txt"), 'wt') as dt:
-            dt.write("File number 2\n")
-        git.add(os.path.join(working_directory, "test1.txt"))
-        git.add(os.path.join(working_directory, "test2.txt"))
-        git.repo.index.commit("commit 1")
+        write_file(git, "test1.txt", "File number 1\n")
+        write_file(git, "test2.txt", "File number 2\n", commit_msg="commit 1")
         commit1 = git.repo.head.commit
 
         # Edit file 1 - Add a line
-        with open(os.path.join(working_directory, "test1.txt"), 'wt') as dt:
-            dt.write("File 1 has changed\n")
-        git.add(os.path.join(working_directory, "test1.txt"))
-        git.repo.index.commit("commit 2")
+        write_file(git, "test1.txt", "File number 1 has changed\n", commit_msg="commit 2")
         commit2 = git.repo.head.commit
 
         # Edit file 2
-        with open(os.path.join(working_directory, "test2.txt"), 'wt') as dt:
-            dt.write("File number 2 changed\n")
-        git.add(os.path.join(working_directory, "test2.txt"))
-        git.repo.index.commit("commit 3")
+        write_file(git, "test2.txt", "File number 2 has changed\n", commit_msg="commit 3")
         commit3 = git.repo.head.commit
 
         # Create another file
-        with open(os.path.join(working_directory, "test3.txt"), 'wt') as dt:
-            dt.write("File number 3\n")
-        git.add(os.path.join(working_directory, "test3.txt"))
-        git.repo.index.commit("commit 4")
+        write_file(git, "test3.txt", "File number 3\n", commit_msg="commit 4")
         commit4 = git.repo.head.commit
 
         # Diff with defaults (HEAD compared to previous commit)
@@ -542,16 +598,13 @@ class GitInterfaceMixin(object):
         working_directory = mock_initialized[1]
 
         # Create files
-        with open(os.path.join(working_directory, "test1.txt"), 'wt') as dt:
-            dt.write("File number 1\n")
+        write_file(git, "test1.txt", "File number 1\n")
+
         subdir = os.path.join(working_directory, "subdir")
         os.makedirs(subdir)
-        with open(os.path.join(subdir, "subdir_file.txt"), 'wt') as dt:
-            dt.write("entry subdir")
-        git.add("test1.txt")
-        git.add(os.path.join("subdir", "subdir_file.txt"))
-        with open(os.path.join(working_directory, "untracked.txt"), 'wt') as dt:
-            dt.write("Untracked File\n")
+        write_file(git, os.path.join(subdir, "subdir_file.txt"), "entry subdir")
+
+        write_file(git, "untracked.txt", "Untracked File", add=False)
 
         status = git.status()
         assert len(status["staged"]) == 2
@@ -578,12 +631,9 @@ class GitInterfaceMixin(object):
     def test_commit_with_author(self, mock_initialized):
         """Test making a commit"""
         git = mock_initialized[0]
-        working_directory = mock_initialized[1]
 
         # Create files
-        with open(os.path.join(working_directory, "test1.txt"), 'wt') as dt:
-            dt.write("File number 1\n")
-        git.add("test1.txt")
+        write_file(git, "test1.txt", "File number 1\n")
 
         status = git.status()
         assert len(status["staged"]) == 1
@@ -613,40 +663,25 @@ class GitInterfaceMixin(object):
     def test_log(self, mock_initialized):
         """Test getting commit history"""
         git = mock_initialized[0]
-        working_directory = mock_initialized[1]
 
         # Create files
         commit_list = []
-        with open(os.path.join(working_directory, "test1.txt"), 'wt') as dt:
-            dt.write("File number 1\n")
-        git.add(os.path.join(working_directory, "test1.txt"))
-        git.repo.index.commit("commit 1")
+        write_file(git, "test1.txt", "File number 1\n", commit_msg="commit 1")
         commit_list.append(git.repo.head.commit)
 
-        with open(os.path.join(working_directory, "test2.txt"), 'wt') as dt:
-            dt.write("File number 2\n")
-        git.add(os.path.join(working_directory, "test2.txt"))
-        git.repo.index.commit("commit 2")
+        write_file(git, "test2.txt", "File number 2\n", commit_msg="commit 2")
         commit_list.append(git.repo.head.commit)
 
         # Edit file 1 - Add a line
-        with open(os.path.join(working_directory, "test1.txt"), 'wt') as dt:
-            dt.write("File 1 has changed\n")
-        git.add(os.path.join(working_directory, "test1.txt"))
-        git.repo.index.commit("commit 3")
+        write_file(git, "test1.txt", "File 1 has changed\n", commit_msg="commit 3")
         commit_list.append(git.repo.head.commit)
 
         # Edit file 2
-        with open(os.path.join(working_directory, "test2.txt"), 'wt') as dt:
-            dt.write("File number 2 changed\n")
-        git.add(os.path.join(working_directory, "test2.txt"))
-        git.repo.index.commit("commit 4")
+        write_file(git, "test2.txt", "File 2 has changed\n", commit_msg="commit 4")
         commit_list.append(git.repo.head.commit)
 
         # Create another file
-        with open(os.path.join(working_directory, "test3.txt"), 'wt') as dt:
-            dt.write("File number 3\n")
-        git.add(os.path.join(working_directory, "test3.txt"))
+        write_file(git, "test3.txt", "File number 3\n")
         git.commit("commit 5", author=GitAuthor("U1", "test@gigantum.io"),
                    committer=GitAuthor("U2", "test2@gigantum.io"))
         commit_list.append(git.repo.head.commit)
@@ -673,40 +708,25 @@ class GitInterfaceMixin(object):
     def test_log_filter(self, mock_initialized):
         """Test getting commit history with some filtering"""
         git = mock_initialized[0]
-        working_directory = mock_initialized[1]
 
         # Create files
         commit_list = []
-        with open(os.path.join(working_directory, "test1.txt"), 'wt') as dt:
-            dt.write("File number 1\n")
-        git.add(os.path.join(working_directory, "test1.txt"))
-        git.repo.index.commit("commit 1")
+        write_file(git, "test1.txt", "File number 1\n", commit_msg="commit 1")
         commit_list.append(git.repo.head.commit)
 
-        with open(os.path.join(working_directory, "test2.txt"), 'wt') as dt:
-            dt.write("File number 2\n")
-        git.add(os.path.join(working_directory, "test2.txt"))
-        git.repo.index.commit("commit 2")
+        write_file(git, "test2.txt", "File number 2\n", commit_msg="commit 2")
         commit_list.append(git.repo.head.commit)
 
         # Edit file 1 - Add a line
-        with open(os.path.join(working_directory, "test1.txt"), 'wt') as dt:
-            dt.write("File 1 has changed\n")
-        git.add(os.path.join(working_directory, "test1.txt"))
-        git.repo.index.commit("commit 3")
+        write_file(git, "test1.txt", "File 1 has changed\n", commit_msg="commit 3")
         commit_list.append(git.repo.head.commit)
 
         # Edit file 2
-        with open(os.path.join(working_directory, "test2.txt"), 'wt') as dt:
-            dt.write("File number 2 changed\n")
-        git.add(os.path.join(working_directory, "test2.txt"))
-        git.repo.index.commit("commit 4")
+        write_file(git, "test2.txt", "File 2 has changed\n", commit_msg="commit 4")
         commit_list.append(git.repo.head.commit)
 
         # Create another file
-        with open(os.path.join(working_directory, "test3.txt"), 'wt') as dt:
-            dt.write("File number 3\n")
-        git.add(os.path.join(working_directory, "test3.txt"))
+        write_file(git, "test3.txt", "File number 3\n")
         git.commit("commit 5", author=GitAuthor("U1", "test@gigantum.io"),
                    committer=GitAuthor("U2", "test2@gigantum.io"))
         commit_list.append(git.repo.head.commit)
@@ -733,3 +753,278 @@ class GitInterfaceMixin(object):
         log_info = git.log(author="U1")
         assert len(log_info) == 1
         log_info[0]["message"] = "commit 5"
+
+    def test_blame(self, mock_initialized):
+        """Test getting blame history for a file"""
+        git = mock_initialized[0]
+        working_dir = mock_initialized[1]
+
+        # Create files
+        write_file(git, "test1.txt", "Write 1 by default\nWrite 2 by default\nWrite 3 by default\n", commit_msg="commit 1")
+        commit1 = git.repo.head.commit
+
+        with open(os.path.join(working_dir, "test1.txt"), 'at') as dt:
+            dt.write("Write 1 by U1\n")
+        git.add(os.path.join(working_dir, "test1.txt"))
+        git.commit("commit 2", author=GitAuthor("U1", "test@gigantum.io"),
+                   committer=GitAuthor("U2", "test2@gigantum.io"))
+        commit2 = git.repo.head.commit
+
+        with open(os.path.join(working_dir, "test1.txt"), 'at') as dt:
+            dt.write("Write 4 by default\nWrite 5 by default\n")
+        git.add(os.path.join(working_dir, "test1.txt"))
+        git.commit("commit 3", author=GitAuthor("Gigantum AutoCommit", "noreply@gigantum.io"),
+                   committer=GitAuthor("Gigantum AutoCommit", "noreply@gigantum.io"))
+        commit3 = git.repo.head.commit
+
+        # write second line
+        with open(os.path.join(working_dir, "test1.txt"), 'wt') as dt:
+            dt.write("Write 1 by default\nEDIT 2 by default\nWrite 3 by default\nWrite 1 by U1\nWrite 4 by default\nWrite 5 by default\n")
+        git.add(os.path.join(working_dir, "test1.txt"))
+        git.commit("commit 4")
+        commit4 = git.repo.head.commit
+
+        blame_info = git.blame("test1.txt")
+
+        assert len(blame_info) == 5
+        assert blame_info[0]["commit"] == commit1.hexsha
+        assert blame_info[1]["commit"] == commit4.hexsha
+        assert blame_info[2]["commit"] == commit1.hexsha
+        assert blame_info[3]["commit"] == commit2.hexsha
+        assert blame_info[4]["commit"] == commit3.hexsha
+
+        assert blame_info[0]["author"]["name"] == "Gigantum AutoCommit"
+        assert blame_info[1]["author"]["name"] == "Gigantum AutoCommit"
+        assert blame_info[2]["author"]["name"] == "Gigantum AutoCommit"
+        assert blame_info[3]["author"]["name"] == "U1"
+        assert blame_info[4]["author"]["name"] == "Gigantum AutoCommit"
+
+        assert blame_info[4]["content"] == "Write 4 by default\nWrite 5 by default"
+
+    def test_create_branch(self, mock_initialized):
+        """Method to test creating a branch"""
+        git = mock_initialized[0]
+        working_dir = mock_initialized[1]
+
+        branches = git.repo.heads
+
+        assert len(branches) == 1
+        assert branches[0].name == "master"
+
+        git.create_branch("test_branch1")
+
+        branches = git.repo.heads
+        assert len(branches) == 2
+        assert branches[0].name == "master"
+        assert branches[1].name == "test_branch1"
+
+    def test_rename_branch(self, mock_initialized):
+        """Method to test deleting a branch"""
+        git = mock_initialized[0]
+
+        branches = git.repo.heads
+        assert len(branches) == 1
+        assert branches[0].name == "master"
+
+        git.create_branch("test_branch1")
+        git.create_branch("test_branch2")
+
+        branches = git.repo.heads
+        assert len(branches) == 3
+        assert branches[0].name == "master"
+        assert branches[1].name == "test_branch1"
+        assert branches[2].name == "test_branch2"
+
+        # Rename branch
+        git.rename_branch("test_branch2", "my_new_branch")
+
+        branches = git.repo.heads
+        assert len(branches) == 3
+        assert branches[0].name == "master"
+        assert branches[1].name == "my_new_branch"
+        assert branches[2].name == "test_branch1"
+
+        # Make sure invalid branch names raise an exception
+        with pytest.raises(ValueError):
+            git.rename_branch("a;lskjdfas;lkjhdf", "test2")
+
+        # Rename checked out branch
+        git.rename_branch("master", "new_master")
+        branches = git.repo.heads
+        assert len(branches) == 3
+        assert branches[0].name == "my_new_branch"
+        assert branches[1].name == "new_master"
+        assert branches[2].name == "test_branch1"
+
+    def test_checkout_branch(self, mock_initialized):
+        """Method to test checkout a branch"""
+        git = mock_initialized[0]
+
+        assert git.repo.head.ref.name == "master"
+
+        git.create_branch("test_branch1")
+
+        assert git.repo.head.ref.name == "master"
+
+        # Checkout branch
+        git.checkout("test_branch1")
+
+        assert git.repo.head.ref.name == "test_branch1"
+
+        # Make sure invalid branch names raise an exception
+        with pytest.raises(ValueError):
+            git.checkout("a;lskjdfas;lkjhdf")
+
+    def test_tags(self, mock_initialized):
+        """Method to test creating and listing tags"""
+        git = mock_initialized[0]
+
+        git.create_tag("tag1", "test tag 1")
+
+        write_file(git, "test1.txt", "content", commit_msg="Adding a file")
+
+        git.create_tag("tag2", "test tag 2")
+
+        tags = git.list_tags()
+
+        assert len(tags) == 2
+
+    def test_add_remove_remote(self, mock_initialized_remote):
+        """Method to test creating and listing tags"""
+        scratch_working_dir = os.path.join(tempfile.gettempdir(), uuid.uuid4().hex)
+        os.makedirs(scratch_working_dir)
+        config = {"backend": "filesystem", "working_directory": scratch_working_dir}
+
+        # Init the empty repo
+        git = GitFilesystem(config)
+        git.initialize()
+        remote_dir = mock_initialized_remote[3]
+
+        git.add_remote("origin", remote_dir)
+
+        remotes = git.list_remotes()
+
+        assert len(remotes) == 1
+        assert remotes[0]["name"] == "origin"
+        assert remotes[0]["url"] == remote_dir
+
+        git.remove_remote("origin")
+        assert len(git.list_remotes()) == 0
+
+        # Delete temp dir
+        shutil.rmtree(scratch_working_dir)
+
+    def test_publish_branch(self, mock_initialized_remote):
+        """Method to test creating and listing tags"""
+        # Get a clone of the remote repo
+        git = mock_initialized_remote[0]
+
+        branches = git.repo.heads
+        assert len(branches) == 1
+        assert branches[0].name == "master"
+
+        # Create a branch
+        git.create_branch("test_branch1")
+        # Publish the branch
+        git.publish_branch("test_branch1", "origin")
+
+        branches = git.repo.heads
+        assert len(branches) == 2
+        assert branches[0].name == "master"
+        assert branches[1].name == "test_branch1"
+
+        # Create a new clone and make sure you got your branches
+        test_working_dir = os.path.join(tempfile.gettempdir(), uuid.uuid4().hex)
+        os.makedirs(test_working_dir)
+        test_repo = Repo.clone_from(mock_initialized_remote[3], test_working_dir)
+        assert len(test_repo.remotes["origin"].fetch()) == 3
+
+    def test_fetch_pull(self, mock_initialized_remote):
+        """Method to fetch, pull from remote"""
+        cloned_working_dir = mock_initialized_remote[1]
+
+        # Get a clone of the remote repo
+        git = mock_initialized_remote[0]
+        assert len(git.repo.heads) == 1
+        assert len(git.repo.remotes["origin"].fetch()) == 2
+        assert len(git.repo.refs) == 4
+
+        # Make sure only master content
+        assert os.path.isfile(os.path.join(cloned_working_dir, 'test1.txt')) is True
+        assert os.path.isfile(os.path.join(cloned_working_dir, 'test2.txt')) is False
+
+        # check out a branch and pull it
+        git.checkout("test_branch")
+        git.pull()
+        assert len(git.repo.heads) == 2
+
+        # Make sure it pulled content
+        assert os.path.isfile(os.path.join(cloned_working_dir, 'test1.txt')) is True
+        assert os.path.isfile(os.path.join(cloned_working_dir, 'test2.txt')) is True
+
+        # Add a file
+        scratch_working_dir = os.path.join(tempfile.gettempdir(), uuid.uuid4().hex)
+        os.makedirs(scratch_working_dir)
+        config = {"backend": "filesystem", "working_directory": scratch_working_dir}
+
+        # Init the empty repo
+        git_updater = GitFilesystem(config)
+        git_updater.clone(mock_initialized_remote[3])
+        git_updater.checkout("test_branch")
+
+        # Add a file to master and commit
+        write_file(git_updater, "test3.txt", "adding a new file Content", commit_msg="add commit")
+        git_updater.repo.remotes.origin.push()
+
+        # Make sure it pulled content
+        assert os.path.isfile(os.path.join(cloned_working_dir, 'test1.txt')) is True
+        assert os.path.isfile(os.path.join(cloned_working_dir, 'test2.txt')) is True
+        assert os.path.isfile(os.path.join(cloned_working_dir, 'test3.txt')) is False
+        git.pull()
+        # Make sure it pulled content
+        assert os.path.isfile(os.path.join(cloned_working_dir, 'test1.txt')) is True
+        assert os.path.isfile(os.path.join(cloned_working_dir, 'test2.txt')) is True
+        assert os.path.isfile(os.path.join(cloned_working_dir, 'test3.txt')) is True
+
+        # Delete temp dir
+        shutil.rmtree(scratch_working_dir)
+
+    def test_push(self, mock_initialized_remote):
+        """Method to test pushing to a remote"""
+        cloned_working_dir = mock_initialized_remote[1]
+
+        # Get a clone of the remote repo
+        git = mock_initialized_remote[0]
+        assert len(git.repo.heads) == 1
+        assert len(git.repo.remotes["origin"].fetch()) == 2
+        assert len(git.repo.refs) == 4
+
+        # Make sure only master content
+        git.checkout("master")
+        assert os.path.isfile(os.path.join(cloned_working_dir, 'test1.txt')) is True
+        assert os.path.isfile(os.path.join(cloned_working_dir, 'test2.txt')) is False
+
+        # Add a file to master and commit
+        write_file(git, "test3.txt", "adding a new file Content", commit_msg="add commit")
+        git.push()
+
+        # Make sure it pushed by cloning again content
+        scratch_working_dir = os.path.join(tempfile.gettempdir(), uuid.uuid4().hex)
+        os.makedirs(scratch_working_dir)
+        config = {"backend": "filesystem", "working_directory": scratch_working_dir}
+
+        # Init the empty repo
+        git_updater = GitFilesystem(config)
+        git_updater.clone(mock_initialized_remote[3])
+        git_updater.checkout("master")
+
+        # Make sure it pulled content
+        assert os.path.isfile(os.path.join(cloned_working_dir, 'test1.txt')) is True
+        assert os.path.isfile(os.path.join(cloned_working_dir, 'test2.txt')) is False
+        assert os.path.isfile(os.path.join(cloned_working_dir, 'test3.txt')) is True
+
+        # Delete temp dir
+        shutil.rmtree(scratch_working_dir)
+
+    # TODO: Add push for tags and test
+

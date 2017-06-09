@@ -309,12 +309,11 @@ class GitRepoInterface(metaclass=abc.ABCMeta):
         Returns an ordered list of dictionaries, one entry per change. Dictionary format:
 
             {
-                "commit": <commit>,
-                "previous_commit": <previous commit>,
-                "author": <author>,
-                "author_email": <author email if available>,
-                "datetime": <datetime>,
-                "message: <commit message>
+                "commit": <commit (str)>,
+                "author": {"name": <name (str)>, "email": <email (str)>},
+                "committed_on": <datetime (datetime)>,
+                "message": <commit message (str)>
+                "content": <content block (str)>
             }
 
 
@@ -384,11 +383,11 @@ class GitRepoInterface(metaclass=abc.ABCMeta):
         raise NotImplemented
 
     @abc.abstractmethod
-    def checkout(self, branch):
+    def checkout(self, branch_name):
         """Method to switch to a different branch
 
         Args:
-            branch(str): Name of the branch to switch to
+            branch_name(str): Name of the branch to switch to
 
         Returns:
             None
@@ -398,14 +397,23 @@ class GitRepoInterface(metaclass=abc.ABCMeta):
 
     # TAG METHODS
     @abc.abstractmethod
-    def create_tag(self, name):
+    def create_tag(self, name, message):
         """Method to create a tag
 
         Args:
             name(str): Name of the tag
+            message(str): Message with the tag
 
         Returns:
             None
+        """
+        raise NotImplemented
+
+    def list_tags(self):
+        """Method to list tags
+
+        Returns:
+            (list(tuple)): list of tuples with the format (tag name, tag message)
         """
         raise NotImplemented
     # TAG METHODS
@@ -428,31 +436,49 @@ class GitRepoInterface(metaclass=abc.ABCMeta):
         raise NotImplemented
 
     @abc.abstractmethod
-    def add_remote(self, name, url):
+    def add_remote(self, name, url, kwargs=None):
         """Method to add a new remote
 
         Args:
             name(str): Name of the remote
-            url(str): URL to the remote
+            url(str): Connection string to the remote
+            kwargs(dict): Dictionary of kwargs to send to the git remote add command
 
         Returns:
             None
         """
-
         raise NotImplemented
 
     @abc.abstractmethod
-    def fetch(self):
+    def remove_remote(self, name):
+        """Method to remove a remote
+
+        Args:
+            name(str): Name of the remote
+
+        Returns:
+            None
+        """
+        raise NotImplemented
+
+    @abc.abstractmethod
+    def fetch(self, refspec=None):
         """Method to download objects and refs from a remote
 
+        Args:
+            refspec(str): string describing the mapping between remote ref and local ref
+
         Returns:
             None
         """
         raise NotImplemented
 
     @abc.abstractmethod
-    def pull(self):
+    def pull(self, refspec=None):
         """Method fetch and integrate a remote
+
+        Args:
+            refspec(str): string describing the mapping between remote ref and local ref
 
         Returns:
             None

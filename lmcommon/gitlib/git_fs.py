@@ -378,12 +378,11 @@ class GitFilesystem(GitRepoInterface):
         Returns an ordered list of dictionaries, one entry per change. Dictionary format:
 
             {
-                "commit": <commit>,
-                "previous_commit": <previous commit>,
-                "author": <author>,
-                "author_email": <author email if available>,
-                "datetime": <datetime>,
-                "message: <commit message>
+                "commit": <commit (str)>,
+                "author": {"name": <name (str)>, "email": <email (str)>},
+                "committed_on": <datetime (datetime)>,
+                "message": <commit message (str)>
+                "content": <content block (str)>
             }
 
 
@@ -393,7 +392,19 @@ class GitFilesystem(GitRepoInterface):
         Returns:
             list(dict)
         """
-        raise NotImplemented
+        blame_data = self.repo.blame('HEAD', filename)
+
+        result = []
+        for b in blame_data:
+            result.append({
+                            "commit": b[0].hexsha,
+                            "author": {"name": b[0].author.name, "email": b[0].author.email},
+                            "committed_on": b[0].committed_datetime,
+                            "message": b[0].message,
+                            "content": "\n".join(b[1])
+                          })
+
+        return result
     # HISTORY METHODS
 
     # BRANCH METHODS
@@ -406,8 +417,30 @@ class GitFilesystem(GitRepoInterface):
         Returns:
             None
         """
-        raise NotImplemented
+        self.repo.create_head(name)
 
+    def publish_branch(self, branch_name, remote_name="origin"):
+        """Method to track a remote branch, check it out, and push
+
+        Args:
+            branch_name(str): Name of the branch
+            remote_name(str): Name of the remote
+
+        Returns:
+            None
+        """
+        if branch_name not in self.repo.heads:
+            raise ValueError("Branch `{}` not found.".format(branch_name))
+
+        try:
+            remote = self.repo.remotes[remote_name]
+        except IndexError:
+            raise ValueError("Remote `{}` not found.".format(remote_name))
+
+        self.repo.heads[branch_name].checkout()
+        remote.push(branch_name)
+
+    # TODO: write this after remote support added
     def list_branches(self):
         """Method to list branches. Should return a dictionary of the format:
 
@@ -423,6 +456,7 @@ class GitFilesystem(GitRepoInterface):
         """
         raise NotImplemented
 
+    # TODO: write this after remote support added
     def delete_branch(self, name, remote=False, force=False):
         """Method to delete a branch
 
@@ -446,31 +480,55 @@ class GitFilesystem(GitRepoInterface):
         Returns:
             None
         """
-        raise NotImplemented
+        if old_name not in self.repo.heads:
+            raise ValueError("Branch `{}` not found.".format(old_name))
 
-    def checkout(self, branch):
+        self.repo.heads[old_name].rename(new_name)
+
+    def checkout(self, branch_name, remote="origin"):
         """Method to switch to a different branch
 
         Args:
-            branch(str): Name of the branch to switch to
+            branch_name(str): Name of the branch to switch to
 
         Returns:
             None
         """
-        raise NotImplemented
+        if branch_name not in self.repo.heads:
+            # Check if the branch exists in the remote and just hasn't been pulled yet
+            if "{}/{}".format(remote, branch_name) not in self.repo.refs:
+                raise ValueError("Branch `{}` not found.".format(branch_name))
+            else:
+                # Need to checkout the branch from the remote
+                new_branch = self.repo.create_head(branch_name,
+                                                   self.repo.remotes["origin"].refs[branch_name])
+                self.repo.heads[branch_name].set_tracking_branch(self.repo.remotes["origin"].refs[branch_name])
+                self.repo.heads[branch_name].checkout()
+        else:
+            self.repo.heads[branch_name].checkout()
+
     # BRANCH METHODS
 
     # TAG METHODS
-    def create_tag(self, name):
+    def create_tag(self, name, message):
         """Method to create a tag
 
         Args:
             name(str): Name of the tag
+            message(str): Message with the tag
 
         Returns:
             None
         """
-        raise NotImplemented
+        self.repo.create_tag(name, message=message)
+
+    def list_tags(self):
+        """Method to list tags
+
+        Returns:
+            (list(tuple)): list of tuples with the format (tag name, tag message)
+        """
+        return [(x.tag.tag, x.tag.message) for x in self.repo.tags]
     # TAG METHODS
 
     # REMOTE METHODS
@@ -487,38 +545,65 @@ class GitFilesystem(GitRepoInterface):
         Returns:
             list(dict)
         """
-        raise NotImplemented
+        return [{"name": x.name, "url": list(x.urls)[0]} for x in self.repo.remotes]
 
-    def add_remote(self, name, url):
+    def add_remote(self, name, url, kwargs={}):
         """Method to add a new remote
 
         Args:
             name(str): Name of the remote
-            url(str): URL to the remote
+            url(str): Connection string to the remote
+            kwargs(dict): Dictionary of kwargs to send to the git remote add command
 
         Returns:
             None
         """
+        self.repo.create_remote(name, url, **kwargs)
 
-        raise NotImplemented
+    def remove_remote(self, name):
+        """Method to remove a remote
 
-    def fetch(self):
+        Args:
+            name(str): Name of the remote
+
+        Returns:
+            None
+        """
+        found = False
+        for r in self.repo.remotes:
+            if r.name == name:
+                r.remove(self.repo, name)
+                found = True
+                break
+
+        if not found:
+            raise ValueError("Remote not found.")
+
+    def fetch(self, refspec=None, remote="origin"):
         """Method to download objects and refs from a remote
 
+        Args:
+            refspec(str): string describing the mapping between remote ref and local ref
+            remote(str): name of remote, default to `origin`
+
         Returns:
             None
         """
-        raise NotImplemented
+        self.repo.remotes[remote].fetch(refspec)
 
-    def pull(self):
+    def pull(self, refspec=None, remote="origin"):
         """Method fetch and integrate a remote
 
+        Args:
+            refspec(str): string describing the mapping between remote ref and local ref
+            remote(str): name of remote, default to `origin`
+
         Returns:
             None
         """
-        raise NotImplemented
+        self.repo.remotes[remote].pull(refspec=refspec)
 
-    def push(self, remote_name, tags=False):
+    def push(self, remote_name="origin", refspec=None, tags=False):
         """Method update remote refs along with associated objects
 
         Args:
@@ -528,7 +613,7 @@ class GitFilesystem(GitRepoInterface):
         Returns:
 
         """
-        raise NotImplemented
+        return self.repo.remotes[remote_name].push()
     # REMOTE METHODS
 
     # MERGE METHODS
