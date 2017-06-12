@@ -87,7 +87,6 @@ class GitRepoInterface(metaclass=abc.ABCMeta):
             committer(GitAuthor): User info for the committer. If omitted, set to the author
         """
         self.config = config_dict
-        self.current_branch = None
         self.author = None
         self.committer = None
 
@@ -128,8 +127,11 @@ class GitRepoInterface(metaclass=abc.ABCMeta):
 
     # CREATE METHODS
     @abc.abstractmethod
-    def initialize(self):
+    def initialize(self, bare=False):
         """Initialize a new repo
+
+        Args:
+            bare(bool): If True, use the --bare option
 
         Returns:
             None
@@ -166,7 +168,7 @@ class GitRepoInterface(metaclass=abc.ABCMeta):
             status is the status of the file (new, modified, deleted)
 
         Returns:
-            dict(list)
+            (dict(list))
         """
         raise NotImplemented
 
@@ -187,7 +189,7 @@ class GitRepoInterface(metaclass=abc.ABCMeta):
         """Remove a file from tracking
 
         Args:
-            filename(str): Filename to add. Should support `.` to add all files
+            filename(str): Filename to remove.
             force(bool): Force removal
             keep_file(bool): If true, don't delete the file (e.g. use the --cached flag)
 
@@ -340,6 +342,19 @@ class GitRepoInterface(metaclass=abc.ABCMeta):
         raise NotImplemented
 
     @abc.abstractmethod
+    def publish_branch(self, branch_name, remote_name="origin"):
+        """Method to track a remote branch, check it out, and push
+
+        Args:
+            branch_name(str): Name of the branch
+            remote_name(str): Name of the remote
+
+        Returns:
+            None
+        """
+        raise NotImplemented
+
+    @abc.abstractmethod
     def list_branches(self):
         """Method to list branches. Should return a dictionary of the format:
 
@@ -413,7 +428,7 @@ class GitRepoInterface(metaclass=abc.ABCMeta):
         """Method to list tags
 
         Returns:
-            (list(tuple)): list of tuples with the format (tag name, tag message)
+            (list(dict)): list of dicts with `name` and `message` fields
         """
         raise NotImplemented
     # TAG METHODS
@@ -462,11 +477,12 @@ class GitRepoInterface(metaclass=abc.ABCMeta):
         raise NotImplemented
 
     @abc.abstractmethod
-    def fetch(self, refspec=None):
+    def fetch(self, refspec=None, remote="origin"):
         """Method to download objects and refs from a remote
 
         Args:
             refspec(str): string describing the mapping between remote ref and local ref
+            remote(str): name of remote, default to `origin`
 
         Returns:
             None
@@ -474,11 +490,12 @@ class GitRepoInterface(metaclass=abc.ABCMeta):
         raise NotImplemented
 
     @abc.abstractmethod
-    def pull(self, refspec=None):
+    def pull(self, refspec=None, remote="origin"):
         """Method fetch and integrate a remote
 
         Args:
             refspec(str): string describing the mapping between remote ref and local ref
+            remote(str): name of remote, default to `origin`
 
         Returns:
             None
@@ -486,7 +503,7 @@ class GitRepoInterface(metaclass=abc.ABCMeta):
         raise NotImplemented
 
     @abc.abstractmethod
-    def push(self, remote_name, tags=False):
+    def push(self, remote_name="origin", refspec=None, tags=False):
         """Method update remote refs along with associated objects
 
         Args:
@@ -502,19 +519,10 @@ class GitRepoInterface(metaclass=abc.ABCMeta):
     # MERGE METHODS
     @abc.abstractmethod
     def merge(self, branch_name):
-        """Method to join a branch history with the current branch
+        """Method to join a future branch history with the current branch
 
         Args:
-            branch_name(str): Name of the branch to merge into the current branch
-
-        Returns:
-            None
-        """
-        raise NotImplemented
-
-    @abc.abstractmethod
-    def abort_merge(self):
-        """Method to abort a merge operation
+            branch_name(str): Name of the FUTURE branch to merge into the current PAST branch
 
         Returns:
             None
@@ -534,43 +542,18 @@ class GitRepoInterface(metaclass=abc.ABCMeta):
             None
         """
         raise NotImplemented
-
-    @abc.abstractmethod
-    def revert(self, commit):
-        """Revert changes into a new commit by replaying with appropriate changes
-
-        Args:
-            commit(str): Commit to revert to
-
-        Returns:
-            None
-        """
-        raise NotImplemented
-
-    @abc.abstractmethod
-    def reset_head(self, commit, hard=False, keep=False):
-        """Reset current head to a specified state
-
-        Args:
-            commit(str): Commit to reset head to
-            hard(bool): If True, Resets so any changes to tracked files in the working tree since <commit> are discarded
-            keep(bool): If True, Resets and updates files in the working tree that are different between <commit> and
-                        HEAD. If a file that is different between <commit> and HEAD has local changes, reset is aborted.
-
-        Returns:
-            None
-        """
-        raise NotImplemented
     # UNDO METHODS
 
     # SUBMODULE METHODS
     @abc.abstractmethod
-    def add_submodule(self, repository, relative_path):
-        """Method to add a submodule at the provided relative path to the repo root
+    def add_submodule(self, name, relative_path, repository, branch=None):
+        """Method to add a submodule at the provided relative path to the repo root and commit the change
 
         Args:
-            repository(str): URL to the remote repository
+            name(str): Name for the submodule
             relative_path(str): Relative path from the repo root where the submodule should go
+            repository(str): URL to the remote repository
+            branch(str): If not None, the branch that should be used
 
         Returns:
             None
@@ -581,18 +564,25 @@ class GitRepoInterface(metaclass=abc.ABCMeta):
     def list_submodules(self):
         """Method to list submodules
 
-            Should return a list of tuples with the format:
+            Should return a list of dicts with the format:
 
-                [(name, commit), ...]
+                {
+                    "name": <name of the submodule>,
+                    "url": <url of repo>,
+                    "branch": <name of the branch>
+                }
 
         Returns:
-            list(tuple)
+            list(dict)
         """
         raise NotImplemented
 
     @abc.abstractmethod
-    def init_submodules(self):
-        """Method to init submodules
+    def update_submodules(self, init=True):
+        """Method to update submodules and optionally init if needed
+
+        Args:
+            init(bool): Flag indicating if submodules should be initialized
 
         Returns:
             None
@@ -600,13 +590,11 @@ class GitRepoInterface(metaclass=abc.ABCMeta):
         raise NotImplemented
 
     @abc.abstractmethod
-    def deinit_submodules(self, submodule_path, force=False, delete=False):
-        """Method to deinit submodules
+    def remove_submodules(self, submodule_name):
+        """Method to remove submodule reference and delete the files
 
         submodule_path:
-            submodule_path(str): Path to the submodule to deinit
-            force(bool): If True, force deinit operation
-            delete(bool): If True, make sure submodule directory has been removed from repository
+            submodule_name(str): Name of the submodule
 
         Returns:
             None

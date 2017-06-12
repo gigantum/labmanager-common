@@ -18,7 +18,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 from .git import GitRepoInterface
-from git import Repo
+from git import Repo, Head, RemoteReference
 from git import InvalidGitRepositoryError
 import os
 import re
@@ -43,11 +43,6 @@ class GitFilesystem(GitRepoInterface):
             config_dict(dict): Configuration details for the interface
             author(GitAuthor): User info for the author, if omitted, assume the "system"
             committer(GitAuthor): User info for the committer. If omitted, set to the author
-
-        Attributes:
-            config(dict): Configuration details
-            current_branch(str): The name of the current branch
-            repo(Repo): A GitPython Repo instance loaded at the
         """
         # Call super constructor
         GitRepoInterface.__init__(self, config_dict, author=author, committer=committer)
@@ -112,7 +107,7 @@ class GitFilesystem(GitRepoInterface):
             status is the status of the file (new, modified, deleted)
 
         Returns:
-            dict
+            (dict(list))
         """
         result = {"untracked": self.repo.untracked_files}
 
@@ -155,7 +150,7 @@ class GitFilesystem(GitRepoInterface):
         """Add a file to a commit
 
         Args:
-            filename(str): Filename to add. Should support `.` to add all files
+            filename(str): Filename to add.
 
         Returns:
             None
@@ -180,13 +175,12 @@ class GitFilesystem(GitRepoInterface):
 
         # TODO: DMK look into if force option is needed
 
-    # todo diff branches
     @staticmethod
     def _parse_diff_strings(value):
         """Method to parse diff strings into chunks
 
         Args:
-            value(str): Diff string from the diff command
+            value(bytes): Diff bytes from the diff command
 
         Returns:
             list((str, str)): a list of (line string, diff str)
@@ -205,6 +199,7 @@ class GitFilesystem(GitRepoInterface):
 
         return [(x, y) for x, y in zip(line_info, change_info)]
 
+    # TODO: Add support to diff branches
     def diff_unstaged(self, filename=None, ignore_white_space=True):
         """Method to return the diff for unstaged files, optionally for a specific file
 
@@ -440,35 +435,63 @@ class GitFilesystem(GitRepoInterface):
         self.repo.heads[branch_name].checkout()
         remote.push(branch_name)
 
-    # TODO: write this after remote support added
     def list_branches(self):
         """Method to list branches. Should return a dictionary of the format:
 
             {
-                "local": [(<name>, <short_hash>, <message>), ...]
-                "remote": [(<name>, <short_hash>, <message>), ...]
+                "local": [<name>, ...]
+                "remote": [<name>, ...]
             }
 
-            The first "local" entry is always the HEAD
+            where local are branches currently available locally
 
         Returns:
-            dict(list(tuple))
+            (list)
         """
-        raise NotImplemented
+        local = []
+        remote = []
+        for ref in self.repo.refs:
+            if type(ref) == Head:
+                local.append(ref.name)
+            elif type(ref) == RemoteReference:
+                remote.append(ref.name)
 
-    # TODO: write this after remote support added
-    def delete_branch(self, name, remote=False, force=False):
+        return {"local": local, "remote": remote}
+
+    def delete_branch(self, name, delete_remote=False, remote="origin", force=False):
         """Method to delete a branch
 
         Args:
             name(str): Name of the branch to delete
-            remote(bool): If True, delete a remote branch
+            delete_remote(bool): If True, delete a remote branch
+            remote(str): Name of remote to use with remote branches, defaults to "origin"
             force(bool): If True, force delete
 
         Returns:
             None
         """
-        raise NotImplemented
+        if name not in self.repo.heads:
+            if delete_remote:
+                if os.path.join(remote, name) not in [x.name for x in self.repo.refs]:
+                    raise ValueError("Branch `{}` not found.".format(os.path.join(remote, name)))
+                else:
+                    name = os.path.join(remote, name)
+            else:
+                raise ValueError("Branch `{}` not found.".format(name))
+
+        options = []
+        if delete_remote:
+            options.append("-r")
+        if force:
+            options.append("-f")
+
+        if options:
+            # Currently, using direct git interface to apply -dr option for remote branch deletion
+            options.insert(0, "-d")
+            options.append(name)
+            self.repo.git.branch(*options)
+        else:
+            self.repo.delete_head(name)
 
     def rename_branch(self, old_name, new_name):
         """Method to rename a branch
@@ -526,9 +549,9 @@ class GitFilesystem(GitRepoInterface):
         """Method to list tags
 
         Returns:
-            (list(tuple)): list of tuples with the format (tag name, tag message)
+            (list(dict)): list of dicts with `name` and `message` fields
         """
-        return [(x.tag.tag, x.tag.message) for x in self.repo.tags]
+        return [{"name": x.tag.tag, "message": x.tag.message} for x in self.repo.tags]
     # TAG METHODS
 
     # REMOTE METHODS
@@ -547,7 +570,7 @@ class GitFilesystem(GitRepoInterface):
         """
         return [{"name": x.name, "url": list(x.urls)[0]} for x in self.repo.remotes]
 
-    def add_remote(self, name, url, kwargs={}):
+    def add_remote(self, name, url, kwargs=None):
         """Method to add a new remote
 
         Args:
@@ -558,6 +581,9 @@ class GitFilesystem(GitRepoInterface):
         Returns:
             None
         """
+        if not kwargs:
+            kwargs = {}
+
         self.repo.create_remote(name, url, **kwargs)
 
     def remove_remote(self, name):
@@ -613,28 +639,40 @@ class GitFilesystem(GitRepoInterface):
         Returns:
 
         """
-        return self.repo.remotes[remote_name].push()
+        return self.repo.remotes[remote_name].push(tags=tags)
     # REMOTE METHODS
 
     # MERGE METHODS
     def merge(self, branch_name):
-        """Method to join a branch history with the current branch
+        """Method to join a future branch history with the current branch
 
         Args:
-            branch_name(str): Name of the branch to merge into the current branch
+            branch_name(str): Name of the FUTURE branch to merge into the current PAST branch
 
         Returns:
             None
         """
-        raise NotImplemented
+        if branch_name not in self.repo.heads:
+            raise ValueError("Branch `{}` not found.".format(branch_name))
 
-    def abort_merge(self):
-        """Method to abort a merge operation
+        # Get branch object for the right side. Should be future.
+        future_branch = self.repo.heads[branch_name]
 
-        Returns:
-            None
-        """
-        raise NotImplemented
+        # Get branch object for the left side. Should be behind the right side and be the current checked out branch.
+        current_branch = self.repo.heads[self.get_current_branch_name()]
+
+        # Get the merge base (where the two branches diverge)
+        merge_base = self.repo.merge_base(current_branch, future_branch)
+
+        # Write merge to the index
+        self.repo.index.merge_tree(future_branch, base=merge_base)
+
+        # Commit
+        self.repo.index.commit("Merged {} into {}".format(branch_name, self.get_current_branch_name()),
+                               parent_commits=(current_branch.commit, future_branch.commit))
+
+        # Now checkout latest commit
+        current_branch.checkout(force=True)
     # MERGE METHODS
 
     # UNDO METHODS
@@ -647,76 +685,72 @@ class GitFilesystem(GitRepoInterface):
         Returns:
             None
         """
-        raise NotImplemented
-
-    def revert(self, commit):
-        """Revert changes into a new commit by replaying with appropriate changes
-
-        Args:
-            commit(str): Commit to revert to
-
-        Returns:
-            None
-        """
-        raise NotImplemented
-
-    def reset_head(self, commit, hard=False, keep=False):
-        """Reset current head to a specified state
-
-        Args:
-            commit(str): Commit to reset head to
-            hard(bool): If True, Resets so any changes to tracked files in the working tree since <commit> are discarded
-            keep(bool): If True, Resets and updates files in the working tree that are different between <commit> and
-                        HEAD. If a file that is different between <commit> and HEAD has local changes, reset is aborted.
-
-        Returns:
-            None
-        """
-        raise NotImplemented
+        if filename:
+            self.repo.index.checkout([filename], force=True)
+        else:
+            self.repo.index.checkout(force=True)
     # UNDO METHODS
 
     # SUBMODULE METHODS
-    def add_submodule(self, repository, relative_path):
-        """Method to add a submodule at the provided relative path to the repo root
+    def add_submodule(self, name, relative_path, repository, branch=None):
+        """Method to add a submodule at the provided relative path to the repo root and commit the change
 
         Args:
-            repository(str): URL to the remote repository
+            name(str): Name for the submodule
             relative_path(str): Relative path from the repo root where the submodule should go
+            repository(str): URL to the remote repository
+            branch(str): If not None, the branch that should be used
 
         Returns:
             None
         """
-        raise NotImplemented
+        self.repo.create_submodule(name, relative_path, url=repository, branch=branch)
+        self.repo.index.commit("Added submodule: {}".format(name))
 
     def list_submodules(self):
         """Method to list submodules
 
-            Should return a list of tuples with the format:
+            Should return a list of dicts with the format:
 
-                [(name, commit), ...]
+                {
+                    "name": <name of the submodule>,
+                    "url": <url of repo>,
+                    "branch": <name of the branch>
+                }
 
         Returns:
-            list(tuple)
+            list(dict)
         """
-        raise NotImplemented
+        result = []
+        for sub in self.repo.submodules:
+            result.append({"name": sub.name,
+                           "url": sub.url,
+                           "branch": sub.branch_name})
 
-    def init_submodules(self):
-        """Method to init submodules
+        return result
+
+    def update_submodules(self, init=True):
+        """Method to update submodules and optionally init if needed
+
+        Args:
+            init(bool): Flag indicating if submodules should be initialized
 
         Returns:
             None
         """
-        raise NotImplemented
+        self.repo.submodule_update(init=init)
 
-    def deinit_submodules(self, submodule_path, force=False, delete=False):
-        """Method to deinit submodules
+    def remove_submodules(self, submodule_name):
+        """Method to remove submodule reference and delete the files
 
         submodule_path:
-            submodule_path(str): Path to the submodule to deinit
-            force(bool): If True, force deinit operation
-            delete(bool): If True, make sure submodule directory has been removed from repository
+            submodule_name(str): Name of the submodule
 
         Returns:
             None
         """
-        raise NotImplemented
+        if submodule_name not in [x.name for x in self.repo.submodules]:
+            raise ValueError("Submodule `{}` not found.".format(submodule_name))
+
+        self.repo.submodules[submodule_name].remove(module=True, configuration=True)
+        self.repo.index.commit("Removed submodule: {}".format(submodule_name))

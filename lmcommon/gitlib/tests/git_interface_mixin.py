@@ -25,6 +25,7 @@ import uuid
 import datetime
 from ...gitlib import GitFilesystem, GitAuthor
 from git import Repo
+from git.exc import GitCommandError
 
 
 # Required Fixtures:
@@ -124,13 +125,15 @@ def populate_bare_repo(working_dir):
     git.repo.remotes.origin.push("test_branch")
 
     # Tag
-    git.repo.create_tag("test_tag_1", message="a test tag")
+    tag = git.repo.create_tag("test_tag_1", message="a test tag")
+    git.repo.remotes.origin.push(tag)
 
     # Check master back out
     git.repo.heads.master.checkout()
 
     # Delete temp dir
     shutil.rmtree(scratch_working_dir)
+
 
 def create_dummy_repo(working_dir):
     """Helper method to create a dummy repo with a file in it"""
@@ -195,7 +198,7 @@ class GitInterfaceMixin(object):
 
         assert len(git.repo.heads) == 1
         assert len(git.repo.remotes["origin"].fetch()) == 2
-        assert len(git.repo.refs) == 4
+        assert len(git.repo.refs) == 5
 
         # Make sure only master content
         assert os.path.isfile(os.path.join(scratch_working_dir, 'test1.txt')) is True
@@ -875,10 +878,70 @@ class GitInterfaceMixin(object):
         with pytest.raises(ValueError):
             git.checkout("a;lskjdfas;lkjhdf")
 
+    def test_list_branches(self, mock_initialized_remote):
+        """Method to test listing branches"""
+        git = mock_initialized_remote[0]
+
+        git.create_branch("test_remote_branch")
+        git.publish_branch("test_remote_branch")
+        git.create_branch("test_local_branch")
+        branches = git.list_branches()
+
+        assert len(branches["local"]) == 3
+        assert len(branches["remote"]) == 4
+        assert "test_local_branch" in branches["local"]
+        assert "test_remote_branch" in branches["local"]
+        assert "origin/test_local_branch" not in branches["remote"]
+        assert "origin/test_remote_branch" in branches["remote"]
+
+    def test_delete_branch(self, mock_initialized_remote):
+        """Method to test deleting branches"""
+        git = mock_initialized_remote[0]
+
+        git.create_branch("test_remote_branch")
+        git.publish_branch("test_remote_branch")
+        git.create_branch("test_local_branch")
+        branches = git.list_branches()
+
+        assert len(branches["local"]) == 3
+        assert len(branches["remote"]) == 4
+
+        # Delete local branch
+        git.delete_branch("test_local_branch")
+        branches = git.list_branches()
+        assert len(branches["local"]) == 2
+        assert len(branches["remote"]) == 4
+
+        # Delete remote branch, locally only
+        git.checkout("master")
+        git.delete_branch("test_remote_branch")
+        branches = git.list_branches()
+        assert len(branches["local"]) == 1
+        assert branches["local"][0] == "master"
+        assert len(branches["remote"]) == 4
+
+        # Delete remote branch on remote
+        git.delete_branch("test_remote_branch", delete_remote=True)
+        branches = git.list_branches()
+        assert len(branches["local"]) == 1
+        assert branches["local"][0] == "master"
+        assert len(branches["remote"]) == 3
+
+    def test_existing_tag_fail(self, mock_initialized):
+        """Method to test creating an existing tag, should fail"""
+        git = mock_initialized[0]
+
+        git.create_tag("test_tag_1", "test tag 1")
+
+        # Should fail on an existing tag
+        with pytest.raises(GitCommandError):
+            git.create_tag("test_tag_1", "test tag 1 should fail!")
+
     def test_tags(self, mock_initialized):
         """Method to test creating and listing tags"""
         git = mock_initialized[0]
 
+        # Test creating a new tag
         git.create_tag("tag1", "test tag 1")
 
         write_file(git, "test1.txt", "content", commit_msg="Adding a file")
@@ -888,6 +951,10 @@ class GitInterfaceMixin(object):
         tags = git.list_tags()
 
         assert len(tags) == 2
+        assert tags[0]["name"] == "tag1"
+        assert tags[0]["message"] == "test tag 1"
+        assert tags[1]["name"] == "tag2"
+        assert tags[1]["message"] == "test tag 2"
 
     def test_add_remove_remote(self, mock_initialized_remote):
         """Method to test creating and listing tags"""
@@ -947,7 +1014,7 @@ class GitInterfaceMixin(object):
         git = mock_initialized_remote[0]
         assert len(git.repo.heads) == 1
         assert len(git.repo.remotes["origin"].fetch()) == 2
-        assert len(git.repo.refs) == 4
+        assert len(git.repo.refs) == 5
 
         # Make sure only master content
         assert os.path.isfile(os.path.join(cloned_working_dir, 'test1.txt')) is True
@@ -997,7 +1064,7 @@ class GitInterfaceMixin(object):
         git = mock_initialized_remote[0]
         assert len(git.repo.heads) == 1
         assert len(git.repo.remotes["origin"].fetch()) == 2
-        assert len(git.repo.refs) == 4
+        assert len(git.repo.refs) == 5
 
         # Make sure only master content
         git.checkout("master")
@@ -1026,5 +1093,218 @@ class GitInterfaceMixin(object):
         # Delete temp dir
         shutil.rmtree(scratch_working_dir)
 
-    # TODO: Add push for tags and test
+    def test_push_tags(self, mock_initialized_remote):
+        """Method to test pushing to a remote"""
+        cloned_working_dir = mock_initialized_remote[1]
 
+        # Get a clone of the remote repo
+        git = mock_initialized_remote[0]
+        assert len(git.repo.heads) == 1
+        assert len(git.repo.remotes["origin"].fetch()) == 2
+        assert len(git.repo.refs) == 5
+
+        # Add a file to master and commit
+        write_file(git, "test3.txt", "adding a new file Content", commit_msg="add commit")
+        git.push()
+
+        # Add a tag
+        git.create_tag("new_tag_1", "this is my test tag")
+
+        # Check, tag should not be pushed yet.
+        scratch_working_dir = os.path.join(tempfile.gettempdir(), uuid.uuid4().hex)
+        os.makedirs(scratch_working_dir)
+        config = {"backend": "filesystem", "working_directory": scratch_working_dir}
+
+        # Init the empty repo
+        git_updater = GitFilesystem(config)
+        git_updater.clone(mock_initialized_remote[3])
+        git_updater.checkout("master")
+
+        # Make sure it pulled content
+        assert os.path.isfile(os.path.join(cloned_working_dir, 'test1.txt')) is True
+        assert os.path.isfile(os.path.join(cloned_working_dir, 'test2.txt')) is False
+        assert os.path.isfile(os.path.join(cloned_working_dir, 'test3.txt')) is True
+
+        # Check tags
+        assert len(git_updater.list_tags()) == 1
+        assert git_updater.list_tags()[0]["name"] == "test_tag_1"
+
+        # Push Tag
+        git.push(tags=True)
+
+        # Fetch and check tags
+        git_updater.fetch()
+        assert len(git_updater.list_tags()) == 2
+        assert git_updater.list_tags()[0]["name"] == "new_tag_1"
+
+        # Delete temp dir
+        shutil.rmtree(scratch_working_dir)
+
+    def test_merge(self, mock_initialized_remote):
+        """Method to test pushing to a remote"""
+        cloned_working_dir = mock_initialized_remote[1]
+
+        # Get a clone of the remote repo
+        git = mock_initialized_remote[0]
+
+        # Create and checkout a new branch
+        git.create_branch("future_branch")
+        git.checkout("future_branch")
+
+        # Add a file to future branch and commit
+        write_file(git, "test3.txt", "adding a new file Content", commit_msg="add commit")
+
+        # Make sure data is there
+        assert os.path.isfile(os.path.join(cloned_working_dir, 'test1.txt')) is True
+        assert os.path.isfile(os.path.join(cloned_working_dir, 'test2.txt')) is False
+        assert os.path.isfile(os.path.join(cloned_working_dir, 'test3.txt')) is True
+
+        # Checkout master
+        git.checkout("master")
+
+        # New file shouldn't be there
+        assert os.path.isfile(os.path.join(cloned_working_dir, 'test1.txt')) is True
+        assert os.path.isfile(os.path.join(cloned_working_dir, 'test2.txt')) is False
+        assert os.path.isfile(os.path.join(cloned_working_dir, 'test3.txt')) is False
+
+        # Merge future branch into master
+        git.merge("future_branch")
+
+        # New file should be there
+        assert os.path.isfile(os.path.join(cloned_working_dir, 'test1.txt')) is True
+        assert os.path.isfile(os.path.join(cloned_working_dir, 'test2.txt')) is False
+        assert os.path.isfile(os.path.join(cloned_working_dir, 'test3.txt')) is True
+
+    def test_discard_changes(self, mock_initialized):
+        """Test discarding all changes in a repo"""
+        git = mock_initialized[0]
+        working_directory = mock_initialized[1]
+
+        # Create file
+        write_file(git, "test_add1.txt", "entry 1", commit_msg="adding file 1")
+        write_file(git, "test_add2.txt", "entry 2", commit_msg="adding file 2")
+
+        # Verify Clean
+        status = git.status()
+        assert len(status["staged"]) == 0
+        assert len(status["unstaged"]) == 0
+        assert len(status["untracked"]) == 0
+
+        # Edit both files
+        write_file(git, "test_add1.txt", "entry 1 updated", add=False)
+        write_file(git, "test_add2.txt", "entry 2 updated", add=False)
+
+        # Verify Edits exist
+        status = git.status()
+        assert len(status["staged"]) == 0
+        assert len(status["unstaged"]) == 2
+        assert len(status["untracked"]) == 0
+
+        # Discard Single file change changes
+        git.discard_changes("test_add2.txt")
+
+        # Verify Edits gone
+        status = git.status()
+        assert len(status["staged"]) == 0
+        assert len(status["unstaged"]) == 1
+        assert status["unstaged"][0][0] == "test_add1.txt"
+        assert len(status["untracked"]) == 0
+
+        # Edit both files again
+        write_file(git, "test_add1.txt", "entry 1 updated", add=False)
+        write_file(git, "test_add2.txt", "entry 2 updated", add=False)
+
+        # Verify Edits exist
+        status = git.status()
+        assert len(status["staged"]) == 0
+        assert len(status["unstaged"]) == 2
+        assert len(status["untracked"]) == 0
+
+        # Discard All changes
+        git.discard_changes()
+
+        # Verify Edits gone
+        status = git.status()
+        assert len(status["staged"]) == 0
+        assert len(status["unstaged"]) == 0
+        assert len(status["untracked"]) == 0
+
+    def test_add_submodule(self, mock_initialized_remote):
+        """Method to test pushing to a remote"""
+        remote_working_dir = mock_initialized_remote[3]
+
+        # Create a new repo
+        scratch_working_dir = os.path.join(tempfile.gettempdir(), uuid.uuid4().hex)
+        os.makedirs(scratch_working_dir)
+        config = {"backend": "filesystem", "working_directory": scratch_working_dir}
+        git = GitFilesystem(config)
+        git.initialize()
+        write_file(git, "blah.txt", "blaaah", commit_msg="First commit")
+
+        # List submodules
+        assert len(git.list_submodules()) == 0
+
+        # Add a submodule
+        git.add_submodule("test_sub", "test", remote_working_dir)
+
+        # List submodules
+        assert len(git.list_submodules()) == 1
+        sm = git.list_submodules()[0]
+        assert sm["name"] == "test_sub"
+        assert sm["url"] == remote_working_dir
+        assert sm["branch"] == "master"
+
+        # Should be clean
+        status = git.status()
+        assert len(status["staged"]) == 0
+        assert len(status["unstaged"]) == 0
+        assert len(status["untracked"]) == 0
+        assert os.path.isfile(os.path.join(scratch_working_dir, "test", 'test1.txt')) is True
+
+        # Delete temp dir
+        shutil.rmtree(scratch_working_dir)
+
+    def test_remove_submodule(self, mock_initialized_remote):
+        """Method to test pushing to a remote"""
+        remote_working_dir = mock_initialized_remote[3]
+
+        # Create a new repo
+        scratch_working_dir = os.path.join(tempfile.gettempdir(), uuid.uuid4().hex)
+        os.makedirs(scratch_working_dir)
+        config = {"backend": "filesystem", "working_directory": scratch_working_dir}
+        git = GitFilesystem(config)
+        git.initialize()
+        write_file(git, "blah.txt", "blaaah", commit_msg="First commit")
+
+        # List submodules
+        assert len(git.list_submodules()) == 0
+
+        # Add a submodule
+        git.add_submodule("test_sub", "test", remote_working_dir)
+
+        # List submodules
+        assert len(git.list_submodules()) == 1
+        sm = git.list_submodules()[0]
+        assert sm["name"] == "test_sub"
+        assert sm["url"] == remote_working_dir
+        assert sm["branch"] == "master"
+
+        # Should be clean
+        status = git.status()
+        assert len(status["staged"]) == 0
+        assert len(status["unstaged"]) == 0
+        assert len(status["untracked"]) == 0
+        assert os.path.isfile(os.path.join(scratch_working_dir, "test", 'test1.txt')) is True
+
+        # Delete the submodule reference
+        git.remove_submodules("test_sub")
+
+        # Should be clean and data should be gone
+        status = git.status()
+        assert len(status["staged"]) == 0
+        assert len(status["unstaged"]) == 0
+        assert len(status["untracked"]) == 0
+        assert os.path.isfile(os.path.join(scratch_working_dir, "test", 'test1.txt')) is False
+
+        # Delete temp dir
+        shutil.rmtree(scratch_working_dir)
