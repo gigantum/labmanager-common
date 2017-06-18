@@ -52,6 +52,29 @@ git:
     del fp.name
 
 
+@pytest.fixture(scope="module")
+def mock_config_file_inherit():
+    with tempfile.NamedTemporaryFile(mode="wt", delete=False) as parent_fp:
+        # Write a temporary config file
+        parent_fp.write("""test: 'new field'
+core:
+  team_mode: false""")
+        parent_fp.close()
+
+    with tempfile.NamedTemporaryFile(mode="wt", delete=False) as fp:
+        # Write a temporary config file
+        fp.write("""from: {}
+core:
+  team_mode: true 
+git:
+  working_directory: '~/gigantum'""".format(parent_fp.name))
+        fp.close()
+
+        yield fp.name  # provide the fixture value
+
+    del fp.name
+
+
 class TestConfiguration(object):
     def test_init(self, mock_config_file):
         """Test loading a config file explicitly"""
@@ -61,6 +84,18 @@ class TestConfiguration(object):
         assert 'team_mode' in configuration.config["core"]
         assert configuration.config["core"]["team_mode"] is True
         assert 'git' in configuration.config
+
+    def test_init_inherit(self, mock_config_file_inherit):
+        """Test loading a config file explicitly from a file that inherits properties"""
+        configuration = Configuration(mock_config_file_inherit)
+
+        assert 'core' in configuration.config
+        assert 'team_mode' in configuration.config["core"]
+        assert configuration.config["core"]["team_mode"] is False
+        assert 'git' in configuration.config
+        assert 'test' in configuration.config
+        assert 'from' in configuration.config
+        assert configuration.config["test"] == 'new field'
 
     def test_init_load_from_package(self):
         """Test loading the default file from the package"""

@@ -55,6 +55,34 @@ class Configuration(object):
             # Load default file out of python package
             return os.path.join(resource_filename("lmcommon", "configuration/config"), "labmanager.yaml.default")
 
+    def _read_config_file(self, config_file):
+        """Method to read a config file into a dictionary
+
+        Args:
+            config_file(str): Absolute path to a configuration file
+
+        Returns:
+            (dict)
+        """
+        with open(config_file, "rt") as cf:
+            data = yaml.load(cf)
+
+        # Check if there is a parent config file to inherit from
+        if "from" in data.keys():
+            if data["from"]:
+                if os.path.isfile(data["from"]):
+                    # Absolute path provided
+                    parent_config_file = data["from"]
+                else:
+                    # Just a filename provided
+                    parent_config_file = os.path.join(os.path.dirname(config_file), data["from"])
+
+                # Load Parent data and overwrite keys as needed
+                parent_data = self._read_config_file(parent_config_file)
+                data.update(parent_data)
+
+        return data
+
     def load(self, config_file=None):
         """Method to load a config file
         
@@ -67,8 +95,7 @@ class Configuration(object):
         if not config_file:
             config_file = self.config_file
 
-        with open(config_file, "rt") as cf:
-            data = yaml.load(cf)
+        data = self._read_config_file(config_file)
 
         return data
 

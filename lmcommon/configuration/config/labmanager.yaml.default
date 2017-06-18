@@ -1,5 +1,8 @@
 # Configuration File for the Gigantum LabManager
 
+# Extend/Modify an existing configuration file. If only file name provided, will assume in the same directory
+from: null
+
 # Core configuration
 core:
   team_mode: false # Should the LabManager run in Team Mode (multi-user)
@@ -9,3 +12,9 @@ core:
 git:
   backend: "filesystem"
   working_directory: "~/gigantum"
+
+# Flask Configuration
+flask:
+  DEBUG: true
+  TESTING: true
+  SERVER_NAME: "service.local"
