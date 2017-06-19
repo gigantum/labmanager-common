@@ -77,7 +77,7 @@ class Configuration(object):
                     # Just a filename provided
                     parent_config_file = os.path.join(os.path.dirname(config_file), data["from"])
 
-                # Load Parent data and overwrite keys as needed
+                # Load Parent data and add/overwrite keys as needed
                 parent_data = self._read_config_file(parent_config_file)
                 data.update(parent_data)
 
