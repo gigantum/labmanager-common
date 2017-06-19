@@ -39,7 +39,7 @@ def get_git_interface(config_dict):
             config_dict(dict): Dictionary of configuration information
 
         Returns:
-            (GitRepoInterface)
+            GitRepoInterface
         """
 
         if "backend" not in config_dict:
@@ -89,8 +89,20 @@ class GitRepoInterface(metaclass=abc.ABCMeta):
         self.config = config_dict
         self.author = None
         self.committer = None
+        self.working_directory = None
 
         self.update_author(author=author, committer=committer)
+
+    def set_working_directory(self, directory):
+        """Method to change the current working directory of the repository
+
+        Args:
+            directory(str): Absolute path to the working dir
+
+        Returns:
+            None
+        """
+        raise NotImplemented
 
     def update_author(self, author, committer=None):
         """Method to get the current branch name

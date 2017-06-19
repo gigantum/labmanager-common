@@ -47,9 +47,25 @@ class GitFilesystem(GitRepoInterface):
         # Call super constructor
         GitRepoInterface.__init__(self, config_dict, author=author, committer=committer)
 
+        # Set up the repository instance
+        self.repo = None
+        self.set_working_directory(self.config["working_directory"])
+
+    def set_working_directory(self, directory):
+        """Method to change the current working directory. Will reset the self.repo reference
+
+        Args:
+            directory(str): Absolute path to the working dir
+
+        Returns:
+            None
+        """
+        # Update the working dir
+        self.working_directory = directory
+
         # Check to see if the working dir is already a repository
         try:
-            self.repo = Repo(self.config["working_directory"])
+            self.repo = Repo(directory)
         except InvalidGitRepositoryError:
             # Empty Dir
             self.repo = None
@@ -75,7 +91,7 @@ class GitFilesystem(GitRepoInterface):
         if self.repo:
             raise ValueError("Cannot init an existing git repository. Choose a different working directory")
 
-        self.repo = Repo.init(self.config["working_directory"], bare=bare)
+        self.repo = Repo.init(self.working_directory, bare=bare)
 
     def clone(self, source):
         """Clone a repo
@@ -89,7 +105,7 @@ class GitFilesystem(GitRepoInterface):
         if self.repo:
             raise ValueError("Cannot init an existing git repository. Choose a different working directory")
 
-        self.repo = Repo.clone_from(source, self.config["working_directory"])
+        self.repo = Repo.clone_from(source, self.working_directory)
     # CREATE METHODS
 
     # LOCAL CHANGE METHODS

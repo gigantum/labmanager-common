@@ -187,6 +187,29 @@ class GitInterfaceMixin(object):
         assert type(git) is GitFilesystem
         assert type(git.repo) is Repo
 
+    def test_update_working_directory(self, mock_config):
+        """Test trying to load an existing repo dir"""
+        # Create a repo in the working dir
+        create_dummy_repo(mock_config["working_directory"])
+
+        # Create a GitFilesystem instance
+        git = GitFilesystem(mock_config)
+        assert type(git) is GitFilesystem
+        assert type(git.repo) is Repo
+        assert git.working_directory == mock_config["working_directory"]
+
+        new_working_dir = os.path.join(tempfile.gettempdir(), uuid.uuid4().hex)
+        os.makedirs(new_working_dir)
+        git.set_working_directory(new_working_dir)
+
+        assert git.repo is None
+        assert git.working_directory == new_working_dir
+
+        git.initialize()
+        assert type(git.repo) is Repo
+
+        shutil.rmtree(new_working_dir)
+
     def test_clone_repo(self, mock_initialized_remote):
         """Test trying to clone an existing repo dir"""
         scratch_working_dir = os.path.join(tempfile.gettempdir(), uuid.uuid4().hex)
