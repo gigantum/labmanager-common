@@ -60,6 +60,9 @@ class GitFilesystem(GitRepoInterface):
         Returns:
             None
         """
+        # Make sure you expand a user dir string
+        directory = os.path.expanduser(directory)
+
         # Update the working dir
         self.working_directory = directory
 
@@ -67,6 +70,10 @@ class GitFilesystem(GitRepoInterface):
         try:
             self.repo = Repo(directory)
         except InvalidGitRepositoryError:
+            # Make sure the working dir exists
+            if not os.path.exists(directory):
+                os.makedirs(directory)
+
             # Empty Dir
             self.repo = None
 

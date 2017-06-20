@@ -17,4 +17,3 @@ git:
 flask:
   DEBUG: true
   TESTING: true
-  SERVER_NAME: "service.local"
