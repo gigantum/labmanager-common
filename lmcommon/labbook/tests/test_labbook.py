@@ -25,7 +25,7 @@ import uuid
 import shutil
 import yaml
 
-from lmcommon.labbook import LabBookManager
+from lmcommon.labbook import LabBook, LabBookManager
 
 
 @pytest.fixture()
@@ -34,7 +34,7 @@ def mock_config_file():
     # Create a temporary working directory
     temp_dir = os.path.join(tempfile.tempdir, uuid.uuid4().hex)
     os.makedirs(temp_dir)
-    
+
     with tempfile.NamedTemporaryFile(mode="wt") as fp:
         # Write a temporary config file
         fp.write("""core:
@@ -50,8 +50,8 @@ git:
     shutil.rmtree(temp_dir)
 
 
-class TestLabBookManager(object):
-    def test_create_labbook(self, mock_config_file):
+class TestLabBook(object):
+    def test_load_labbook_from_directory(self, mock_config_file):
         """Test creating an empty labbook"""
         lbm = LabBookManager(mock_config_file[0])
 
@@ -92,69 +92,26 @@ class TestLabBookManager(object):
 
         with pytest.raises(ValueError):
             lbm.create_labbook(username="test", name="labbook1", description="my first labbook")
-            
+
     def test_invalid_name(self, mock_config_file):
         """Test trying to create a labbook with an invalid name"""
         lbm = LabBookManager(mock_config_file[0])
 
-        lbm.create_labbook(username="test", name="DNf84329Ddf-d-d-d-d-dasdsw-SJfdj3820jg", description="my first labbook")
+        lbm.create_labbook(username="test", name="DNf84329Ddf-d-d-d-d-dasdsw-SJfdj3820jg",
+                           description="my first labbook")
 
         with pytest.raises(ValueError):
             lbm.create_labbook(username="test", name="my labbook1", description="my first labbook")
 
         with pytest.raises(ValueError):
             lbm.create_labbook(username="test", name="my--labbook1", description="my first labbook")
-        
+
         with pytest.raises(ValueError):
             lbm.create_labbook(username="test", name="DNf84329DSJfdj3820jg-", description="my first labbook")
-        
+
         with pytest.raises(ValueError):
             lbm.create_labbook(username="test", name="-DNf84329DSJfdj3820jg", description="my first labbook")
 
         long_name = "".join(["a" for x in range(0, 101)])
         with pytest.raises(ValueError):
             lbm.create_labbook(username="test", name=long_name, description="my first labbook")
-
-    def test_list_labbooks(self, mock_config_file):
-        """Test listing labbooks for all users"""
-        lbm = LabBookManager(mock_config_file[0])
-
-        labbook_dir1 = lbm.create_labbook(username="user1", name="labbook1", description="my first labbook")
-        labbook_dir2 = lbm.create_labbook(username="user1", name="labbook2", description="my second labbook")
-        labbook_dir3 = lbm.create_labbook(username="user2", name="labbook3", description="my other labbook")
-
-        assert labbook_dir1 == os.path.join(mock_config_file[1], "user1", "labbook1")
-        assert labbook_dir2 == os.path.join(mock_config_file[1], "user1", "labbook2")
-        assert labbook_dir3 == os.path.join(mock_config_file[1], "user2", "labbook3")
-
-        labbooks = lbm.list_labbooks()
-
-        assert len(labbooks) == 2
-        assert "user1" in labbooks
-        assert "user2" in labbooks
-        assert len(labbooks["user1"]) == 2
-        assert len(labbooks["user2"]) == 1
-        assert "labbook1" in labbooks["user1"]
-        assert "labbook2" in labbooks["user1"]
-        assert "labbook3" in labbooks["user2"]
-
-    def test_list_labbooks_for_user(self, mock_config_file):
-        """Test list only a single user's labbooks"""
-        lbm = LabBookManager(mock_config_file[0])
-
-        labbook_dir1 = lbm.create_labbook(username="user1", name="labbook1", description="my first labbook")
-        labbook_dir2 = lbm.create_labbook(username="user1", name="labbook2", description="my second labbook")
-        labbook_dir3 = lbm.create_labbook(username="user2", name="labbook3", description="my other labbook")
-
-        assert labbook_dir1 == os.path.join(mock_config_file[1], "user1", "labbook1")
-        assert labbook_dir2 == os.path.join(mock_config_file[1], "user1", "labbook2")
-        assert labbook_dir3 == os.path.join(mock_config_file[1], "user2", "labbook3")
-
-        labbooks = lbm.list_labbooks("user1")
-
-        assert len(labbooks) == 1
-        assert "user1" in labbooks
-        assert len(labbooks["user1"]) == 2
-        assert "labbook1" in labbooks["user1"]
-        assert "labbook2" in labbooks["user1"]
-
