@@ -317,6 +317,28 @@ class GitRepoInterface(metaclass=abc.ABCMeta):
         raise NotImplemented
 
     @abc.abstractmethod
+    def log_entry (self, commit=commit):
+        """Method to get single commit records
+
+        Returns a single dictionary in format:
+
+            {
+                "commit": <commit hash (str)>,
+                "author": {"name": <name (str)>, "email": <email (str)>},
+                "committer": {"name": <name (str)>, "email": <email (str)>},
+                "committed_on": <commit datetime (datetime.datetime)>,
+                "message: <commit message (str)>
+            }
+
+        Args:
+            commit: <commit hash (str)>
+    
+        Returns:
+            (dict)
+        """
+        raise NotImplemented
+
+    @abc.abstractmethod
     def blame(self, filename):
         """Method to get the revision and author for each line of a file
 
