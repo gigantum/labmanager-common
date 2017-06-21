@@ -284,7 +284,7 @@ class GitRepoInterface(metaclass=abc.ABCMeta):
             committer(GitAuthor): User info for the committer. If omitted, set to the author
 
         Returns:
-            None
+            git.Commit -- hash of new commit
         """
         raise NotImplemented
     # LOCAL CHANGE METHODS

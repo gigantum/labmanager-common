@@ -330,12 +330,12 @@ class GitFilesystem(GitRepoInterface):
             committer(GitAuthor): User info for the committer. If omitted, set to the author
 
         Returns:
-            None
+            git.Commit -- hash of new commit
         """
         if author:
             self.update_author(author, committer=committer)
 
-        self.repo.index.commit(message, author=self.author, committer=self.committer)
+        return self.repo.index.commit(message, author=self.author, committer=self.committer)
     # LOCAL CHANGE METHODS
 
     # HISTORY METHODS
