@@ -77,6 +77,42 @@ class GitFilesystem(GitRepoInterface):
             # Empty Dir
             self.repo = None
 
+    @property
+    def commit_hash(self):
+        """Get the current commit hash
+
+        Returns:
+            str
+        """
+        return self.repo.head.object.hexsha
+
+    @property
+    def commit_hash_short(self):
+        """Get the current commit hash, limit to 8 character
+
+        Returns:
+            str
+        """
+        return self.repo.head.object.hexsha[:8]
+
+    @property
+    def committed_on(self):
+        """Get the datetime the commit occurred
+
+        Returns:
+            datetime.datetime
+        """
+        return self.repo.head.object.committed_datetime
+
+    @property
+    def git_path(self):
+        """Get the full git path of the active branch
+
+        Returns:
+            str
+        """
+        return self.repo.active_branch.path
+
     def get_current_branch_name(self):
         """Method to get the current branch name
 
@@ -469,7 +505,7 @@ class GitFilesystem(GitRepoInterface):
             where local are branches currently available locally
 
         Returns:
-            (list)
+            dict
         """
         local = []
         remote = []

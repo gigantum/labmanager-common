@@ -128,6 +128,42 @@ class GitRepoInterface(metaclass=abc.ABCMeta):
         else:
             self.committer = self.author
 
+    @property
+    def commit_hash(self):
+        """Get the current commit hash
+
+        Returns:
+            str
+        """
+        raise NotImplemented
+
+    @property
+    def commit_hash_short(self):
+        """Get the current commit hash, limit to 8 characters
+
+        Returns:
+            str
+        """
+        raise NotImplemented
+
+    @property
+    def committed_on(self):
+        """Get the datetime the commit occurred
+
+        Returns:
+            datetime.datetime
+        """
+        raise NotImplemented
+
+    @property
+    def git_path(self):
+        """Get the full git path of the active branch
+
+        Returns:
+            str
+        """
+        raise NotImplemented
+
     @abc.abstractmethod
     def get_current_branch_name(self):
         """Method to get the current branch name
@@ -371,14 +407,14 @@ class GitRepoInterface(metaclass=abc.ABCMeta):
         """Method to list branches. Should return a dictionary of the format:
 
             {
-                "local": [(<name>, <short_hash>, <message>), ...]
-                "remote": [(<name>, <short_hash>, <message>), ...]
+                "local": [<name>, ...]
+                "remote": [<name>, ...]
             }
 
-            The first "local" entry is always the HEAD
+            where local are branches currently available locally
 
         Returns:
-            dict(list(tuple))
+            dict
         """
         raise NotImplemented
 

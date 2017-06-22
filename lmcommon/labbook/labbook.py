@@ -27,6 +27,9 @@ from lmcommon.gitlib import get_git_interface
 from lmcommon.configuration import Configuration
 
 
+GIT_IGNORE_DEFAULT = """.DS_Store"""
+
+
 class LabBook(object):
     """Class representing a single LabBook"""
 
@@ -81,8 +84,8 @@ class LabBook(object):
 
     # TODO: Replace with a user class instance once proper user interface implemented
     @property
-    def username(self):
-        return self._data["owner"]["username"]
+    def owner(self):
+        return self._data["owner"]
     # PROPERTIES
 
     def _save_labbook_data(self):
@@ -118,7 +121,7 @@ class LabBook(object):
         """
         return''.join(c for c in value if c not in '<>?/;"`\'')
 
-    def new(self, username=None, name=None, description=None):
+    def new(self, username=None, owner=None, name=None, description=None):
         """Method to create a new minimal LabBook instance on disk
 
         /[LabBook name]
@@ -135,9 +138,10 @@ class LabBook(object):
             /.git
 
         Args:
-            username:
-            name:
-            description:
+            path(str): Relative path to the directory where the LabBook should be created from the root working dir
+            owner(dict): Owner information
+            name(str): Name of the LabBook
+            description(str): A short description of the LabBook
 
         Returns:
             str: Path to the LabBook contents
@@ -145,11 +149,14 @@ class LabBook(object):
         if not username:
             username = "default"
 
+        if not owner:
+            owner = {"username": "default"}
+
         # Build data file contents
         self._data = {"labbook": {"id": uuid.uuid4().hex,
                                   "name": name,
                                   "description": self._santize_input(description)},
-                      "owner": {"username": username}
+                      "owner": owner
                       }
 
         # Validate data
@@ -194,10 +201,15 @@ class LabBook(object):
         with open(os.path.join(self.root_dir, ".gigantum", "env", "Dockerfile"), 'wt') as dockerfile:
             dockerfile.write("FROM ubuntu:16.04")
 
+        # Create .gitignore default file
+        with open(os.path.join(self.root_dir, ".gitignore"), 'wt') as gi_file:
+            gi_file.write(GIT_IGNORE_DEFAULT)
+
         # Commit
         # TODO: Once users are properly added, create a GitAuthor instance before commit
         git.add(os.path.join(self.root_dir, ".gigantum", "labbook.yaml"))
         git.add(os.path.join(self.root_dir, ".gigantum", "env", "Dockerfile"))
+        git.add(os.path.join(self.root_dir, ".gitignore"))
         git.commit("Creating new empty LabBook: {}".format(name))
 
         return self.root_dir

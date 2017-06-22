@@ -96,7 +96,7 @@ class Configuration(object):
             config_file = self.config_file
 
         data = self._read_config_file(config_file)
-
+        Configuration
         return data
 
     def save(self, config_file=None):
