@@ -35,14 +35,6 @@ class NoteStore():
         # get the path from the config
         self._entries_path =  os.path.join(labbook.root_dir, ".gigantum", "notes")
 
-        # open the DB
-        self.edb = plyvel.DB ( self._entries_path, create_if_missing=True )
-
-
-    def __del__(self):
-        """Close the database entry."""
-        self.edb.close()
-
 
     def putEntry(self, key: str, value: dict) -> None:
         """
@@ -55,13 +47,19 @@ class NoteStore():
             Returns:
                 None.  Throws an exception.
         """
+        # Open outside try (can't close if this fails)
+        edb = plyvel.DB ( self._entries_path, create_if_missing=True ) 
+
         try:
+
             # level db wants binary
             bkey = key.encode('utf8')
             bvalue = json.dumps(value).encode('utf8')
-            self.edb.put ( bkey, bvalue )
+            edb.put ( bkey, bvalue )
         except:
             raise
+        finally:
+            edb.close()
 
 
     def getEntry(self, key: str) -> dict:
@@ -73,12 +71,16 @@ class NoteStore():
             Returns:
                  dict
         """
+
+        # Open outside try (can't close if this fails)
+        edb = plyvel.DB ( self._entries_path, create_if_missing=True )
         try:
+
             bkey = key.encode('utf8')
-            bvalue = self.edb.get ( bkey )
+            bvalue = edb.get ( bkey )
             value = json.loads(bvalue.decode('utf8')) 
         except:
             raise
 
         return value
-        
+    
