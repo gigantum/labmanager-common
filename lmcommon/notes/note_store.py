@@ -29,14 +29,14 @@ class NoteStore():
     """
 
     def __init__(self, labbook):
-        """ Load the database for the specified labbook"""
+        """ Load the database for the specified labbook """
 
-        # instantion notes at _root_dir/.gigantum/notes/
+        # instantiate notes at _root_dir/.gigantum/notes/
         # get the path from the config
         self._entries_path =  os.path.join(labbook.root_dir, ".gigantum", "notes")
 
 
-    def putEntry(self, key: str, value: dict) -> None:
+    def putEntry(self, key : str, value: dict) -> None:
         """
             Put a notes detailed entry into a levelDB.
 
@@ -48,10 +48,9 @@ class NoteStore():
                 None.  Throws an exception.
         """
         # Open outside try (can't close if this fails)
-        edb = plyvel.DB ( self._entries_path, create_if_missing=True ) 
+        edb = plyvel.DB(self._entries_path, create_if_missing=True)
 
         try:
-
             # level db wants binary
             bkey = key.encode('utf8')
             bvalue = json.dumps(value).encode('utf8')
@@ -73,11 +72,11 @@ class NoteStore():
         """
 
         # Open outside try (can't close if this fails)
-        edb = plyvel.DB ( self._entries_path, create_if_missing=True )
+        edb = plyvel.DB(self._entries_path, create_if_missing=True)
         try:
 
             bkey = key.encode('utf8')
-            bvalue = edb.get ( bkey )
+            bvalue = edb.get(bkey)
             value = json.loads(bvalue.decode('utf8')) 
         except:
             raise

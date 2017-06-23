@@ -65,18 +65,18 @@ class TestNoteStore():
         # a long value
         key1 = ''.join(random.choice('0123456789abcdef') for i in range(30))
         uni1 = u''.join(chr(random.randint(0x80, sys.maxunicode)) for _ in range(9999))
-        value1 = { 'uni1': uni1 }
+        value1 = {'uni1': uni1}
 
         # an embedded list
         key2 = ''.join(random.choice('0123456789abcdef') for i in range(30))
         uni2 = u''.join(chr(random.randint(0x80, sys.maxunicode)) for _ in range(533))
-        value2 = { 'outer2': 'outerval2', 'embedded2': ['foo', uni2] }
+        value2 = {'outer2': 'outerval2', 'embedded2': ['foo', uni2]}
 
 
         # an embedded dict
         key3 = ''.join(random.choice('0123456789abcdef') for i in range(30))
         uni3 = u''.join(chr(random.randint(0x80, sys.maxunicode)) for _ in range(700))
-        value3 = { 'outer3': 'outerval3', 'embedded3': { 'bar': uni3, 'moo': 'mooval' } }
+        value3 = {'outer3': 'outerval3', 'embedded3': { 'bar': uni3, 'moo': 'mooval'}}
 
         # interleave puts and gets
         test_ns.putEntry(key1,value1)
@@ -84,7 +84,6 @@ class TestNoteStore():
         test_ns.putEntry(key2,value2)
 
         ret1 = test_ns.getEntry(key1)
-
         assert ( ret1['uni1'] == uni1 )
 
         test_ns.putEntry(key3,value3)
