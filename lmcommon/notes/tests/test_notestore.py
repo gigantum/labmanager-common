@@ -32,8 +32,8 @@ from lmcommon.notes import NoteStore
 
 
 @pytest.fixture()
-def test_ns():
-    """A pytest fixture that creates a temporary directory and a config file to match. Deletes directory after test"""
+def test_notestore():
+    """A pytest fixture that creates a notestore (and labbook) and deletes directory after test"""
     # Create a temporary working directory
     temp_dir = os.path.join(tempfile.tempdir, uuid.uuid4().hex)
     os.makedirs(temp_dir)
@@ -59,7 +59,7 @@ git:
 
 class TestNoteStore():
 
-    def test_ns_get_put(self, test_ns):
+    def test_ns_get_put(self, test_notestore):
         """Write note details and read note details from the NoteStore"""
 
         # a long value
@@ -79,19 +79,19 @@ class TestNoteStore():
         value3 = {'outer3': 'outerval3', 'embedded3': { 'bar': uni3, 'moo': 'mooval'}}
 
         # interleave puts and gets
-        test_ns.putEntry(key1,value1)
+        test_notestore.putEntry(key1,value1)
 
-        test_ns.putEntry(key2,value2)
+        test_notestore.putEntry(key2,value2)
 
-        ret1 = test_ns.getEntry(key1)
+        ret1 = test_notestore.getEntry(key1)
         assert ( ret1['uni1'] == uni1 )
 
-        test_ns.putEntry(key3,value3)
+        test_notestore.putEntry(key3,value3)
 
-        ret2 = test_ns.getEntry(key2)
+        ret2 = test_notestore.getEntry(key2)
         assert ( ret2['embedded2'][1] == uni2 )
 
-        ret3 = test_ns.getEntry(key3)
+        ret3 = test_notestore.getEntry(key3)
         assert ( ret3['embedded3']['bar'] == uni3 )
 
 
