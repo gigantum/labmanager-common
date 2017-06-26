@@ -674,7 +674,8 @@ class GitFilesystem(GitRepoInterface):
         Returns:
             None
         """
-        self.repo.remotes[remote].fetch(refspec)
+        if len(self.repo.remotes) > 0:
+            self.repo.remotes[remote].fetch(refspec)
 
     def pull(self, refspec=None, remote="origin"):
         """Method fetch and integrate a remote

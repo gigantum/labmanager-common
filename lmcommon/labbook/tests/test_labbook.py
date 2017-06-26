@@ -55,7 +55,8 @@ class TestLabBook(object):
         """Test creating an empty labbook"""
         lb = LabBook(mock_config_file[0])
 
-        labbook_dir = lb.new(username="test", name="labbook1", description="my first labbook")
+        labbook_dir = lb.new(username="test", name="labbook1", description="my first labbook",
+                             owner={"username": "test"})
 
         assert labbook_dir == os.path.join(mock_config_file[1], "test", "labbook1")
         assert type(lb) == LabBook
@@ -163,7 +164,8 @@ class TestLabBook(object):
         """Test loading a labbook from a directory"""
         lb = LabBook(mock_config_file[0])
 
-        labbook_dir = lb.new(username="test", name="labbook1", description="my first labbook")
+        labbook_dir = lb.new(username="test", name="labbook1", description="my first labbook",
+                             owner={"username": "test"})
 
         assert labbook_dir == os.path.join(mock_config_file[1], "test", "labbook1")
         assert type(lb) == LabBook
@@ -203,7 +205,8 @@ class TestLabBook(object):
         """Test loading a labbook from a directory"""
         lb = LabBook(mock_config_file[0])
 
-        labbook_dir = lb.new(username="test", name="labbook1", description="my first labbook")
+        labbook_dir = lb.new(username="test", name="labbook1", description="my first labbook",
+                             owner={"username": "test"})
 
         assert labbook_dir == os.path.join(mock_config_file[1], "test", "labbook1")
         assert type(lb) == LabBook
