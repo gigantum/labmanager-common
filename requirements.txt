@@ -1,3 +1,5 @@
 pytest
 pyyaml
 GitPython
+plyvel
+elasticsearch

@@ -320,7 +320,7 @@ class GitRepoInterface(metaclass=abc.ABCMeta):
             committer(GitAuthor): User info for the committer. If omitted, set to the author
 
         Returns:
-            None
+            git.Commit -- hash of new commit
         """
         raise NotImplemented
     # LOCAL CHANGE METHODS
@@ -349,6 +349,28 @@ class GitRepoInterface(metaclass=abc.ABCMeta):
 
         Returns:
             (list(dict))
+        """
+        raise NotImplemented
+
+    @abc.abstractmethod
+    def log_entry (self, commit=commit):
+        """Method to get single commit records
+
+        Returns a single dictionary in format:
+
+            {
+                "commit": <commit hash (str)>,
+                "author": {"name": <name (str)>, "email": <email (str)>},
+                "committer": {"name": <name (str)>, "email": <email (str)>},
+                "committed_on": <commit datetime (datetime.datetime)>,
+                "message: <commit message (str)>
+            }
+
+        Args:
+            commit: <commit hash (str)>
+    
+        Returns:
+            (dict)
         """
         raise NotImplemented
 

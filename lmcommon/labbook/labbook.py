@@ -289,3 +289,58 @@ class LabBook(object):
                 result[user].append(labbook)
 
         return result
+
+
+    # DKTODO review implemented by RB
+    def log(self, username=None, max_count=10):
+        """Method to list commit history of a Labbook
+
+        Args:
+            username(str): Username to filter the query on
+
+        Returns:
+        """
+
+        # RBTODO this function should go away and callers should used labbook interface directly?  
+        # otherwise we're writing a wrapper for every git calls in labbook.
+        #
+        # DKTODO probably want to make git -> self.git so you have an interface 
+        #     after you from_name
+        # Init repository
+        git = get_git_interface(self.labmanager_config.config["git"])
+        git.set_working_directory(self.root_dir)
+
+        return git.log ( max_count=max_count )
+
+    # DKTODO review implemented by RB
+    def log_entry(self, commit, username=None):
+        """Method to get a single log entry by commit
+
+        Args:
+            commit(str): commit hash of the entry
+            username(str): Username to filter the query on
+
+        Returns:
+        """
+
+        # RBTODO this function should go away and callers should used labbook interface directly?  
+        # otherwise we're writing a wrapper for every git calls in labbook.
+        #
+        # DKTODO probably want to make git -> self.git so you have an interface 
+        #     after you from_name
+        # Init repository
+        git = get_git_interface(self.labmanager_config.config["git"])
+        git.set_working_directory(self.root_dir)
+
+        return git.log_entry ( commit=commit )
+
+
+    # RBTODO -- same question about wrappers.  Remove!
+    def commit (self, message, author=None, username=None):
+
+        git = get_git_interface(self.labmanager_config.config["git"])
+        git.set_working_directory(self.root_dir)
+
+        return git.commit ( message, author=author )
+
+

@@ -366,12 +366,12 @@ class GitFilesystem(GitRepoInterface):
             committer(GitAuthor): User info for the committer. If omitted, set to the author
 
         Returns:
-            None
+            git.Commit -- hash of new commit
         """
         if author:
             self.update_author(author, committer=committer)
 
-        self.repo.index.commit(message, author=self.author, committer=self.committer)
+        return self.repo.index.commit(message, author=self.author, committer=self.committer)
     # LOCAL CHANGE METHODS
 
     # HISTORY METHODS
@@ -425,6 +425,36 @@ class GitFilesystem(GitRepoInterface):
                           })
 
         return result
+
+    def log_entry (self, commit=commit):
+        """Method to get single commit records
+
+        Returns a single dictionary in format:
+
+            {
+                "commit": <commit hash (str)>,
+                "author": {"name": <name (str)>, "email": <email (str)>},
+                "committer": {"name": <name (str)>, "email": <email (str)>},
+                "committed_on": <commit datetime (datetime.datetime)>,
+                "message: <commit message (str)>
+            }
+
+        Args:
+            commit: <commit hash (str)>
+    
+        Returns:
+            (dict)
+        """
+        entry = self.repo.commit(commit)
+
+        return { "commit": entry.hexsha,
+                 "author":  {"name": entry.author.name, "email": entry.author.email},
+                 "committer": {"name": entry.committer.name, "email": entry.committer.email},
+                 "committed_on": entry.committed_datetime,
+                 "message": entry.message
+               }
+        
+
 
     def blame(self, filename):
         """Method to get the revision and author for each line of a file
