@@ -21,7 +21,8 @@ import os
 import plyvel
 import json
 
-class NoteStore():
+
+class NoteStore(object):
     """
     NoteStore contains the detailed notes records stored through a key/value interface.
 
@@ -35,8 +36,7 @@ class NoteStore():
         # get the path from the config
         self._entries_path =  os.path.join(labbook.root_dir, ".gigantum", "notes")
 
-
-    def putEntry(self, key : str, value: dict) -> None:
+    def put_entry(self, key: str, value: dict) -> None:
         """
             Put a notes detailed entry into a levelDB.
 
@@ -54,14 +54,13 @@ class NoteStore():
             # level db wants binary
             bkey = key.encode('utf8')
             bvalue = json.dumps(value).encode('utf8')
-            edb.put ( bkey, bvalue )
+            edb.put(bkey, bvalue)
         except:
             raise
         finally:
             edb.close()
 
-
-    def getEntry(self, key: str) -> dict:
+    def get_entry(self, key: str) -> dict:
         """
             Fetch a notes detailed entry from a levelDB by commit hash
             Args:
@@ -74,7 +73,6 @@ class NoteStore():
         # Open outside try (can't close if this fails)
         edb = plyvel.DB(self._entries_path, create_if_missing=True)
         try:
-
             bkey = key.encode('utf8')
             bvalue = edb.get(bkey)
             value = json.loads(bvalue.decode('utf8')) 
@@ -82,4 +80,4 @@ class NoteStore():
             raise
 
         return value
-    
+

@@ -396,7 +396,7 @@ class GitFilesystem(GitRepoInterface):
             author(str): Optional filter based on author name
 
         Returns:
-            (list(dict))
+            list(dict)
         """
         kwargs = {"max_count": max_count}
 
@@ -426,7 +426,7 @@ class GitFilesystem(GitRepoInterface):
 
         return result
 
-    def log_entry (self, commit=commit):
+    def log_entry(self, commit):
         """Method to get single commit records
 
         Returns a single dictionary in format:
@@ -440,21 +440,20 @@ class GitFilesystem(GitRepoInterface):
             }
 
         Args:
-            commit: <commit hash (str)>
+            commit(str): The commit hash for the log entry to get
     
         Returns:
-            (dict)
+            dict
         """
         entry = self.repo.commit(commit)
 
-        return { "commit": entry.hexsha,
+        return {
+                 "commit": entry.hexsha,
                  "author":  {"name": entry.author.name, "email": entry.author.email},
                  "committer": {"name": entry.committer.name, "email": entry.committer.email},
                  "committed_on": entry.committed_datetime,
                  "message": entry.message
                }
-        
-
 
     def blame(self, filename):
         """Method to get the revision and author for each line of a file

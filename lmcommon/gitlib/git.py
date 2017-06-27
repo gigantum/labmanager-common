@@ -353,7 +353,7 @@ class GitRepoInterface(metaclass=abc.ABCMeta):
         raise NotImplemented
 
     @abc.abstractmethod
-    def log_entry (self, commit=commit):
+    def log_entry(self, commit):
         """Method to get single commit records
 
         Returns a single dictionary in format:

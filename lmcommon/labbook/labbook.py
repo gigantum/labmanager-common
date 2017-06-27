@@ -36,6 +36,9 @@ class LabBook(object):
     def __init__(self, config_file=None):
         self.labmanager_config = Configuration(config_file)
 
+        # Create gitlib instance
+        self.git = get_git_interface(self.labmanager_config.config["git"])
+
         # LabBook Properties
         self._root_dir = None
         self._data = None
@@ -71,7 +74,9 @@ class LabBook(object):
         # Rename directory
         base_dir, _ = self._root_dir.rsplit(os.path.sep, 1)
         os.rename(self._root_dir, os.path.join(base_dir, value))
-        self._root_dir = os.path.join(base_dir, value)
+        
+        # Update the root directory to the knew directory name
+        self._set_root_dir(os.path.join(base_dir, value))
 
     @property
     def description(self):
@@ -87,6 +92,18 @@ class LabBook(object):
     def owner(self):
         return self._data["owner"]
     # PROPERTIES
+
+    def _set_root_dir(self, new_root_dir):
+        """Update the root directory and also reconfigure the git instance
+
+        Returns:
+            None
+        """
+        # Be sure to expand in case a user dir string is used
+        self._root_dir = os.path.expanduser(new_root_dir)
+
+        # Update the git working directory
+        self.git.set_working_directory(self.root_dir)
 
     def _save_labbook_data(self):
         """Method to save changes to the LabBook
@@ -175,13 +192,12 @@ class LabBook(object):
             raise ValueError("LabBook `{}` already exists locally. Choose a new LabBook name".format(name))
 
         # Create LabBook subdirectory
-        self._root_dir = os.path.join(user_dir, name)
-        os.makedirs(self.root_dir)
+        new_root_dir = os.path.join(user_dir, name)
+        os.makedirs(new_root_dir)
+        self._set_root_dir(new_root_dir)
 
         # Init repository
-        git = get_git_interface(self.labmanager_config.config["git"])
-        git.set_working_directory(self.root_dir)
-        git.initialize()
+        self.git.initialize()
 
         # Create Directory Structure
         os.makedirs(os.path.join(self.root_dir, "code"))
@@ -207,10 +223,10 @@ class LabBook(object):
 
         # Commit
         # TODO: Once users are properly added, create a GitAuthor instance before commit
-        git.add(os.path.join(self.root_dir, ".gigantum", "labbook.yaml"))
-        git.add(os.path.join(self.root_dir, ".gigantum", "env", "Dockerfile"))
-        git.add(os.path.join(self.root_dir, ".gitignore"))
-        git.commit("Creating new empty LabBook: {}".format(name))
+        self.git.add(os.path.join(self.root_dir, ".gigantum", "labbook.yaml"))
+        self.git.add(os.path.join(self.root_dir, ".gigantum", "env", "Dockerfile"))
+        self.git.add(os.path.join(self.root_dir, ".gitignore"))
+        self.git.commit("Creating new empty LabBook: {}".format(name))
 
         return self.root_dir
 
@@ -224,7 +240,7 @@ class LabBook(object):
             LabBook
         """
         # Update root dir
-        self._root_dir = root_dir
+        self._set_root_dir(root_dir)
 
         # Load LabBook data file
         with open(os.path.join(self.root_dir, ".gigantum", "labbook.yaml"), "rt") as data_file:
@@ -241,12 +257,9 @@ class LabBook(object):
             LabBook
         """
         # Update root dir
-        self._root_dir = os.path.join(self.labmanager_config.config["git"]["working_directory"],
-                                      username,
-                                      labbook_name)
-
-        # Be sure to expand in case a user dir string is used
-        self._root_dir = os.path.expanduser(self._root_dir)
+        self._set_root_dir(os.path.join(self.labmanager_config.config["git"]["working_directory"],
+                                        username,
+                                        labbook_name))
 
         # Make sure directory exists
         if not os.path.isdir(self._root_dir):
@@ -290,8 +303,6 @@ class LabBook(object):
 
         return result
 
-
-    # DKTODO review implemented by RB
     def log(self, username=None, max_count=10):
         """Method to list commit history of a Labbook
 
@@ -299,48 +310,24 @@ class LabBook(object):
             username(str): Username to filter the query on
 
         Returns:
+            dict
         """
+        # TODO: Add additional optional args to the git.log call to support futher filtering
+        return self.git.log(max_count=max_count, author=username)
 
-        # RBTODO this function should go away and callers should used labbook interface directly?  
-        # otherwise we're writing a wrapper for every git calls in labbook.
-        #
-        # DKTODO probably want to make git -> self.git so you have an interface 
-        #     after you from_name
-        # Init repository
-        git = get_git_interface(self.labmanager_config.config["git"])
-        git.set_working_directory(self.root_dir)
-
-        return git.log ( max_count=max_count )
-
-    # DKTODO review implemented by RB
-    def log_entry(self, commit, username=None):
+    def log_entry(self, commit):
         """Method to get a single log entry by commit
 
         Args:
             commit(str): commit hash of the entry
-            username(str): Username to filter the query on
 
         Returns:
+            dict
         """
+        return self.git.log_entry(commit)
 
-        # RBTODO this function should go away and callers should used labbook interface directly?  
-        # otherwise we're writing a wrapper for every git calls in labbook.
-        #
-        # DKTODO probably want to make git -> self.git so you have an interface 
-        #     after you from_name
-        # Init repository
-        git = get_git_interface(self.labmanager_config.config["git"])
-        git.set_working_directory(self.root_dir)
-
-        return git.log_entry ( commit=commit )
-
-
-    # RBTODO -- same question about wrappers.  Remove!
-    def commit (self, message, author=None, username=None):
-
-        git = get_git_interface(self.labmanager_config.config["git"])
-        git.set_working_directory(self.root_dir)
-
-        return git.commit ( message, author=author )
+    def commit(self, message, author=None):
+        # TODO: Revisit and possibly remove explict commit interface towards unified notes abstraction
+        return self.git.commit(message, author=author)
 
 
