@@ -354,6 +354,79 @@ class GitInterfaceMixin(object):
         assert len(status["untracked"]) == 0
         assert status["staged"][0] == ("add.txt", 'added')
 
+    def test_add_all_working_dir(self, mock_initialized):
+        """Test adding all files and changes in the working directory"""
+        git = mock_initialized[0]
+        working_directory = mock_initialized[1]
+
+        # Create files
+        write_file(git, "file1.txt", "dsfgfghfghhsdf", commit_msg="first commit")
+        write_file(git, "file2.txt", "34356234532453", commit_msg="second commit")
+
+        # Create an untracked file, remove a file
+        write_file(git, "file2.txt", "343562345324535656", add=False)
+        write_file(git, "file3.txt", "jhgjhgffgdsfgdvdas", add=False)
+        os.remove(os.path.join(working_directory, "file1.txt"))
+
+        # Verify untracked
+        status = git.status()
+
+        assert len(status["staged"]) == 0
+        assert len(status["unstaged"]) == 2
+        assert len(status["untracked"]) == 1
+        assert status["untracked"] == ["file3.txt"]
+
+        # Add file
+        git.add_all()
+
+        # Verify untracked
+        status = git.status()
+
+        assert len(status["staged"]) == 3
+        assert len(status["unstaged"]) == 0
+        assert len(status["untracked"]) == 0
+        assert status["staged"][0] == ("file1.txt", 'deleted')
+        assert status["staged"][1] == ("file2.txt", 'modified')
+        assert status["staged"][2] == ("file3.txt", 'added')
+
+    def test_add_all_sub_dir(self, mock_initialized):
+        """Test adding all files and changes in a sub directory of the working directory"""
+        git = mock_initialized[0]
+        working_directory = mock_initialized[1]
+
+        os.makedirs(os.path.join(working_directory, "env"))
+
+        # Create files
+        write_file(git, os.path.join("untracked.txt"), "4545", add=False)
+        write_file(git, os.path.join('env', "file1.txt"), "dsfgfghfghhsdf", commit_msg="first commit")
+        write_file(git, os.path.join('env', "file2.txt"), "34356234532453", commit_msg="second commit")
+
+        # Create an untracked file, remove a file
+        write_file(git, os.path.join('env', "file2.txt"), "343562345324535656", add=False)
+        write_file(git, os.path.join('env', "file3.txt"), "jhgjhgffgdsfgdvdas", add=False)
+        os.remove(os.path.join(working_directory, 'env', "file1.txt"))
+
+        # Verify untracked
+        status = git.status()
+
+        assert len(status["staged"]) == 0
+        assert len(status["unstaged"]) == 2
+        assert len(status["untracked"]) == 2
+        assert status["untracked"] == ["env/file3.txt", "untracked.txt"]
+
+        # Add file
+        git.add_all("env")
+
+        # Verify untracked
+        status = git.status()
+
+        assert len(status["staged"]) == 3
+        assert len(status["unstaged"]) == 0
+        assert len(status["untracked"]) == 1
+        assert status["staged"][0] == ("env/file1.txt", 'deleted')
+        assert status["staged"][1] == ("env/file2.txt", 'modified')
+        assert status["staged"][2] == ("env/file3.txt", 'added')
+
     def test_remove_staged_file(self, mock_initialized):
         """Test removing files from a repository"""
         git = mock_initialized[0]

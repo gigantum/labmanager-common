@@ -233,6 +233,18 @@ class GitRepoInterface(metaclass=abc.ABCMeta):
         raise NotImplemented
 
     @abc.abstractmethod
+    def add_all(self, relative_directory=None):
+        """Add all changes/files using the `git add -A` command
+
+        Args:
+            relative_directory(str): Relative directory (from the root_dir) to add everything
+
+        Returns:
+            None
+        """
+        raise NotImplemented
+
+    @abc.abstractmethod
     def remove(self, filename, force=False, keep_file=True):
         """Remove a file from tracking
 

@@ -34,7 +34,7 @@ class NoteStore(object):
 
         # instantiate notes at _root_dir/.gigantum/notes/
         # get the path from the config
-        self._entries_path =  os.path.join(labbook.root_dir, ".gigantum", "notes")
+        self._entries_path = os.path.join(labbook.root_dir, ".gigantum", "notes", "log")
 
     def put_entry(self, key: str, value: dict) -> None:
         """
@@ -69,9 +69,9 @@ class NoteStore(object):
             Returns:
                  dict
         """
-
         # Open outside try (can't close if this fails)
         edb = plyvel.DB(self._entries_path, create_if_missing=True)
+
         try:
             bkey = key.encode('utf8')
             bvalue = edb.get(bkey)

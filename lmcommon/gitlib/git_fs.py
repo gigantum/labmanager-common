@@ -216,6 +216,20 @@ class GitFilesystem(GitRepoInterface):
         """
         self.repo.index.add([filename])
 
+    def add_all(self, relative_directory=None):
+        """Add all changes/files using the `git add -A` command
+
+        Args:
+            relative_directory(str): Relative directory (from the root_dir) to add everything
+
+        Returns:
+            None
+        """
+        if relative_directory:
+            self.repo.git.add(os.path.join('.', relative_directory), A=True)
+        else:
+            self.repo.git.add(A=True)
+
     def remove(self, filename, force=False, keep_file=True):
         """Remove a file from tracking
 

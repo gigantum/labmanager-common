@@ -256,14 +256,16 @@ class LabBook(object):
         Returns:
             LabBook
         """
-        # Update root dir
-        self._set_root_dir(os.path.join(self.labmanager_config.config["git"]["working_directory"],
-                                        username,
-                                        labbook_name))
+        labbook_path = os.path.expanduser(os.path.join(self.labmanager_config.config["git"]["working_directory"],
+                                                       username,
+                                                       labbook_name))
 
         # Make sure directory exists
-        if not os.path.isdir(self._root_dir):
+        if not os.path.isdir(labbook_path):
             raise ValueError("LabBook `{}` not found locally.".format(labbook_name))
+
+        # Update root dir
+        self._set_root_dir(labbook_path)
 
         # Load LabBook data file
         with open(os.path.join(self.root_dir, ".gigantum", "labbook.yaml"), "rt") as data_file:
