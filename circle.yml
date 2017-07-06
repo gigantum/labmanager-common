@@ -8,6 +8,8 @@ dependencies:
     - mkdir ~/leveldb; cd ~/leveldb; git clone https://github.com/google/leveldb.git; cd leveldb/; make;
     - sudo scp ~/leveldb/leveldb/out-static/lib* ~/leveldb/leveldb/out-shared/lib* /usr/local/lib/
     - cd ~/leveldb/leveldb/include/; sudo scp -r leveldb /usr/local/include/; sudo ldconfig
+    - git config --global user.email "noreply@gigantum.io"
+    - git config --global user.name "CircleCI"
 
   override:
     - pip install -r requirements.txt
