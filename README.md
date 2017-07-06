@@ -1,4 +1,8 @@
 # LabManager Common
+
+[![CircleCI](https://circleci.com/gh/gigantum/labmanager-common.svg?style=svg)](https://circleci.com/gh/gigantum/labmanager-common)
+[![Coverage Status](https://coveralls.io/repos/github/gigantum/labmanager-common/badge.svg?branch=integration&t=X8AMcV)](https://coveralls.io/github/gigantum/labmanager-common?branch=integration)
+
 This repository contains common tools used across LabManager components.
 
 ## Packages
