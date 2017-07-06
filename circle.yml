@@ -1,0 +1,19 @@
+machine:
+  python:
+    version: 3.6.1
+
+dependencies:
+  pre:
+    - sudo apt-get update; sudo apt-get install build-essential libsnappy-dev
+    - mkdir ~/leveldb; cd ~/leveldb; git clone https://github.com/google/leveldb.git; cd leveldb/; make;
+    - sudo scp ~/leveldb/leveldb/out-static/lib* ~/leveldb/leveldb/out-shared/lib* /usr/local/lib/
+    - cd ~/leveldb/leveldb/include/; sudo scp -r leveldb /usr/local/include/; sudo ldconfig
+
+  override:
+    - pip install -r requirements.txt
+    - pip install coveralls pytest-cov
+
+test:
+  override:
+    - pytest --cov=lmcommon .
+    - coveralls
