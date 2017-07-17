@@ -40,7 +40,7 @@ class LabBook(object):
         self.git = get_git_interface(self.labmanager_config.config["git"])
 
         # LabBook Properties
-        self._root_dir = None
+        self._root_dir = None  # The root dir is the location of the labbook this instance represents
         self._data = None
 
         # LabBook Environment
@@ -127,8 +127,9 @@ class LabBook(object):
         if len(self.name) > 100:
             raise ValueError("Invalid `name`. Max length is 100 characters")
 
+    # TODO: Get feedback on better way to sanitize
     def _santize_input(self, value):
-        """Simple method to santize a user provided value with characters that can be bad
+        """Simple method to sanitize a user provided value with characters that can be bad
 
         Args:
             value(str): Input string
@@ -138,7 +139,7 @@ class LabBook(object):
         """
         return''.join(c for c in value if c not in '<>?/;"`\'')
 
-    def new(self, username=None, owner=None, name=None, description=None):
+    def new(self, owner, name, username=None, description=None):
         """Method to create a new minimal LabBook instance on disk
 
         /[LabBook name]
@@ -155,19 +156,20 @@ class LabBook(object):
             /.git
 
         Args:
-            path(str): Relative path to the directory where the LabBook should be created from the root working dir
-            owner(dict): Owner information
+            owner(dict): Owner information. Can be a user or a team/org.
             name(str): Name of the LabBook
+            username(str): Username of the logged in user. Used to store the LabBook in the proper location. If omitted
+                           the owner username is used
             description(str): A short description of the LabBook
 
         Returns:
             str: Path to the LabBook contents
         """
-        if not username:
-            username = "default"
-
         if not owner:
-            owner = {"username": "default"}
+            raise ValueError("You must provide owner details when creating a LabBook.")
+
+        if not username:
+            username = owner["username"]
 
         # Build data file contents
         self._data = {"labbook": {"id": uuid.uuid4().hex,
@@ -186,13 +188,18 @@ class LabBook(object):
         if not os.path.isdir(user_dir):
             os.makedirs(user_dir)
 
+        # Create owner dir - store LabBooks in working dir > logged in user > owner
+        owner_dir = os.path.join(user_dir, owner["username"])
+        if not os.path.isdir(owner_dir):
+            os.makedirs(owner_dir)
+
         # Verify name not already in use
-        if os.path.isdir(os.path.join(user_dir, name)):
+        if os.path.isdir(os.path.join(owner_dir, name)):
             # Exists already. Raise an exception
             raise ValueError("LabBook `{}` already exists locally. Choose a new LabBook name".format(name))
 
         # Create LabBook subdirectory
-        new_root_dir = os.path.join(user_dir, name)
+        new_root_dir = os.path.join(owner_dir, name)
         os.makedirs(new_root_dir)
         self._set_root_dir(new_root_dir)
 
@@ -218,6 +225,7 @@ class LabBook(object):
             dockerfile.write("FROM ubuntu:16.04")
 
         # Create .gitignore default file
+        # TODO: Use a base .gitignore file vs. global variable
         with open(os.path.join(self.root_dir, ".gitignore"), 'wt') as gi_file:
             gi_file.write(GIT_IGNORE_DEFAULT)
 
@@ -246,11 +254,12 @@ class LabBook(object):
         with open(os.path.join(self.root_dir, ".gigantum", "labbook.yaml"), "rt") as data_file:
             self._data = yaml.load(data_file)
 
-    def from_name(self, username, labbook_name):
+    def from_name(self, username, owner, labbook_name):
         """Method to populate a LabBook instance based on the user and name of the labbook
 
         Args:
-            username(str): The username of the owner of the LabBook
+            username(str): The username of the logged in user
+            owner(str): The username/org name of the owner of the LabBook
             labbook_name(str): the name of the LabBook
 
         Returns:
@@ -258,6 +267,7 @@ class LabBook(object):
         """
         labbook_path = os.path.expanduser(os.path.join(self.labmanager_config.config["git"]["working_directory"],
                                                        username,
+                                                       owner,
                                                        labbook_name))
 
         # Make sure directory exists
@@ -278,7 +288,7 @@ class LabBook(object):
             username(str): Username to filter the query on
 
         Returns:
-            (dict(list)): A dictionary of lists of LabBook Names, one entry per user
+            dict: A dictionary containing labbooks grouped by local username
         """
         # Make sure you expand a user string
         working_dir = os.path.expanduser(self.labmanager_config.config["git"]["working_directory"])
@@ -287,21 +297,23 @@ class LabBook(object):
             # Return all available labbooks
             files_collected = glob.glob(os.path.join(working_dir,
                                                      "*",
+                                                     "*",
                                                      "*"))
         else:
             # Return only labbooks for the provided user
             files_collected = glob.glob(os.path.join(working_dir,
                                                      username,
+                                                     "*",
                                                      "*"))
         # Generate dictionary to return
         result = {}
         for dir_path in files_collected:
             if os.path.isdir(dir_path):
-                _, user, labbook = dir_path.rsplit(os.path.sep, 2)
-                if user not in result:
-                    result[user] = []
+                _, username, owner, labbook = dir_path.rsplit(os.path.sep, 3)
+                if username not in result:
+                    result[username] = []
 
-                result[user].append(labbook)
+                result[username].append({"owner": owner, "name": labbook})
 
         return result
 

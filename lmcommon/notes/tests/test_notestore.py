@@ -48,7 +48,7 @@ git:
         fp.seek(0)
 
         lb = LabBook(fp.name)
-        labbook_dir = lb.new(username="test", name="labbook1", description="my first labbook")
+        lb.new(owner={"username": "test"}, name="labbook1", description="my first labbook")
         ns = NoteStore(lb)
 
         yield ns # provide the fixture value
@@ -76,7 +76,7 @@ class TestNoteStore():
         # an embedded dict
         key3 = ''.join(random.choice('0123456789abcdef') for i in range(30))
         uni3 = u''.join(chr(random.randint(0x80, sys.maxunicode)) for _ in range(700))
-        value3 = {'outer3': 'outerval3', 'embedded3': { 'bar': uni3, 'moo': 'mooval'}}
+        value3 = {'outer3': 'outerval3', 'embedded3': {'bar': uni3, 'moo': 'mooval'}}
 
         # interleave puts and gets
         test_notestore.put_entry(key1, value1)
@@ -84,14 +84,14 @@ class TestNoteStore():
         test_notestore.put_entry(key2, value2)
 
         ret1 = test_notestore.get_entry(key1)
-        assert ( ret1['uni1'] == uni1 )
+        assert (ret1['uni1'] == uni1)
 
         test_notestore.put_entry(key3, value3)
 
         ret2 = test_notestore.get_entry(key2)
-        assert ( ret2['embedded2'][1] == uni2 )
+        assert (ret2['embedded2'][1] == uni2)
 
         ret3 = test_notestore.get_entry(key3)
-        assert ( ret3['embedded3']['bar'] == uni3 )
+        assert (ret3['embedded3']['bar'] == uni3)
 
 
