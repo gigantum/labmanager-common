@@ -11,7 +11,8 @@ core:
 # Git Configuration
 git:
   backend: "filesystem"
-  working_directory: "~/gigantum"
+  working_directory: "~/gigantum/labbooks"
+  dataset_directory: "~/gigantum/datasets"
 
 # Flask Configuration
 flask:
