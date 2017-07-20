@@ -193,6 +193,11 @@ class LabBook(object):
         if not os.path.isdir(owner_dir):
             os.makedirs(owner_dir)
 
+            # Create `labbooks` subdir in the owner dir
+            owner_dir = os.path.join(owner_dir, "labbooks")
+        else:
+            owner_dir = os.path.join(owner_dir, "labbooks")
+
         # Verify name not already in use
         if os.path.isdir(os.path.join(owner_dir, name)):
             # Exists already. Raise an exception
@@ -268,6 +273,7 @@ class LabBook(object):
         labbook_path = os.path.expanduser(os.path.join(self.labmanager_config.config["git"]["working_directory"],
                                                        username,
                                                        owner,
+                                                       "labbooks",
                                                        labbook_name))
 
         # Make sure directory exists
@@ -298,18 +304,20 @@ class LabBook(object):
             files_collected = glob.glob(os.path.join(working_dir,
                                                      "*",
                                                      "*",
+                                                     "labbooks",
                                                      "*"))
         else:
             # Return only labbooks for the provided user
             files_collected = glob.glob(os.path.join(working_dir,
                                                      username,
                                                      "*",
+                                                     "labbooks",
                                                      "*"))
         # Generate dictionary to return
         result = {}
         for dir_path in files_collected:
             if os.path.isdir(dir_path):
-                _, username, owner, labbook = dir_path.rsplit(os.path.sep, 3)
+                _, username, owner, _, labbook = dir_path.rsplit(os.path.sep, 4)
                 if username not in result:
                     result[username] = []
 
@@ -326,7 +334,7 @@ class LabBook(object):
         Returns:
             dict
         """
-        # TODO: Add additional optional args to the git.log call to support futher filtering
+        # TODO: Add additional optional args to the git.log call to support further filtering
         return self.git.log(max_count=max_count, author=username)
 
     def log_entry(self, commit):

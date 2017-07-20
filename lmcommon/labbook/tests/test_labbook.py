@@ -58,7 +58,7 @@ class TestLabBook(object):
         labbook_dir = lb.new(username="test", name="labbook1", description="my first labbook",
                              owner={"username": "test"})
 
-        assert labbook_dir == os.path.join(mock_config_file[1], "test", "test", "labbook1")
+        assert labbook_dir == os.path.join(mock_config_file[1], "test", "test", "labbooks", "labbook1")
         assert type(lb) == LabBook
 
         # Validate directory structure
@@ -93,7 +93,7 @@ class TestLabBook(object):
         labbook_dir = lb.new(name="labbook1", description="my first labbook",
                              owner={"username": "test"})
 
-        assert labbook_dir == os.path.join(mock_config_file[1], "test", "test", "labbook1")
+        assert labbook_dir == os.path.join(mock_config_file[1], "test", "test", "labbooks",   "labbook1")
         assert type(lb) == LabBook
 
         # Validate directory structure
@@ -162,10 +162,10 @@ class TestLabBook(object):
         labbook_dir4 = lb.new(owner={"username": "user2"}, username="user1", name="labbook4",
                               description="another users labbook")
 
-        assert labbook_dir1 == os.path.join(mock_config_file[1], "user1", "user1", "labbook1")
-        assert labbook_dir2 == os.path.join(mock_config_file[1], "user1", "user1", "labbook2")
-        assert labbook_dir3 == os.path.join(mock_config_file[1], "user2", "user2", "labbook3")
-        assert labbook_dir4 == os.path.join(mock_config_file[1], "user1", "user2", "labbook4")
+        assert labbook_dir1 == os.path.join(mock_config_file[1], "user1", "user1", "labbooks", "labbook1")
+        assert labbook_dir2 == os.path.join(mock_config_file[1], "user1", "user1", "labbooks", "labbook2")
+        assert labbook_dir3 == os.path.join(mock_config_file[1], "user2", "user2", "labbooks", "labbook3")
+        assert labbook_dir4 == os.path.join(mock_config_file[1], "user1", "user2", "labbooks", "labbook4")
 
         labbooks = lb.list_local_labbooks()
 
@@ -187,9 +187,9 @@ class TestLabBook(object):
         labbook_dir2 = lb.new(owner={"username": "user1"}, name="labbook2", description="my second labbook")
         labbook_dir3 = lb.new(owner={"username": "user2"}, name="labbook3", description="my other labbook")
 
-        assert labbook_dir1 == os.path.join(mock_config_file[1], "user1", "user1", "labbook1")
-        assert labbook_dir2 == os.path.join(mock_config_file[1], "user1", "user1", "labbook2")
-        assert labbook_dir3 == os.path.join(mock_config_file[1], "user2", "user2", "labbook3")
+        assert labbook_dir1 == os.path.join(mock_config_file[1], "user1", "user1", "labbooks", "labbook1")
+        assert labbook_dir2 == os.path.join(mock_config_file[1], "user1", "user1", "labbooks", "labbook2")
+        assert labbook_dir3 == os.path.join(mock_config_file[1], "user2", "user2", "labbooks", "labbook3")
 
         labbooks = lb.list_local_labbooks(username="user1")
 
@@ -206,7 +206,7 @@ class TestLabBook(object):
         labbook_dir = lb.new(username="test", name="labbook1", description="my first labbook",
                              owner={"username": "test"})
 
-        assert labbook_dir == os.path.join(mock_config_file[1], "test", "test", "labbook1")
+        assert labbook_dir == os.path.join(mock_config_file[1], "test", "test", "labbooks", "labbook1")
         assert type(lb) == LabBook
 
         # Validate directory structure
@@ -231,7 +231,7 @@ class TestLabBook(object):
         lb_loaded = LabBook(mock_config_file[0])
         lb_loaded.from_directory(labbook_dir)
 
-        assert lb_loaded.root_dir == os.path.join(mock_config_file[1], "test", "test", "labbook1")
+        assert lb_loaded.root_dir == os.path.join(mock_config_file[1], "test", "test", "labbooks", "labbook1")
         assert type(lb) == LabBook
 
         # Validate labbook data file
@@ -247,7 +247,7 @@ class TestLabBook(object):
         labbook_dir = lb.new(username="test", name="labbook1", description="my first labbook",
                              owner={"username": "test"})
 
-        assert labbook_dir == os.path.join(mock_config_file[1], "test", "test", "labbook1")
+        assert labbook_dir == os.path.join(mock_config_file[1], "test", "test", "labbooks", "labbook1")
         assert type(lb) == LabBook
 
         # Validate directory structure
@@ -272,7 +272,7 @@ class TestLabBook(object):
         lb_loaded = LabBook(mock_config_file[0])
         lb_loaded.from_name("test", "test", "labbook1")
 
-        assert lb_loaded.root_dir == os.path.join(mock_config_file[1], "test", "test", "labbook1")
+        assert lb_loaded.root_dir == os.path.join(mock_config_file[1], "test", "test", "labbooks", "labbook1")
         assert type(lb) == LabBook
 
         # Validate labbook data file
@@ -293,7 +293,7 @@ class TestLabBook(object):
         lb_loaded = LabBook(mock_config_file[0])
         lb_loaded.from_name("test", "test", "new-labbook-1")
 
-        assert lb_loaded.root_dir == os.path.join(mock_config_file[1], "test", "test", "new-labbook-1")
+        assert lb_loaded.root_dir == os.path.join(mock_config_file[1], "test", "test", "labbooks", "new-labbook-1")
         assert type(lb) == LabBook
 
         # Validate labbook data file
