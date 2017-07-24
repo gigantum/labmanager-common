@@ -258,7 +258,8 @@ class NoteStore(object):
                     "message": message,
                     "level": NoteLogLevel(note_metadata["level"]),
                     "timestamp": entry["committed_on"],
-                    "tags": note_metadata["tags"],
+                    "tags": sorted(note_metadata["tags"]),
+                    "author": entry["author"]
                     }
         else:
             raise ValueError("Note commit {} not found".format(commit))
@@ -289,7 +290,8 @@ class NoteStore(object):
                                        "message": message,
                                        "level": NoteLogLevel(note_metadata["level"]),
                                        "timestamp": entry["committed_on"],
-                                       "tags": note_metadata["tags"],
+                                       "tags": sorted(note_metadata["tags"]),
+                                       "author": entry["author"]
                                        })
         return note_summaries
 
@@ -331,14 +333,16 @@ class NoteStore(object):
             Returns:
                  dict
         """
-        # Create DB connection
-        note_detail_db = plyvel.DB(self._entries_path, create_if_missing=True)
-
         # Create key
         binary_key = linked_commit_hash.encode('utf8')
 
-        # Get value from key-value store
-        binary_value = note_detail_db.get(binary_key)
+        # Create DB connection
+        note_detail_db = plyvel.DB(self._entries_path, create_if_missing=True)
+        try:
+            # Get value from key-value store
+            binary_value = note_detail_db.get(binary_key)
+        finally:
+            note_detail_db.close()
 
         # Load into dictionary
         value = json.loads(binary_value.decode('utf8'))
