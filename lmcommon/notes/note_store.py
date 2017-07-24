@@ -258,7 +258,7 @@ class NoteStore(object):
                     "message": message,
                     "level": NoteLogLevel(note_metadata["level"]),
                     "timestamp": entry["committed_on"],
-                    "tags": note_metadata["tags"],
+                    "tags": sorted(note_metadata["tags"]),
                     "author": entry["author"]
                     }
         else:
@@ -290,7 +290,7 @@ class NoteStore(object):
                                        "message": message,
                                        "level": NoteLogLevel(note_metadata["level"]),
                                        "timestamp": entry["committed_on"],
-                                       "tags": note_metadata["tags"],
+                                       "tags": sorted(note_metadata["tags"]),
                                        "author": entry["author"]
                                        })
         return note_summaries
