@@ -23,7 +23,7 @@ import re
 import glob
 import yaml
 
-from lmcommon.gitlib import get_git_interface
+from lmcommon.gitlib import get_git_interface, GitAuthor
 from lmcommon.configuration import Configuration
 
 
@@ -91,6 +91,33 @@ class LabBook(object):
     @property
     def owner(self):
         return self._data["owner"]
+
+    # TODO: Replace with a user class instance once proper user interface implemented
+    @property
+    def user(self):
+        """Property containing information about the current logged in user
+            Dictionary of values:
+                "name" - First Last name
+                "email" - user's email address
+                "username" - user's username
+
+        """
+        return self._data["user"]
+
+    @user.setter
+    def user(self, value):
+        """
+
+        Args:
+            value:
+
+        Returns:
+
+        """
+        self._data["user"] = value
+
+        # Update gitlib to have the right user information
+        self.git.update_author(GitAuthor(value["name"], value["email"]))
     # PROPERTIES
 
     def _set_root_dir(self, new_root_dir):
@@ -137,7 +164,7 @@ class LabBook(object):
         Returns:
             str: Output string
         """
-        return''.join(c for c in value if c not in '<>?/;"`\'')
+        return''.join(c for c in value if c not in '\<>?/;"`\'')
 
     def new(self, owner, name, username=None, description=None):
         """Method to create a new minimal LabBook instance on disk
@@ -347,9 +374,3 @@ class LabBook(object):
             dict
         """
         return self.git.log_entry(commit)
-
-    def commit(self, message, author=None):
-        # TODO: Revisit and possibly remove explict commit interface towards unified notes abstraction
-        return self.git.commit(message, author=author)
-
-
