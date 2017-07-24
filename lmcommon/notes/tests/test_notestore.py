@@ -173,6 +173,7 @@ class TestNoteStore:
         assert sorted(note_data["tags"]) == sorted(stored_note["tags"])
         assert stored_note["note_commit"] == note_commit.hexsha
         assert stored_note["timestamp"] == note_commit.committed_datetime
+        assert stored_note["author"] == {'name': 'Gigantum AutoCommit', 'email': 'noreply@gigantum.io'}
 
     def test_invalid_log_level(self, mock_create_notestore):
         """Method to test trying to create a note with an invalid log level"""
@@ -224,6 +225,7 @@ class TestNoteStore:
         assert stored_note["note_commit"] == note_commit.hexsha
         assert stored_note["timestamp"] == note_commit.committed_datetime
         assert note_data["free_text"] == stored_note["free_text"]
+        assert stored_note["author"] == {'name': 'Gigantum AutoCommit', 'email': 'noreply@gigantum.io'}
 
         for obj_truth, obj_test in zip(note_data["objects"], stored_note["objects"]):
             assert obj_truth.__dict__ == obj_test.__dict__
@@ -260,6 +262,7 @@ class TestNoteStore:
             assert sorted(truth[0]["tags"]) == sorted(test["tags"])
             assert test["note_commit"] == truth[1].hexsha
             assert test["timestamp"] == truth[1].committed_datetime
+            assert test["author"] == {'name': 'Gigantum AutoCommit', 'email': 'noreply@gigantum.io'}
 
     def test_get_notes(self, mock_create_notestore):
         """Method to test creating and getting a bunch of note summaries and converting them to notes"""
@@ -295,6 +298,7 @@ class TestNoteStore:
             assert test["note_commit"] == truth[1].hexsha
             assert test["timestamp"] == truth[1].committed_datetime
             assert truth[0]["free_text"] == test["free_text"]
+            assert test["author"] == {'name': 'Gigantum AutoCommit', 'email': 'noreply@gigantum.io'}
 
             for obj_truth, obj_test in zip(truth[0]["objects"], test["objects"]):
                 assert obj_truth.__dict__ == obj_test.__dict__
