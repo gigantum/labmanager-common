@@ -19,7 +19,7 @@
 # SOFTWARE.
 from .git import GitRepoInterface
 from git import Repo, Head, RemoteReference
-from git import InvalidGitRepositoryError
+from git import InvalidGitRepositoryError, BadName
 import os
 import re
 
@@ -389,7 +389,7 @@ class GitFilesystem(GitRepoInterface):
     # LOCAL CHANGE METHODS
 
     # HISTORY METHODS
-    def log(self, max_count=10, filename=None, skip=None, since=None, author=None):
+    def log(self, max_count=None, filename=None, skip=None, since=None, author=None):
         """Method to get the commit history, optionally for a single file, with pagination support
 
         Returns an ordered list of dictionaries, one entry per commit. Dictionary format:
@@ -412,7 +412,10 @@ class GitFilesystem(GitRepoInterface):
         Returns:
             list(dict)
         """
-        kwargs = {"max_count": max_count}
+        kwargs = {}
+
+        if max_count:
+            kwargs["max_count"] = max_count
 
         if filename:
             kwargs["paths"] = [filename]
@@ -458,8 +461,14 @@ class GitFilesystem(GitRepoInterface):
     
         Returns:
             dict
+
+        Raises:
+            ValueError
         """
-        entry = self.repo.commit(commit)
+        try:
+            entry = self.repo.commit(commit)
+        except BadName:
+            raise ValueError("Commit {} not found".format(commit))
 
         return {
                  "commit": entry.hexsha,
