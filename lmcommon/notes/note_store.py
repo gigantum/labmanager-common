@@ -351,7 +351,7 @@ class NoteStore(object):
         objects = []
         for obj_data in value["objects"]:
             objects.append(NoteDetailObject(obj_data["key"],
-                                            obj_data["object_type"],
+                                            obj_data["type"],
                                             base64.b64decode(obj_data["value"])))
 
         return {"free_text": value["free_text"], "objects": objects}
