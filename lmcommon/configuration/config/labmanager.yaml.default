@@ -17,3 +17,4 @@ git:
 flask:
   DEBUG: true
   TESTING: true
+  allow_cors: true
