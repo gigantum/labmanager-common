@@ -164,9 +164,8 @@ class NoteStore(object):
         # Check tag length
         for tag in tags:
             if len(tag) > self.max_tag_length:
-                raise ValueError("tag `{}` has {} characters, but a  tag is limited to {} characters.".format(tag,
-                                                                                                              len(tag),
-                                                                                                              self.max_tag_length))
+                msg = "tag `{}` has {} characters,".format(tag, len(tag))
+                raise ValueError("{} but a  tag is limited to {} characters.".format(msg, self.max_tag_length))
 
         # Remove \`; as a very basic level of sanitization
         return [tag.strip().translate({ord(c): None for c in '\`;'}) for tag in tags]
@@ -200,13 +199,10 @@ class NoteStore(object):
         message = "gtmNOTE_: {}\ngtmjson_metadata_: {}".format(note_data['message'], json.dumps(note_metadata,
                                                                                                 cls=NoteRecordEncoder))
 
-        try:
-            # Create record using the linked_commit hash as the reference
-            self.put_detail_record(str(note_data['linked_commit']),
-                                   note_data['free_text'],
-                                   note_data['objects'])
-        except Exception as err:
-            raise IOError("Failed to store note detail: {}".format(err))
+        # Create record using the linked_commit hash as the reference
+        self.put_detail_record(str(note_data['linked_commit']),
+                               note_data['free_text'],
+                               note_data['objects'])
 
         # Add everything in the LabBook notes/log directory in case it is new or a new log file has been created
         self.labbook.git.add_all(os.path.expanduser(os.path.join(".gigantum", "notes", "log")))
