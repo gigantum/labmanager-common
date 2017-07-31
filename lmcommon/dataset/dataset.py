@@ -316,7 +316,6 @@ class Dataset:
         return self.git.log_entry(commit)
 
     def commit(self, message, author=None):
-        # TODO: Revisit and possibly remove explict commit interface towards unified notes abstraction
         return self.git.commit(message, author=author)
 
 

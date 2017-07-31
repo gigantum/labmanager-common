@@ -74,6 +74,9 @@ class TestDataset():
         assert "id" in data["dataset"]
         assert data["owner"]["username"] == "test"
 
+        # Validate the Jenkins file
+        assert os.path.isfile(os.path.join(dataset_dir, ".gigantum", "protocols", "Jenkinsfile")) is True
+
 
     def test_create_dataset_that_exists(self, mock_config_file):
         """Test trying to create a dataset with a name that already exists locally"""
@@ -172,6 +175,9 @@ class TestDataset():
         assert "id" in data["dataset"]
         assert data["owner"]["username"] == "test"
 
+        # Validate the Jenkins file
+        assert os.path.isfile(os.path.join(dataset_dir, ".gigantum", "protocols", "Jenkinsfile")) is True
+
         ds_loaded = Dataset(mock_config_file[0])
         ds_loaded.from_directory(dataset_dir)
 
@@ -206,6 +212,9 @@ class TestDataset():
         assert data["dataset"]["description"] == "my first dataset"
         assert "id" in data["dataset"]
         assert data["owner"]["username"] == "test"
+
+        # Validate the Jenkins file
+        assert os.path.isfile(os.path.join(dataset_dir, ".gigantum", "protocols", "Jenkinsfile")) is True
 
         ds_loaded = Dataset(mock_config_file[0])
         ds_loaded.from_name("test", "dataset1")
