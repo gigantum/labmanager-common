@@ -340,6 +340,9 @@ class LabBook(object):
                                                      "*",
                                                      "labbooks",
                                                      "*"))
+        # Sort to give deterministic response
+        files_collected = sorted(files_collected)
+
         # Generate dictionary to return
         result = {}
         for dir_path in files_collected:
