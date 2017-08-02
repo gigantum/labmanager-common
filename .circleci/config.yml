@@ -9,9 +9,9 @@ jobs:
       - checkout
       - run: 
           name: Install build essentials
-          command:
-            - sudo apt-get update
-            - sudo apt-get install build-essential libsnappy-dev
+          command: |
+            sudo apt-get update
+            sudo apt-get install build-essential libsnappy-dev
       - run: mkdir ~/leveldb; cd ~/leveldb; git clone https://github.com/google/leveldb.git; cd leveldb/; make;
       - run: sudo scp ~/leveldb/leveldb/out-static/lib* ~/leveldb/leveldb/out-shared/lib* /usr/local/lib/
       - run: cd ~/leveldb/leveldb/include/; sudo scp -r leveldb /usr/local/include/; sudo ldconfig
