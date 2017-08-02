@@ -12,12 +12,32 @@ jobs:
           command: |
             sudo apt-get update
             sudo apt-get install build-essential libsnappy-dev
-      - run: mkdir ~/leveldb; cd ~/leveldb; git clone https://github.com/google/leveldb.git; cd leveldb/; make;
-      - run: sudo scp ~/leveldb/leveldb/out-static/lib* ~/leveldb/leveldb/out-shared/lib* /usr/local/lib/
-      - run: cd ~/leveldb/leveldb/include/; sudo scp -r leveldb /usr/local/include/; sudo ldconfig
-      - run: git config --global user.email "noreply@gigantum.io" && git config --global user.name "CircleCI"
-      - run: sudo pip install -r requirements.txt
-      - run: sudo pip install coveralls pytest-cov
-      - run: pytest --cov=lmcommon .
-      - run: coveralls
+      - run:
+          name: Checkout and build LevelDB
+          command: |
+            mkdir ~/leveldb
+            cd ~/leveldb
+            git clone https://github.com/google/leveldb.git
+            cd leveldb/
+            make;
+      - run:
+          name: Handle linking LevelDB libraries
+          command: |
+            sudo scp ~/leveldb/leveldb/out-static/lib* ~/leveldb/leveldb/out-shared/lib* /usr/local/lib/
+            cd ~/leveldb/leveldb/include/
+            sudo scp -r leveldb /usr/local/include/
+            sudo ldconfig
+      - run:
+          name: Set Git credentials
+          command: git config --global user.email "noreply@gigantum.io" && git config --global user.name "CircleCI"
+      - run:
+          name: Pip install requirements and pytest
+          command: |
+            sudo pip install -r requirements.txt
+            sudo pip install coveralls pytest-cov
+      - run:
+          name: Run unit and coverage tests
+          command: |
+            pytest --cov=lmcommon .
+            coveralls
 
