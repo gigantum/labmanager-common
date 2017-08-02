@@ -1,21 +1,35 @@
-machine:
-  python:
-    version: 3.6.1
+version: 2
+jobs:
+  build:
+    python:
+      version: 3.6.1
+    steps:
+      - checkout
+      - run:
+          name: Build Essentials
+          command: sudo apt-get update; sudo apt-get install build-essential libsnappy-dev
+      - run:
+          name: Checkout and build leveldb
+          command: mkdir ~/leveldb; cd ~/leveldb; git clone https://github.com/google/leveldb.git; cd leveldb/; make;
+      - run:
+          name: Install LevelDB
+          command: sudo scp ~/leveldb/leveldb/out-static/lib* ~/leveldb/leveldb/out-shared/lib* /usr/local/lib/
+      - run:
+          name: Run ldconfig with LevelDB
+          command: cd ~/leveldb/leveldb/include/; sudo scp -r leveldb /usr/local/include/; sudo ldconfig
+      - run:
+          name: Configure git user  for CircleCI
+          command: git config --global user.email "noreply@gigantum.io" && git config --global user.name "CircleCI"
+      - run:
+          name: Pip install requirements
+          command: pip install -r requirements.txt
+      - run:
+          name: Pip install test stuff
+          command: pip install coveralls pytest-cov
+      - run:
+          name: Run Pytest
+          command: pytest --cov=lmcommon .
+      - run:
+          name: Run coverage test 
+          command: coveralls
 
-dependencies:
-  pre:
-    - sudo apt-get update; sudo apt-get install build-essential libsnappy-dev
-    - mkdir ~/leveldb; cd ~/leveldb; git clone https://github.com/google/leveldb.git; cd leveldb/; make;
-    - sudo scp ~/leveldb/leveldb/out-static/lib* ~/leveldb/leveldb/out-shared/lib* /usr/local/lib/
-    - cd ~/leveldb/leveldb/include/; sudo scp -r leveldb /usr/local/include/; sudo ldconfig
-    - git config --global user.email "noreply@gigantum.io"
-    - git config --global user.name "CircleCI"
-
-  override:
-    - pip install -r requirements.txt
-    - pip install coveralls pytest-cov
-
-test:
-  override:
-    - pytest --cov=lmcommon .
-    - coveralls
