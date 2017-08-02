@@ -7,31 +7,13 @@ jobs:
       version: 3.6.1
     steps:
       - checkout
-      - run:
-          name: Build Essentials
-          command: sudo apt-get update; sudo apt-get install build-essential libsnappy-dev
-      - run:
-          name: Checkout and build leveldb
-          command: mkdir ~/leveldb; cd ~/leveldb; git clone https://github.com/google/leveldb.git; cd leveldb/; make;
-      - run:
-          name: Install LevelDB
-          command: sudo scp ~/leveldb/leveldb/out-static/lib* ~/leveldb/leveldb/out-shared/lib* /usr/local/lib/
-      - run:
-          name: Run ldconfig with LevelDB
-          command: cd ~/leveldb/leveldb/include/; sudo scp -r leveldb /usr/local/include/; sudo ldconfig
-      - run:
-          name: Configure git user  for CircleCI
-          command: git config --global user.email "noreply@gigantum.io" && git config --global user.name "CircleCI"
-      - run:
-          name: Pip install requirements
-          command: sudo pip install -r requirements.txt
-      - run:
-          name: Pip install test stuff
-          command: sudo pip install coveralls pytest-cov
-      - run:
-          name: Run Pytest
-          command: pytest --cov=lmcommon .
-      - run:
-          name: Run coverage test 
-          command: coveralls
+      - run: sudo apt-get update; sudo apt-get install build-essential libsnappy-dev
+      - run: mkdir ~/leveldb; cd ~/leveldb; git clone https://github.com/google/leveldb.git; cd leveldb/; make;
+      - run: sudo scp ~/leveldb/leveldb/out-static/lib* ~/leveldb/leveldb/out-shared/lib* /usr/local/lib/
+      - run: cd ~/leveldb/leveldb/include/; sudo scp -r leveldb /usr/local/include/; sudo ldconfig
+      - run: git config --global user.email "noreply@gigantum.io" && git config --global user.name "CircleCI"
+      - run: sudo pip install -r requirements.txt
+      - run: sudo pip install coveralls pytest-cov
+      - run: pytest --cov=lmcommon .
+      - run: coveralls
 
