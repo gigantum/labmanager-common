@@ -24,10 +24,10 @@ jobs:
           command: git config --global user.email "noreply@gigantum.io" && git config --global user.name "CircleCI"
       - run:
           name: Pip install requirements
-          command: pip install -r requirements.txt
+          command: sudo pip install -r requirements.txt
       - run:
           name: Pip install test stuff
-          command: pip install coveralls pytest-cov
+          command: sudo pip install coveralls pytest-cov
       - run:
           name: Run Pytest
           command: pytest --cov=lmcommon .
