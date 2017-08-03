@@ -100,7 +100,7 @@ class EnvironmentRepositoryManager(object):
         # Get repo Urls
         repo_urls = self.config.config["environment"]["repo_url"]
 
-t        for repo_url in repo_urls:
+        for repo_url in repo_urls:
             repo_dir_name = self._repo_url_to_name(repo_url)
             repo_dir = os.path.join(self.local_repo_directory, repo_dir_name)
 
