@@ -44,12 +44,20 @@ class LMLogger(object):
             with tempfile.NamedTemporaryFile(mode='at', delete=False, suffix=".log") as temp_log_file:
                 data['handlers']['fileHandler']['filename'] = temp_log_file.name
 
+        self.log_file = data['handlers']['fileHandler']['filename']
+        self._make_log_dir(os.path.dirname(self.log_file))
+
         # Configure logging
         logging.config.dictConfig(data)
 
         # Get the logger
         self.logger = logging.getLogger('labmanager')
-        self.log_file = data['handlers']['fileHandler']['filename']
+
+    def _make_log_dir(self, log_file_dir):
+      """Create directory tree to log file if it does not exist. """
+      if not os.path.exists(log_file_dir):
+        os.makedirs(log_file_dir, exist_ok=True)
+      return log_file_dir
 
     @staticmethod
     def find_default_config():
