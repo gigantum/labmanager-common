@@ -17,14 +17,14 @@
     "fileHandler": {
       "class": "logging.handlers.RotatingFileHandler",
       "formatter": "labmanagerFormatter",
-      "filename": "/mtn/gigantum/labmanager.log",
+      "filename": "/mnt/gigantum/labmanager.log",
       "maxBytes": 2048,
       "backupCount": 20
     }
   },
   "formatters": {
     "labmanagerFormatter": {
-      "format": "%(levelname)s - %(asctime)s - %(message)s"
+      "format": "%(levelname)-10s %(asctime)s - %(module).%(funcName) :: %(message)s"
     }
   }
 }
