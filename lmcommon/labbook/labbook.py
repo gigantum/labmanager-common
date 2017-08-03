@@ -270,6 +270,15 @@ class LabBook(object):
 
         return self.root_dir
 
+    def set_base_image(self, base_image_conf: str) -> None:
+        pass
+
+    def add_dev_envrionment(self, dev_environment_conf: str) -> None:
+        pass
+
+    def add_dependency(self, dependency_conf: str) -> None:
+        pass
+
     def from_directory(self, root_dir):
         """Method to populate a LabBook instance from a directory
 
