@@ -17,7 +17,7 @@
     "fileHandler": {
       "class": "logging.handlers.RotatingFileHandler",
       "formatter": "labmanagerFormatter",
-      "filename": "/mnt/gigantum/labmanager.log",
+      "filename": "/mnt/gigantum/.labmanager/labmanager.log",
       "maxBytes": 2048,
       "backupCount": 20
     }
