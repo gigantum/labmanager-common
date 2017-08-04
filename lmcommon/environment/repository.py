@@ -116,8 +116,22 @@ class EnvironmentRepositoryManager(object):
                 self._update_repo(repo_dir)
 
     def index_base_images(self, repo_name: str) -> OrderedDict:
-        """Method to index base image sub dir of a repo
+        """Method to 'index' a base_image directory in a single environment component repository
 
+        Currently, the `index` is simply an ordered dictionary of all of the base image components in the repo
+        The dictionary contains the contents of the YAML files for every version of the component and is strucutured:
+
+            {
+              "<repo_name>": {
+                                "info": { repo info stored in repo config.yaml }
+                                "<namespace>": {
+                                                  "<base_image_name>": {
+                                                                          "<Major.Minor.Build>": { YAML contents }, ...
+                                                                       }, ...
+                                               }, ...
+                              }
+            }
+            
         Args:
             repo_name(str): The name of the repo cloned locally
 
