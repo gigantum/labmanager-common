@@ -11,24 +11,7 @@ jobs:
           name: Install build essentials
           command: |
             sudo apt-get update
-            sudo apt-get install build-essential libsnappy-dev
-
-      - run:
-          name: Checkout and build LevelDB
-          command: |
-            mkdir ~/leveldb
-            cd ~/leveldb
-            git clone https://github.com/google/leveldb.git
-            cd leveldb/
-            make;
-
-      - run:
-          name: Handle linking LevelDB libraries
-          command: |
-            sudo scp ~/leveldb/leveldb/out-static/lib* ~/leveldb/leveldb/out-shared/lib* /usr/local/lib/
-            cd ~/leveldb/leveldb/include/
-            sudo scp -r leveldb /usr/local/include/
-            sudo ldconfig
+            sudo apt-get install -y build-essential libsnappy-dev libleveldb-dev libleveldb1v5
 
       - run:
           name: Set Git credentials
