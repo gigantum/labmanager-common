@@ -8,6 +8,11 @@ core:
   team_mode: false # Should the LabManager run in Team Mode (multi-user)
   logging_config: "/etc/gigantum/logging.json" # Location of configuration file for the LabManager logger
 
+# Environment Management Configuration
+environment:
+  repo_url:
+    - "https://github.com/gig-dev/environment-components.git"
+
 # Git Configuration
 git:
   backend: "filesystem"
