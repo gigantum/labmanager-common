@@ -115,14 +115,14 @@ class EnvironmentRepositoryManager(object):
                 # Need to update
                 self._update_repo(repo_dir)
 
-    def index_base_images(self, repo_name: str) -> None:
+    def index_base_images(self, repo_name: str) -> OrderedDict:
         """Method to index base image sub dir of a repo
 
         Args:
             repo_name(str): The name of the repo cloned locally
 
         Returns:
-            None
+            OrderedDict
         """
         # Get full path to repo
         repo_dir = os.path.join(self.local_repo_directory, repo_name)
@@ -135,6 +135,13 @@ class EnvironmentRepositoryManager(object):
                                             "*"))
 
         data = OrderedDict()
+        data[repo_name] = OrderedDict()
+
+        # Set repository info
+        with open(os.path.join(repo_dir, '.gigantum', 'config.yaml'), 'rt') as cf:
+            repo_info = yaml.load(cf)
+            data[repo_name]['info'] = repo_info
+
         # Read YAML files and write data to dictionary
         for yf in yaml_files:
             with open(yf, 'rt') as yf_file:
@@ -143,22 +150,20 @@ class EnvironmentRepositoryManager(object):
 
                 yaml_data["namespace"] = namespace
 
-                if namespace not in data:
-                    data[namespace] = OrderedDict()
+                if namespace not in data[repo_name]:
+                    data[repo_name][namespace] = OrderedDict()
 
-                if component_name not in data[namespace]:
-                    data[namespace][component_name] = OrderedDict()
+                if component_name not in data[repo_name][namespace]:
+                    data[repo_name][namespace][component_name] = OrderedDict()
 
-                data[namespace][component_name]["{}.{}.{}".format(yaml_data['info']['version_major'],
-                                                                  yaml_data['info']['version_minor'],
-                                                                  yaml_data['info']['version_build']
-                                                                  )] = yaml_data
+                data[repo_name][namespace][component_name]["{}.{}.{}".format(yaml_data['info']['version_major'],
+                                                                             yaml_data['info']['version_minor'],
+                                                                             yaml_data['info']['version_build']
+                                                                             )] = yaml_data
 
         # TODO: Sort recursively to provide both deterministic result and versions in order with newest first
 
-        # Write file
-        with open(os.path.join(self.local_repo_directory, "base_image_index.pickle"), 'wb') as fh:
-            pickle.dump(data, fh)
+        return data
 
     def index_repositories(self):
         """Method to index repos using a naive approach
@@ -172,9 +177,15 @@ class EnvironmentRepositoryManager(object):
         repo_urls = self.config.config["environment"]["repo_url"]
         repo_names = [self._repo_url_to_name(x) for x in repo_urls]
 
+        base_image_all_repo_data = OrderedDict()
         for repo_name in repo_names:
             # Index Base Images
-            self.index_base_images(repo_name)
+            base_image_all_repo_data.update(self.index_base_images(repo_name))
 
             # TODO: Index other categories
 
+        # Write file
+        with open(os.path.join(self.local_repo_directory, "base_image_index.pickle"), 'wb') as fh:
+            pickle.dump(base_image_all_repo_data, fh)
+
+        # TODO: Write other categories to disk

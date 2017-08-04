@@ -82,11 +82,15 @@ class TestEnvironmentRepositoryManager(object):
         with open(os.path.join(erm.local_repo_directory, "base_image_index.pickle"), 'rb') as fh:
             data = pickle.load(fh)
 
-        assert "gigantum" in data
-        assert "ubuntu1604-python3" in data["gigantum"]
-        assert "0.1.0" in data["gigantum"]["ubuntu1604-python3"]
-        assert "info" in data["gigantum"]["ubuntu1604-python3"]["0.1.0"]
-        assert "author" in data["gigantum"]["ubuntu1604-python3"]["0.1.0"]
-        assert "image" in data["gigantum"]["ubuntu1604-python3"]["0.1.0"]
-        assert "available_package_managers" in data["gigantum"]["ubuntu1604-python3"]["0.1.0"]
-        assert "namespace" in data["gigantum"]["ubuntu1604-python3"]["0.1.0"]
+        assert "gig-dev_environment-components" in data
+        assert "gigantum" in data["gig-dev_environment-components"]
+        assert "info" in data["gig-dev_environment-components"]
+        assert "maintainer" in data["gig-dev_environment-components"]['info']
+        assert "repo" in data["gig-dev_environment-components"]['info']
+        assert "ubuntu1604-python3" in data["gig-dev_environment-components"]["gigantum"]
+        assert "0.1.0" in data["gig-dev_environment-components"]["gigantum"]["ubuntu1604-python3"]
+        assert "info" in data["gig-dev_environment-components"]["gigantum"]["ubuntu1604-python3"]["0.1.0"]
+        assert "author" in data["gig-dev_environment-components"]["gigantum"]["ubuntu1604-python3"]["0.1.0"]
+        assert "image" in data["gig-dev_environment-components"]["gigantum"]["ubuntu1604-python3"]["0.1.0"]
+        assert "available_package_managers" in data["gig-dev_environment-components"]["gigantum"]["ubuntu1604-python3"]["0.1.0"]
+        assert "namespace" in data["gig-dev_environment-components"]["gigantum"]["ubuntu1604-python3"]["0.1.0"]
