@@ -18,10 +18,12 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 from lmcommon.gitlib import get_git_interface
+import glob
+from collections import OrderedDict
+import pickle
 
 import os
 import yaml
-from pkg_resources import resource_filename
 
 from lmcommon.configuration import Configuration
 
@@ -113,5 +115,66 @@ class EnvironmentRepositoryManager(object):
                 # Need to update
                 self._update_repo(repo_dir)
 
+    def index_base_images(self, repo_name: str) -> None:
+        """Method to index base image sub dir of a repo
+
+        Args:
+            repo_name(str): The name of the repo cloned locally
+
+        Returns:
+            None
+        """
+        # Get full path to repo
+        repo_dir = os.path.join(self.local_repo_directory, repo_name)
+        base_image_repo_dir = os.path.join(repo_dir, 'base_image')
+
+        # Get all base image YAML files
+        yaml_files = glob.glob(os.path.join(base_image_repo_dir,
+                                            "*",
+                                            "*",
+                                            "*"))
+
+        data = OrderedDict()
+        # Read YAML files and write data to dictionary
+        for yf in yaml_files:
+            with open(yf, 'rt') as yf_file:
+                yaml_data = yaml.load(yf_file)
+                _, namespace, component_name, _ = yf.rsplit(os.path.sep, 3)
+
+                yaml_data["namespace"] = namespace
+
+                if namespace not in data:
+                    data[namespace] = OrderedDict()
+
+                if component_name not in data[namespace]:
+                    data[namespace][component_name] = OrderedDict()
+
+                data[namespace][component_name]["{}.{}.{}".format(yaml_data['info']['version_major'],
+                                                                  yaml_data['info']['version_minor'],
+                                                                  yaml_data['info']['version_build']
+                                                                  )] = yaml_data
+
+        # TODO: Sort recursively to provide both deterministic result and versions in order with newest first
+
+        # Write file
+        with open(os.path.join(self.local_repo_directory, "base_image_index.pickle"), 'wb') as fh:
+            pickle.dump(data, fh)
+
     def index_repositories(self):
-        raise NotImplemented
+        """Method to index repos using a naive approach
+
+        Stores index data in a pickled dictionaries in <working_directory>/.labmanager/environment_repositories/.index/
+
+        Returns:
+            None
+        """
+        # Get all local repos
+        repo_urls = self.config.config["environment"]["repo_url"]
+        repo_names = [self._repo_url_to_name(x) for x in repo_urls]
+
+        for repo_name in repo_names:
+            # Index Base Images
+            self.index_base_images(repo_name)
+
+            # TODO: Index other categories
+

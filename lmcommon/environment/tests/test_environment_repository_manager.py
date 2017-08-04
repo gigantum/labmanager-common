@@ -23,6 +23,7 @@ import tempfile
 import os
 import uuid
 import shutil
+import pickle
 import yaml
 
 from lmcommon.environment import EnvironmentRepositoryManager
@@ -68,3 +69,24 @@ class TestEnvironmentRepositoryManager(object):
                                            "gig-dev_environment-components")) is True
         assert os.path.exists(os.path.join(mock_config_file[1], ".labmanager", "environment_repositories",
                                            "gig-dev_environment-components", "README.md")) is True
+
+    def test_index_repositories(self, mock_config_file):
+        """Test creating an empty labbook"""
+        erm = EnvironmentRepositoryManager(mock_config_file[0])
+
+        erm.update_repositories()
+
+        erm.index_repositories()
+
+        # Verify index file contents
+        with open(os.path.join(erm.local_repo_directory, "base_image_index.pickle"), 'rb') as fh:
+            data = pickle.load(fh)
+
+        assert "gigantum" in data
+        assert "ubuntu1604-python3" in data["gigantum"]
+        assert "0.1.0" in data["gigantum"]["ubuntu1604-python3"]
+        assert "info" in data["gigantum"]["ubuntu1604-python3"]["0.1.0"]
+        assert "author" in data["gigantum"]["ubuntu1604-python3"]["0.1.0"]
+        assert "image" in data["gigantum"]["ubuntu1604-python3"]["0.1.0"]
+        assert "available_package_managers" in data["gigantum"]["ubuntu1604-python3"]["0.1.0"]
+        assert "namespace" in data["gigantum"]["ubuntu1604-python3"]["0.1.0"]
