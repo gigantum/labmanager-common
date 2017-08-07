@@ -38,6 +38,7 @@ def clone_env_repo():
         repo = git.Repo()
         repo.clone_from("https://github.com/gig-dev/environment-components-dev.git", tempdir)
         yield tempdir
+    shutil.rmtree(tempdir)
 
 @pytest.fixture()
 def mock_config_file():
@@ -65,6 +66,7 @@ git:
     # Remove the temp_dir
     shutil.rmtree(temp_dir)
 
+
 class TestImageBuilder(object):
     def test_checkout_successful(self, clone_env_repo):
         assert os.path.exists(
@@ -72,5 +74,10 @@ class TestImageBuilder(object):
 
     def test_indexing(self, clone_env_repo, mock_config_file):
         erm = EnvironmentRepositoryManager(mock_config_file[0])
-
         erm.update_repositories()
+        index = erm.index_base_images()
+
+        import pprint; pprint.pprint(index)
+
+        assert False
+
