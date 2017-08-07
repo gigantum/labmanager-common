@@ -1,1 +1,2 @@
-from lmcommon.environment.repository import EnvironmentRepositoryManager
+from lmcommon.environment.repositorymanager import RepositoryManager
+from lmcommon.environment.repository import ComponentRepository
