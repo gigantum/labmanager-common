@@ -18,13 +18,20 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+import datetime
 import typing
+import os
 
 class ImageBuidler(object):
     """Class to ingest indexes describing base images, environments, and dependencies into Dockerfiles. """
 
     def __init__(self, indexed_data: typing.Dict) -> None:
         self.indexed_data = indexed_data
+        self._validate_index()
+
+    def _validate_index(self) -> None:
+        """Throw exception if self.indexed_data does not follow anticipated schema or is missing keys. """
+        pass
 
     def assemble_dockerfile(self) -> typing.AnyStr:
         """Create the content of a Dockerfile per the fields in the indexed data.
@@ -33,4 +40,18 @@ class ImageBuidler(object):
             typing.AnyStr - Content of Dockerfile.
         """
 
-        pass
+        fields = self.indexed_data["gig-dev_environment-components"]["gigantum"]["ubuntu1604-python3"]["0.1.0"]
+        generation_ts =str(datetime.datetime.now())
+
+        docker_owner_ns = fields['image']['namespace']
+        docker_repo = fields['image']['repo']
+        docker_tag = fields['image']['tag']
+
+        docker_lines: typing.List[typing.AnyStr] = []
+        docker_lines.append("# Dockerfile generated on {}".format(generation_ts))
+        docker_lines.append("# Name: {}".format(fields["info"]["human_name"]))
+        docker_lines.append("# Description: {}".format(fields["info"]["description"]))
+        docker_lines.append("")
+        docker_lines.append("FROM {}/{}:{}".format(docker_owner_ns, docker_repo, docker_tag))
+
+        return os.linesep.join(docker_lines)

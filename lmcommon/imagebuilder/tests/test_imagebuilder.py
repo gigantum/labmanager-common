@@ -95,4 +95,4 @@ class TestImageBuilder(object):
             data = pickle.load(fh)
 
         ib = ImageBuidler(data)
-        assert "FROM gigdev/ubuntu1604-python3" in ib.assemble_dockerfile()
+        assert "FROM gigdev/ubuntu1604-python3:7a7c9d41-2017-08-03" in ib.assemble_dockerfile()
