@@ -88,12 +88,12 @@ class TestEnvironmentRepositoryManager(object):
         assert "maintainer" in data["gig-dev_environment-components"]['info']
         assert "repo" in data["gig-dev_environment-components"]['info']
         assert "ubuntu1604-python3" in data["gig-dev_environment-components"]["gigantum"]
-        assert "0.1.0" in data["gig-dev_environment-components"]["gigantum"]["ubuntu1604-python3"]
-        assert "info" in data["gig-dev_environment-components"]["gigantum"]["ubuntu1604-python3"]["0.1.0"]
-        assert "author" in data["gig-dev_environment-components"]["gigantum"]["ubuntu1604-python3"]["0.1.0"]
-        assert "image" in data["gig-dev_environment-components"]["gigantum"]["ubuntu1604-python3"]["0.1.0"]
-        assert "available_package_managers" in data["gig-dev_environment-components"]["gigantum"]["ubuntu1604-python3"]["0.1.0"]
-        assert "namespace" in data["gig-dev_environment-components"]["gigantum"]["ubuntu1604-python3"]["0.1.0"]
+        assert "0.1" in data["gig-dev_environment-components"]["gigantum"]["ubuntu1604-python3"]
+        assert "info" in data["gig-dev_environment-components"]["gigantum"]["ubuntu1604-python3"]["0.1"]
+        assert "author" in data["gig-dev_environment-components"]["gigantum"]["ubuntu1604-python3"]["0.1"]
+        assert "image" in data["gig-dev_environment-components"]["gigantum"]["ubuntu1604-python3"]["0.1"]
+        assert "available_package_managers" in data["gig-dev_environment-components"]["gigantum"]["ubuntu1604-python3"]["0.1"]
+        assert "namespace" in data["gig-dev_environment-components"]["gigantum"]["ubuntu1604-python3"]["0.1"]
 
     def test_index_repositories_list(self, mock_config_file):
         """Test accessing the list version of the index"""

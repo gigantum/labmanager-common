@@ -39,6 +39,44 @@ class ComponentRepository(object):
         self.local_repo_directory = os.path.expanduser(os.path.join(self.config.config["git"]['working_directory'],
                                                        ".labmanager", "environment_repositories"))
 
+        # Dictionary to hold loaded index files in memory
+        self.list_index_data = {}
+        self.detail_index_data = {}
+
+    def _get_list_index_data(self, component_class: str) -> list:
+        """Private method to get list index data from either the file or memory
+
+        Args:
+            component_class(str): Name of the component class (e.g. base_image)
+
+        Returns:
+            list: the data stored in the index file
+        """
+        if component_class not in self.list_index_data:
+            # Load data for the first time
+            with open(os.path.join(self.local_repo_directory, "{}_list_index.pickle".format(component_class)),
+                      'rb') as fh:
+                self.list_index_data[component_class] = pickle.load(fh)
+
+        return self.list_index_data[component_class]
+
+    def _get_detail_index_data(self, component_class: str) -> dict:
+        """Private method to get detail index data from either the file or memory
+
+        Args:
+            component_class(str): Name of the component class (e.g. base_image)
+
+        Returns:
+            dict: the data stored in the index file
+        """
+        if component_class not in self.detail_index_data:
+            # Load data for the first time
+            with open(os.path.join(self.local_repo_directory, "{}_index.pickle".format(component_class)),
+                      'rb') as fh:
+                self.detail_index_data[component_class] = pickle.load(fh)
+
+        return self.detail_index_data[component_class]
+
     def get_component_list(self, component_class: str) -> list:
         """Method to get a list of all components of a specific class (e.g base_image, development_environment, etc)
         The component class should map to a directory in the component repository
@@ -46,9 +84,7 @@ class ComponentRepository(object):
         Returns:
             list
         """
-        # Open index
-        with open(os.path.join(self.local_repo_directory, "{}_list_index.pickle".format(component_class)), 'rb') as fh:
-            index_data = pickle.load(fh)
+        index_data = self._get_list_index_data(component_class)
 
         return index_data
 
@@ -65,8 +101,7 @@ class ComponentRepository(object):
             list
         """
         # Open index
-        with open(os.path.join(self.local_repo_directory, "{}_index.pickle".format(component_class)), 'rb') as fh:
-            index_data = pickle.load(fh)
+        index_data = self._get_detail_index_data(component_class)
 
         if repository not in index_data:
             raise ValueError("Repository `{}` not found.".format(repository))
@@ -78,6 +113,36 @@ class ComponentRepository(object):
             raise ValueError("Component `{}` not found in repository `{}`.".format(component, repository))
 
         return list(index_data[repository][namespace][component].items())
+
+    def get_component(self, component_class: str, repository: str, namespace: str,
+                      component: str, version: str) -> dict:
+        """Method to get a detailed list of all available versions for a single component
+
+        Args:
+            component_class(str): class of the component (e.g. base_image, development_env, etc)
+            repository(str): name of the component as provided via the list (<namespace>_<repo name>)
+            namespace(str): namespace within the component repo
+            component(str): name of the component
+            version(str): the version string of the component
+
+        Returns:
+            dict
+        """
+        index_data = self._get_detail_index_data(component_class)
+
+        if repository not in index_data:
+            raise ValueError("Repository `{}` not found.".format(repository))
+
+        if namespace not in index_data[repository]:
+            raise ValueError("Namespace `{}` not found in repository `{}`.".format(namespace, repository))
+
+        if component not in index_data[repository][namespace]:
+            raise ValueError("Component `{}` not found in repository `{}`.".format(component, repository))
+
+        if version not in index_data[repository][namespace][component]:
+            raise ValueError("Version `{}` not found in repository `{}`.".format(component, repository))
+
+        return index_data[repository][namespace][component][version]
 
 
 

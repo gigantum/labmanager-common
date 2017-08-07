@@ -68,6 +68,7 @@ class TestEnvironmentRepository(object):
         data = repo.get_component_list("base_image")
 
         assert type(data) == list
+        assert len(data) == 2
         assert data[0]['info']['name'] == 'ubuntu1604-python3'
         assert data[0]['namespace'] == 'gigantum'
         assert data[0]['repository'] == 'gig-dev_environment-components'
@@ -76,12 +77,25 @@ class TestEnvironmentRepository(object):
         """Test accessing the detail version of the index"""
         repo = ComponentRepository(mock_config_file[0])
         data = repo.get_component_versions('base_image', 'gig-dev_environment-components', 'gigantum',
-                                         'ubuntu1604-python3')
+                                           'ubuntu1604-python3')
 
         assert type(data) == list
-        assert data[0][0] == '0.1.0'
+        assert len(data) == 4
+        assert data[0][0] == '0.4'
+        assert data[3][0] == '0.1'
         assert data[0][1]['info']['name'] == 'ubuntu1604-python3'
         assert data[0][1]['namespace'] == 'gigantum'
         assert data[0][1]['repository'] == 'gig-dev_environment-components'
+
+    def test_get_component_version_base_image(self, mock_config_file):
+        """Test accessing the a single version of the index"""
+        repo = ComponentRepository(mock_config_file[0])
+        data = repo.get_component('base_image', 'gig-dev_environment-components', 'gigantum',
+                                  'ubuntu1604-python3', '0.1')
+
+        assert type(data) == dict
+        assert data['info']['name'] == 'ubuntu1604-python3'
+        assert data['namespace'] == 'gigantum'
+        assert data['repository'] == 'gig-dev_environment-components'
 
 

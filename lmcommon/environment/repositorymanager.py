@@ -21,6 +21,7 @@ from lmcommon.gitlib import get_git_interface
 import glob
 from collections import OrderedDict
 import pickle
+import operator
 
 import os
 import yaml
@@ -127,7 +128,7 @@ class RepositoryManager(object):
                                 "info": { repo info stored in repo config.yaml }
                                 "<namespace>": {
                                                   "<base_image_name>": {
-                                                                          "<Major.Minor.Build>": { YAML contents }, ...
+                                                                          "<Major.Minor>": { YAML contents }, ...
                                                                        }, ...
                                                }, ...
                               }
@@ -172,13 +173,19 @@ class RepositoryManager(object):
                 if component_name not in data[repo_name][namespace]:
                     data[repo_name][namespace][component_name] = OrderedDict()
 
-                data[repo_name][namespace][component_name]["{}.{}.{}".format(yaml_data['info']['version_major'],
-                                                                             yaml_data['info']['version_minor'],
-                                                                             yaml_data['info']['version_build']
-                                                                             )] = yaml_data
+                data[repo_name][namespace][component_name]["{}.{}".format(yaml_data['info']['version_major'],
+                                                                          yaml_data['info']['version_minor']
+                                                                          )] = yaml_data
 
-        # TODO: Sort recursively to provide both deterministic result and versions in order with newest first
-
+        # Sort versions after collecting everything
+        # to provide both deterministic result and versions in order with newest first
+        for repo in list(data.keys()):
+            for namespace in list(data[repo].keys()):
+                for component in list(data[repo][namespace].keys()):
+                    if component == 'info':
+                        continue
+                    data[repo][namespace][component] = OrderedDict(sorted(data[repo][namespace][component].items(),
+                                                                   key=operator.itemgetter(0), reverse=True))
         return data
 
     def build_component_list_index(self, index_data: OrderedDict) -> list:
