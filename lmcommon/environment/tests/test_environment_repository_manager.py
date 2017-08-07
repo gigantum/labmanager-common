@@ -26,7 +26,7 @@ import shutil
 import pickle
 import yaml
 
-from lmcommon.environment import EnvironmentRepositoryManager
+from lmcommon.environment import RepositoryManager
 
 
 @pytest.fixture()
@@ -58,8 +58,8 @@ git:
 
 class TestEnvironmentRepositoryManager(object):
     def test_update_repositories(self, mock_config_file):
-        """Test creating an empty labbook"""
-        erm = EnvironmentRepositoryManager(mock_config_file[0])
+        """Test building the index"""
+        erm = RepositoryManager(mock_config_file[0])
 
         erm.update_repositories()
 
@@ -71,8 +71,8 @@ class TestEnvironmentRepositoryManager(object):
                                            "gig-dev_environment-components", "README.md")) is True
 
     def test_index_repositories(self, mock_config_file):
-        """Test creating an empty labbook"""
-        erm = EnvironmentRepositoryManager(mock_config_file[0])
+        """Test creating and accessing the detail version of the index"""
+        erm = RepositoryManager(mock_config_file[0])
 
         erm.update_repositories()
 
@@ -88,9 +88,23 @@ class TestEnvironmentRepositoryManager(object):
         assert "maintainer" in data["gig-dev_environment-components"]['info']
         assert "repo" in data["gig-dev_environment-components"]['info']
         assert "ubuntu1604-python3" in data["gig-dev_environment-components"]["gigantum"]
-        assert "0.1.0" in data["gig-dev_environment-components"]["gigantum"]["ubuntu1604-python3"]
-        assert "info" in data["gig-dev_environment-components"]["gigantum"]["ubuntu1604-python3"]["0.1.0"]
-        assert "author" in data["gig-dev_environment-components"]["gigantum"]["ubuntu1604-python3"]["0.1.0"]
-        assert "image" in data["gig-dev_environment-components"]["gigantum"]["ubuntu1604-python3"]["0.1.0"]
-        assert "available_package_managers" in data["gig-dev_environment-components"]["gigantum"]["ubuntu1604-python3"]["0.1.0"]
-        assert "namespace" in data["gig-dev_environment-components"]["gigantum"]["ubuntu1604-python3"]["0.1.0"]
+        assert "0.1" in data["gig-dev_environment-components"]["gigantum"]["ubuntu1604-python3"]
+        assert "info" in data["gig-dev_environment-components"]["gigantum"]["ubuntu1604-python3"]["0.1"]
+        assert "author" in data["gig-dev_environment-components"]["gigantum"]["ubuntu1604-python3"]["0.1"]
+        assert "image" in data["gig-dev_environment-components"]["gigantum"]["ubuntu1604-python3"]["0.1"]
+        assert "available_package_managers" in data["gig-dev_environment-components"]["gigantum"]["ubuntu1604-python3"]["0.1"]
+        assert "namespace" in data["gig-dev_environment-components"]["gigantum"]["ubuntu1604-python3"]["0.1"]
+
+    def test_index_repositories_list(self, mock_config_file):
+        """Test accessing the list version of the index"""
+        erm = RepositoryManager(mock_config_file[0])
+
+        erm.update_repositories()
+
+        erm.index_repositories()
+
+        # Verify index file contents
+        with open(os.path.join(erm.local_repo_directory, "base_image_list_index.pickle"), 'rb') as fh:
+            data = pickle.load(fh)
+
+        assert data[0]['info']['name'] == 'ubuntu1604-python3'
