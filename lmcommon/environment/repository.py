@@ -17,19 +17,16 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-from lmcommon.gitlib import get_git_interface
-import glob
-from collections import OrderedDict
 import pickle
+from collections import OrderedDict
 
 import os
-import yaml
 
 from lmcommon.configuration import Configuration
 
 
-class EnvironmentRepositoryManager(object):
-    """Class to manage local copies of Environment Component Repositories
+class ComponentRepository(object):
+    """Class to interface with local copies of environment component repositories
     """
 
     def __init__(self, config_file: str=None):
@@ -41,165 +38,46 @@ class EnvironmentRepositoryManager(object):
         self.config = Configuration(config_file=config_file)
         self.local_repo_directory = os.path.expanduser(os.path.join(self.config.config["git"]['working_directory'],
                                                        ".labmanager", "environment_repositories"))
-        self.git = get_git_interface(self.config.config['git'])
 
-    def _repo_url_to_name(self, url: str) -> str:
-        """Method to generate a directory name from the repo URL for local storage
+    def get_component_list(self, component_class: str) -> list:
+        """Method to get a list of all components of a specific class (e.g base_image, development_environment, etc)
+        The component class should map to a directory in the component repository
+
+        Returns:
+            list
+        """
+        # Open index
+        with open(os.path.join(self.local_repo_directory, "{}_list_index.pickle".format(component_class)), 'rb') as fh:
+            index_data = pickle.load(fh)
+
+        return index_data
+
+    def get_component_versions(self, component_class: str, repository: str, namespace: str, component: str) -> list:
+        """Method to get a detailed list of all available versions for a single component
 
         Args:
-            url(str): repository URL
+            component_class(str): class of the component (e.g. base_image, development_env, etc)
+            repository(str): name of the component as provided via the list (<namespace>_<repo name>)
+            namespace(str): namespace within the component repo
+            component(str): name of the component
 
         Returns:
-            str
+            list
         """
-        url, _ = url.rsplit(".git",1)
-        _, namespace, repo = url.rsplit("/", 2)
-        return "{}_{}".format(namespace, repo)
+        # Open index
+        with open(os.path.join(self.local_repo_directory, "{}_index.pickle".format(component_class)), 'rb') as fh:
+            index_data = pickle.load(fh)
 
-    def _clone_repo(self, url: str, location: str) -> None:
-        """Private method to clone a repository
+        if repository not in index_data:
+            raise ValueError("Repository `{}` not found.".format(repository))
 
-        Args:
-            url(str): the git repo url for the repository
-            location(str): the directory to clone into
+        if namespace not in index_data[repository]:
+            raise ValueError("Namespace `{}` not found in repository `{}`.".format(namespace, repository))
 
-        Returns:
-            None
-        """
-        # Create the directory to clone into
-        os.makedirs(location)
+        if component not in index_data[repository][namespace]:
+            raise ValueError("Component `{}` not found in repository `{}`.".format(component, repository))
 
-        # Set the gitlib to point to that directory
-        self.git.set_working_directory(location)
+        return list(index_data[repository][namespace][component].items())
 
-        # Clone the repo
-        self.git.clone(url)
 
-    def _update_repo(self, location: str) -> None:
-        """Private method to update a repository
 
-        Args:
-            location(str): the directory containing the repository
-
-        Returns:
-            None
-        """
-        # Set the gitlib to point to that directory
-        self.git.set_working_directory(location)
-
-        # Clone the repo
-        self.git.fetch()
-        self.git.pull()
-
-    def update_repositories(self) -> None:
-        """Method to update all repositories in the LabManager configuration file
-
-        If the repositories do not exist, they are cloned
-
-        Returns:
-            None
-        """
-        # Get repo Urls
-        repo_urls = self.config.config["environment"]["repo_url"]
-
-        for repo_url in repo_urls:
-            repo_dir_name = self._repo_url_to_name(repo_url)
-            repo_dir = os.path.join(self.local_repo_directory, repo_dir_name)
-
-            # Check if repo exists locally
-            if not os.path.exists(repo_dir):
-                # Need to clone
-                self._clone_repo(repo_url, repo_dir)
-
-            else:
-                # Need to update
-                self._update_repo(repo_dir)
-
-    def index_base_images(self, repo_name: str) -> OrderedDict:
-        """Method to 'index' a base_image directory in a single environment component repository
-
-        Currently, the `index` is simply an ordered dictionary of all of the base image components in the repo
-        The dictionary contains the contents of the YAML files for every version of the component and is strucutured:
-
-            {
-              "<repo_name>": {
-                                "info": { repo info stored in repo config.yaml }
-                                "<namespace>": {
-                                                  "<base_image_name>": {
-                                                                          "<Major.Minor.Build>": { YAML contents }, ...
-                                                                       }, ...
-                                               }, ...
-                              }
-            }
-            
-        Args:
-            repo_name(str): The name of the repo cloned locally
-
-        Returns:
-            OrderedDict
-        """
-        # Get full path to repo
-        repo_dir = os.path.join(self.local_repo_directory, repo_name)
-        base_image_repo_dir = os.path.join(repo_dir, 'base_image')
-
-        # Get all base image YAML files
-        yaml_files = glob.glob(os.path.join(base_image_repo_dir,
-                                            "*",
-                                            "*",
-                                            "*"))
-
-        data = OrderedDict()
-        data[repo_name] = OrderedDict()
-
-        # Set repository info
-        with open(os.path.join(repo_dir, '.gigantum', 'config.yaml'), 'rt') as cf:
-            repo_info = yaml.load(cf)
-            data[repo_name]['info'] = repo_info
-
-        # Read YAML files and write data to dictionary
-        for yf in yaml_files:
-            with open(yf, 'rt') as yf_file:
-                yaml_data = yaml.load(yf_file)
-                _, namespace, component_name, _ = yf.rsplit(os.path.sep, 3)
-
-                yaml_data["namespace"] = namespace
-
-                if namespace not in data[repo_name]:
-                    data[repo_name][namespace] = OrderedDict()
-
-                if component_name not in data[repo_name][namespace]:
-                    data[repo_name][namespace][component_name] = OrderedDict()
-
-                data[repo_name][namespace][component_name]["{}.{}.{}".format(yaml_data['info']['version_major'],
-                                                                             yaml_data['info']['version_minor'],
-                                                                             yaml_data['info']['version_build']
-                                                                             )] = yaml_data
-
-        # TODO: Sort recursively to provide both deterministic result and versions in order with newest first
-
-        return data
-
-    def index_repositories(self):
-        """Method to index repos using a naive approach
-
-        Stores index data in a pickled dictionaries in <working_directory>/.labmanager/environment_repositories/.index/
-
-        Returns:
-            None
-        """
-        # Get all local repos
-        repo_urls = self.config.config["environment"]["repo_url"]
-        repo_names = [self._repo_url_to_name(x) for x in repo_urls]
-
-        base_image_all_repo_data = OrderedDict()
-        for repo_name in repo_names:
-            # Index Base Images
-            base_image_all_repo_data.update(self.index_base_images(repo_name))
-
-            # TODO: Index other categories
-
-        # Write file
-        with open(os.path.join(self.local_repo_directory, "base_image_index.pickle"), 'wb') as fh:
-            pickle.dump(base_image_all_repo_data, fh)
-
-        # TODO: Write other categories to disk
