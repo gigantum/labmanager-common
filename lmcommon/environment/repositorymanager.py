@@ -177,10 +177,15 @@ class RepositoryManager(object):
                                                                           yaml_data['info']['version_minor']
                                                                           )] = yaml_data
 
-        # Sort versions after collecting everything
-        # to provide both deterministic result and versions in order with newest first
+        # Sort all levels of the index dictionary to provide both deterministic result
+        # For versions, reverse the order with newest (highest version number) first
+        data = OrderedDict(sorted(data.items(), key=operator.itemgetter(0)))
         for repo in list(data.keys()):
+            data[repo] = OrderedDict(sorted(data[repo].items(), key=operator.itemgetter(0)))
             for namespace in list(data[repo].keys()):
+                if namespace == 'info':
+                    continue
+                data[repo][namespace] = OrderedDict(sorted(data[repo][namespace].items(), key=operator.itemgetter(0)))
                 for component in list(data[repo][namespace].keys()):
                     if component == 'info':
                         continue
