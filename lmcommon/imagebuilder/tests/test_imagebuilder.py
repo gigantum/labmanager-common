@@ -27,6 +27,7 @@ import shutil
 import yaml
 import pickle
 
+import docker
 import git
 
 from lmcommon.imagebuilder import ImageBuidler
@@ -96,3 +97,21 @@ class TestImageBuilder(object):
 
         ib = ImageBuidler(data)
         assert "FROM gigdev/ubuntu1604-python3:7a7c9d41-2017-08-03" in ib.assemble_dockerfile()
+
+    def test_build_with_docker(self, mock_config_file):
+        erm = EnvironmentRepositoryManager(mock_config_file[0])
+        erm.update_repositories()
+        erm.index_repositories()
+
+        # Verify index file contents
+        with open(os.path.join(erm.local_repo_directory, "base_image_index.pickle"), 'rb') as fh:
+            data = pickle.load(fh)
+
+        ib = ImageBuidler(data)
+
+        with tempfile.TemporaryDirectory() as tempd:
+            with open(os.path.join(tempd, "Dockerfile"), "w") as dockerfile:
+                dockerfile.write(ib.assemble_dockerfile())
+            #import pprint; pprint.pprint(dockerfile.read())
+            client = docker.from_env()
+            client.images.build(path=tempd)
