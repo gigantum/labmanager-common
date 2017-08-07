@@ -270,43 +270,6 @@ class LabBook(object):
 
         return self.root_dir
 
-    def set_base_image(self, base_image_conf: str) -> None:
-        """Digest YAML description of base docker image.
-
-        This method should only be called once.
-
-        Args:
-            base_image_conf(str): Path to YAML file describing base image.
-
-        Returns:
-            None
-        """
-        pass
-
-    def add_dev_envrionment(self, dev_environment_conf: str) -> None:
-        """Digest YAML description of research/development environment.
-
-        This method should only be called once.
-
-        Args:
-            dev_environment_conf(str): Path to YAML file describing dev environment.
-
-        Returns:
-            None
-        """
-        pass
-
-    def add_dependency(self, dependency_conf: str) -> None:
-        """Digest YAML description of arbitrary dependency.
-
-        Args:
-            dependency_conf(str): Path to YAML file describing dependency install instructions.
-
-        Returns:
-            None
-        """
-        pass
-
     def from_directory(self, root_dir):
         """Method to populate a LabBook instance from a directory
 
