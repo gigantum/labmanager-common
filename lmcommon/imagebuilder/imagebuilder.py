@@ -99,7 +99,7 @@ class ImageBuilder(object):
         return docker_lines
 
     def _load_packages(self) -> typing.List[typing.AnyStr]:
-        pass
+        return []
 
     def assemble_dockerfile(self, write: bool=False) -> typing.AnyStr:
         """Create the content of a Dockerfile per the fields in the indexed data.
@@ -110,7 +110,7 @@ class ImageBuilder(object):
 
         baseimage_lines = self._load_baseimage()
         devenv_lines = self._load_devenv()
-        package_lines = []
+        package_lines = self._load_packages()
         docker_lines = baseimage_lines + devenv_lines + package_lines
 
         if write:
