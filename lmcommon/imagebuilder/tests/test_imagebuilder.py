@@ -82,3 +82,4 @@ class TestImageBuilder(object):
         with open(os.path.join(erm.local_repo_directory, "base_image_index.pickle"), 'rb') as fh:
             data = pickle.load(fh)
 
+        assert "7a7c" in data["gig-dev_environment-components"]["gigantum"]["ubuntu1604-python3"]["0.1.0"]["tag"]
