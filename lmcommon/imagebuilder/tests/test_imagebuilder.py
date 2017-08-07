@@ -106,5 +106,5 @@ class TestImageBuilder(object):
         with open(os.path.join(labbook_dir_tree, ".gigantum", "env", "Dockerfile"),
                   "w") as dockerfile:
             dockerfile.write(ib.assemble_dockerfile())
-        client = docker.from_env()
-        client.images.build(path=os.path.join(labbook_dir_tree, ".gigantum", "env"))
+        #client = docker.from_env()
+        #client.images.build(path=os.path.join(labbook_dir_tree, ".gigantum", "env"))
