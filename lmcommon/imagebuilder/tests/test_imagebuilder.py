@@ -29,7 +29,7 @@ import yaml
 import git
 
 from lmcommon.imagebuilder import ImageBuidler
-
+from lmcommon.environment import EnvironmentRepositoryManager
 
 
 @pytest.fixture()
@@ -39,8 +39,38 @@ def clone_env_repo():
         repo.clone_from("https://github.com/gig-dev/environment-components-dev.git", tempdir)
         yield tempdir
 
+@pytest.fixture()
+def mock_config_file():
+    """A pytest fixture that creates a temporary directory and a config file to match. Deletes directory after test"""
+    # Create a temporary working directory
+    temp_dir = os.path.join(tempfile.tempdir, uuid.uuid4().hex)
+    os.makedirs(temp_dir)
+
+    with tempfile.NamedTemporaryFile(mode="wt") as fp:
+        # Write a temporary config file
+        fp.write("""core:
+  team_mode: false 
+
+environment:
+  repo_url:
+    - "https://github.com/gig-dev/environment-components.git"
+
+git:
+  backend: 'filesystem'
+  working_directory: '{}'""".format(temp_dir))
+        fp.seek(0)
+
+        yield fp.name, temp_dir  # provide the fixture value
+
+    # Remove the temp_dir
+    shutil.rmtree(temp_dir)
 
 class TestImageBuilder(object):
     def test_checkout_successful(self, clone_env_repo):
         assert os.path.exists(
             os.path.join(clone_env_repo, "base_image/gigantum/ubuntu1604-python3/ubuntu1604-python3-v0_1_0.yaml"))
+
+    def test_indexing(self, clone_env_repo, mock_config_file):
+        erm = EnvironmentRepositoryManager(mock_config_file[0])
+
+        erm.update_repositories()
