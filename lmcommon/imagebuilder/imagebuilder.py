@@ -23,6 +23,7 @@ import typing
 import yaml
 import os
 
+
 class ImageBuilder(object):
     """Class to ingest indexes describing base images, environments, and dependencies into Dockerfiles. """
 
@@ -54,7 +55,8 @@ class ImageBuilder(object):
         with open(base_images[0]) as base_image_file:
             fields = yaml.load(base_image_file)
 
-        generation_ts =str(datetime.datetime.now())
+        import pprint; pprint.pprint(fields)
+        generation_ts = str(datetime.datetime.now())
         docker_owner_ns = fields['image']['namespace']
         docker_repo = fields['image']['repo']
         docker_tag = fields['image']['tag']
@@ -99,7 +101,7 @@ class ImageBuilder(object):
     def _load_packages(self) -> typing.List[typing.AnyStr]:
         pass
 
-    def assemble_dockerfile(self) -> typing.AnyStr:
+    def assemble_dockerfile(self, write: bool=False) -> typing.AnyStr:
         """Create the content of a Dockerfile per the fields in the indexed data.
 
         Returns:
@@ -107,16 +109,16 @@ class ImageBuilder(object):
         """
 
         baseimage_lines = self._load_baseimage()
-        devenv_lines = []
+        devenv_lines = self._load_devenv()
         package_lines = []
         docker_lines = baseimage_lines + devenv_lines + package_lines
+
+        if write:
+            with open(os.path.join(self.labbook_directory, ".gigantum", "env", "Dockerfile"), "w") as dockerfile:
+                dockerfile.write(os.linesep.join(docker_lines))
+
         return os.linesep.join(docker_lines)
 
-
 if __name__ == '__main__':
-    from lmcommon.labbook import LabBook
-
-    for subdir in subdirs:
-        os.makedirs(tempdir, *subdir)
-
-    ib = ImageBuilder(tempdir)
+    ib = ImageBuilder(os.getcwd())
+    ib.assemble_dockerfile(write=True)
