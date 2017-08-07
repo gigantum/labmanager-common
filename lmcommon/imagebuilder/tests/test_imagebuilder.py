@@ -25,6 +25,7 @@ import os
 import uuid
 import shutil
 import yaml
+import pickle
 
 import git
 
@@ -38,7 +39,7 @@ def clone_env_repo():
         repo = git.Repo()
         repo.clone_from("https://github.com/gig-dev/environment-components-dev.git", tempdir)
         yield tempdir
-    shutil.rmtree(tempdir)
+
 
 @pytest.fixture()
 def mock_config_file():
@@ -72,12 +73,12 @@ class TestImageBuilder(object):
         assert os.path.exists(
             os.path.join(clone_env_repo, "base_image/gigantum/ubuntu1604-python3/ubuntu1604-python3-v0_1_0.yaml"))
 
-    def test_indexing(self, clone_env_repo, mock_config_file):
+    def test_indexing(self, mock_config_file):
         erm = EnvironmentRepositoryManager(mock_config_file[0])
         erm.update_repositories()
-        index = erm.index_base_images()
+        erm.index_repositories()
 
-        import pprint; pprint.pprint(index)
-
-        assert False
+        # Verify index file contents
+        with open(os.path.join(erm.local_repo_directory, "base_image_index.pickle"), 'rb') as fh:
+            data = pickle.load(fh)
 
