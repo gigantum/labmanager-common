@@ -26,11 +26,21 @@ import uuid
 import shutil
 import yaml
 
+import git
+
 from lmcommon.imagebuilder import ImageBuidler
+
+
 
 @pytest.fixture()
 def clone_env_repo():
-    pass
+    with tempfile.TemporaryDirectory() as tempdir:
+        repo = git.Repo()
+        repo.clone_from("https://github.com/gig-dev/environment-components-dev.git", tempdir)
+        yield tempdir
+
 
 class TestImageBuilder(object):
-    pass
+    def test_checkout_successful(self, clone_env_repo):
+        assert os.path.exists(
+            os.path.join(clone_env_repo, "base_image/gigantum/ubuntu1604-python3/ubuntu1604-python3-v0_1_0.yaml"))
