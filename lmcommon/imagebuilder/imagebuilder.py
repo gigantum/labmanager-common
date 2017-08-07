@@ -23,8 +23,14 @@ import typing
 class ImageBuidler(object):
     """Class to ingest indexes describing base images, environments, and dependencies into Dockerfiles. """
 
-    def __init__(self) -> None:
-        pass
+    def __init__(self, indexed_data: typing.Dict) -> None:
+        self.indexed_data = indexed_data
 
-    def parse_base_image(self, index: dict):
+    def assemble_dockerfile(self) -> typing.AnyStr:
+        """Create the content of a Dockerfile per the fields in the indexed data.
+
+        Returns:
+            typing.AnyStr - Content of Dockerfile.
+        """
+
         pass

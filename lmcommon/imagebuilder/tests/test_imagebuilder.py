@@ -82,4 +82,17 @@ class TestImageBuilder(object):
         with open(os.path.join(erm.local_repo_directory, "base_image_index.pickle"), 'rb') as fh:
             data = pickle.load(fh)
 
-        assert "7a7c" in data["gig-dev_environment-components"]["gigantum"]["ubuntu1604-python3"]["0.1.0"]["tag"]
+        assert "7a7c" in data["gig-dev_environment-components"]["gigantum"]["ubuntu1604-python3"]["0.1.0"] \
+            ["image"]["tag"]
+
+    def test_match_dockerfile(self, mock_config_file):
+        erm = EnvironmentRepositoryManager(mock_config_file[0])
+        erm.update_repositories()
+        erm.index_repositories()
+
+        # Verify index file contents
+        with open(os.path.join(erm.local_repo_directory, "base_image_index.pickle"), 'rb') as fh:
+            data = pickle.load(fh)
+
+        ib = ImageBuidler(data)
+        assert "FROM gigdev/ubuntu1604-python3" in ib.assemble_dockerfile()
