@@ -45,8 +45,9 @@ class ImageBuidler(object):
                 raise ValueError("Labbook directory missing subdir `{}'".format(subdir))
 
     def _load_baseimage(self) -> typing.List[typing.AnyStr]:
-        base_images = [f for f in os.listdir(self.labbook_directory, '.gigantum', 'env', 'base_image')
-                       if os.path.isfile(f)]
+        root_dir = os.path.join(self.labbook_directory, '.gigantum', 'env', 'base_image')
+        base_images = [os.path.join(root_dir, f) for f in os.listdir(root_dir)
+                       if os.path.isfile(os.path.join(root_dir, f))]
 
         assert len(base_images) == 1
 
@@ -67,6 +68,7 @@ class ImageBuidler(object):
         docker_lines.append("")
         docker_lines.append("FROM {}/{}:{}".format(docker_owner_ns, docker_repo, docker_tag))
 
+        return docker_lines
 
     def _load_devenv(self) -> typing.List[typing.AnyStr]:
         pass

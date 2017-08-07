@@ -20,6 +20,7 @@
 
 
 import pytest
+import shutil
 import tempfile
 import os
 import uuid
@@ -32,15 +33,6 @@ import git
 
 from lmcommon.imagebuilder import ImageBuidler
 from lmcommon.environment import EnvironmentRepositoryManager
-
-
-@pytest.fixture()
-def clone_env_repo():
-    with tempfile.TemporaryDirectory() as tempdir:
-        repo = git.Repo()
-        repo.clone_from("https://github.com/gig-dev/environment-components-dev.git", tempdir)
-        yield tempdir
-
 
 @pytest.fixture()
 def mock_config_file():
@@ -68,50 +60,51 @@ git:
     # Remove the temp_dir
     shutil.rmtree(temp_dir)
 
+@pytest.fixture()
+def labbook_dir_tree():
+    with tempfile.TemporaryDirectory() as tempdir:
+
+        subdirs = [['.gigantum'],
+                   ['.gigantum', 'env'],
+                   ['.gigantum', 'env', 'base_image'],
+                   ['.gigantum', 'env', 'dev_env'],
+                   ['.gigantum', 'env', 'package_manager']]
+
+        for subdir in subdirs:
+            os.makedirs(os.path.join(tempdir, "my-temp-labbook", *subdir), exist_ok=True)
+
+        with tempfile.TemporaryDirectory() as checkoutdir:
+            repo = git.Repo()
+            repo.clone_from("https://github.com/gig-dev/environment-components-dev.git", checkoutdir)
+            shutil.copy(os.path.join(checkoutdir, "base_image/gigantum/ubuntu1604-python3/ubuntu1604-python3-v0_1_0.yaml"),
+                        os.path.join(tempdir, "my-temp-labbook", ".gigantum", "env", "base_image"))
+
+        yield os.path.join(tempdir, 'my-temp-labbook')
+
 
 class TestImageBuilder(object):
-    def test_checkout_successful(self, clone_env_repo):
-        assert os.path.exists(
-            os.path.join(clone_env_repo, "base_image/gigantum/ubuntu1604-python3/ubuntu1604-python3-v0_1_0.yaml"))
 
-    def test_indexing(self, mock_config_file):
-        erm = EnvironmentRepositoryManager(mock_config_file[0])
-        erm.update_repositories()
-        erm.index_repositories()
+    def test_temp_labbook_dir(self, labbook_dir_tree):
+        """Make sure that the labbook_dir_tree is created properly and loads into the ImageBuilder. """
+        ib = ImageBuidler(labbook_dir_tree)
 
-        # Verify index file contents
-        with open(os.path.join(erm.local_repo_directory, "base_image_index.pickle"), 'rb') as fh:
-            data = pickle.load(fh)
+    def test_load_baseimage(self, labbook_dir_tree):
+        """Ensure the FROM line exists in the _load_baseimage function. """
+        ib = ImageBuidler(labbook_dir_tree)
+        docker_lines = ib._load_baseimage()
+        assert any(["FROM gigdev/ubuntu1604-python3:7a7c9d41-2017-08-03" in l for l in docker_lines])
 
-        assert "7a7c" in data["gig-dev_environment-components"]["gigantum"]["ubuntu1604-python3"]["0.1.0"] \
-            ["image"]["tag"]
+    def test_load_baseimage_only_from(self, labbook_dir_tree):
+        """Ensure that _load_baseimage ONLY sets the FROM line, all others are comments or empty"""
+        ib = ImageBuidler(labbook_dir_tree)
+        assert len([l for l in ib._load_baseimage() if len(l) > 0 and l[0] != '#']) == 1
 
-    def test_match_dockerfile(self, mock_config_file):
-        erm = EnvironmentRepositoryManager(mock_config_file[0])
-        erm.update_repositories()
-        erm.index_repositories()
+    def test_validate_dockerfile(self, labbook_dir_tree):
+        """Test if the Dockerfile builds and can launch the image. """
+        ib = ImageBuidler(labbook_dir_tree)
 
-        # Verify index file contents
-        with open(os.path.join(erm.local_repo_directory, "base_image_index.pickle"), 'rb') as fh:
-            data = pickle.load(fh)
-
-        ib = ImageBuidler(data)
-        assert "FROM gigdev/ubuntu1604-python3:7a7c9d41-2017-08-03" in ib.assemble_dockerfile()
-
-    def test_build_with_docker(self, mock_config_file):
-        erm = EnvironmentRepositoryManager(mock_config_file[0])
-        erm.update_repositories()
-        erm.index_repositories()
-
-        # Verify index file contents
-        with open(os.path.join(erm.local_repo_directory, "base_image_index.pickle"), 'rb') as fh:
-            data = pickle.load(fh)
-
-        ib = ImageBuidler(data)
-
-        with tempfile.TemporaryDirectory() as tempd:
-            with open(os.path.join(tempd, "Dockerfile"), "w") as dockerfile:
-                dockerfile.write(ib.assemble_dockerfile())
-            #import pprint; pprint.pprint(dockerfile.read())
-            client = docker.from_env()
-            client.images.build(path=tempd)
+        with open(os.path.join(labbook_dir_tree, ".gigantum", "env", "Dockerfile"),
+                  "w") as dockerfile:
+            dockerfile.write(ib.assemble_dockerfile())
+        client = docker.from_env()
+        client.images.build(path=os.path.join(labbook_dir_tree, ".gigantum", "env"))
