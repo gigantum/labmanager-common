@@ -23,7 +23,7 @@ import typing
 import yaml
 import os
 
-class ImageBuidler(object):
+class ImageBuilder(object):
     """Class to ingest indexes describing base images, environments, and dependencies into Dockerfiles. """
 
     def __init__(self, labbook_directory: typing.AnyStr) -> None:
@@ -71,7 +71,30 @@ class ImageBuidler(object):
         return docker_lines
 
     def _load_devenv(self) -> typing.List[typing.AnyStr]:
-        pass
+        root_dir = os.path.join(self.labbook_directory, '.gigantum', 'env', 'dev_env')
+        dev_envs = [os.path.join(root_dir, f) for f in os.listdir(root_dir)
+                    if os.path.isfile(os.path.join(root_dir, f))]
+
+        docker_lines = []
+        for dev_env in dev_envs:
+            with open(dev_env) as current_dev_env:
+                fields = yaml.load(current_dev_env)
+
+            docker_lines.append("### Development Environment: {}".format(fields['info']['name']))
+            docker_lines.append("# Description: {}".format(fields['info']['description']))
+            docker_lines.append("# Version {}.{} by {} <{}>".format(fields['info']['version_major'],
+                                                                    fields['info']['version_minor'],
+                                                                    fields['author']['name'],
+                                                                    fields['author']['email']))
+            docker_lines.append("# Environment installation instructions:")
+            docker_lines.extend(["EXPOSE {}".format(port) for port in fields['exposed_tcp_ports']])
+            docker_lines.extend(["RUN {}".format(cmd) for cmd in fields['install_commands']])
+            docker_lines.append("# Run Environment")
+            docker_lines.extend(["RUN {}".format(cmd) for cmd in fields['exec_commands']])
+            docker_lines.append("# Finished section {}".format(fields['info']['name']))
+            docker_lines.append("")
+
+        return docker_lines
 
     def _load_packages(self) -> typing.List[typing.AnyStr]:
         pass
@@ -88,3 +111,12 @@ class ImageBuidler(object):
         package_lines = []
         docker_lines = baseimage_lines + devenv_lines + package_lines
         return os.linesep.join(docker_lines)
+
+
+if __name__ == '__main__':
+    from lmcommon.labbook import LabBook
+
+    for subdir in subdirs:
+        os.makedirs(tempdir, *subdir)
+
+    ib = ImageBuilder(tempdir)
