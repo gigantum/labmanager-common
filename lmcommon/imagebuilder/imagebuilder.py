@@ -92,8 +92,7 @@ class ImageBuilder(object):
             docker_lines.append("# Environment installation instructions:")
             docker_lines.extend(["EXPOSE {}".format(port) for port in fields['exposed_tcp_ports']])
             docker_lines.extend(["RUN {}".format(cmd) for cmd in fields['install_commands']])
-            docker_lines.append("# Run Environment")
-            docker_lines.extend(["RUN {}".format(cmd) for cmd in fields['exec_commands']])
+
             docker_lines.append("# Finished section {}".format(fields['info']['name']))
             docker_lines.append("")
 
@@ -105,12 +104,34 @@ class ImageBuilder(object):
     def _post_image_hook(self) -> typing.List[typing.AnyStr]:
         docker_lines = ["# Post-image creation hooks"]
         docker_lines.append('RUN apt-get -y install supervisor curl gosu')
-        docker_lines.append('')
-        docker_lines.append('RUN mkdir /mnt/labbook')
         docker_lines.append('COPY entrypoint.sh /usr/local/bin/entrypoint.sh')
         docker_lines.append('RUN chmod u+x /usr/local/bin/entrypoint.sh')
         docker_lines.append('RUN /usr/local/bin/entrypoint.sh')
         docker_lines.append('')
+
+        return docker_lines
+
+    def _entrypoint_hooks(self):
+        root_dir = os.path.join(self.labbook_directory, '.gigantum', 'env', 'dev_env')
+        base_images = [os.path.join(root_dir, f) for f in os.listdir(root_dir)
+                       if os.path.isfile(os.path.join(root_dir, f))]
+
+        assert len(base_images) == 1
+
+        with open(base_images[0]) as base_image_file:
+            fields = yaml.load(base_image_file)
+
+        docker_lines = ['## Entrypoint hooks']
+        docker_lines.append("# Run Environment")
+        docker_lines.extend(["RUN {}".format(cmd) for cmd in fields['exec_commands']])
+        docker_lines.append('ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]')
+        docker_lines.append('WORKDIR /mnt/labbook')
+
+        for cmd in fields['exec_commands']:
+            tokenized_args = [c.strip().replace('"', "'") for c in cmd.split(' ') if c]
+            quoted_args = ['"{}"'.format(arg) for arg in tokenized_args]
+            cmd_str = 'CMD [{}]'.format(", ".join(quoted_args))
+            docker_lines.append(cmd_str)
 
         return docker_lines
 
@@ -124,7 +145,8 @@ class ImageBuilder(object):
         assembly_pipeline = [self._load_baseimage,
                              self._post_image_hook,
                              self._load_devenv,
-                             self._load_packages]
+                             self._load_packages,
+                             self._entrypoint_hooks]
 
         # flat map the results of executing the pipeline.
         docker_lines = functools.reduce(lambda a, b: a + b, [f() for f in assembly_pipeline], [])

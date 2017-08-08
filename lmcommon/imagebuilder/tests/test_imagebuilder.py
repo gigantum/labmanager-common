@@ -78,6 +78,8 @@ def labbook_dir_tree():
             repo.clone_from("https://github.com/gig-dev/environment-components-dev.git", checkoutdir)
             shutil.copy(os.path.join(checkoutdir, "base_image/gigantum/ubuntu1604-python3/ubuntu1604-python3-v0_4.yaml"),
                         os.path.join(tempdir, "my-temp-labbook", ".gigantum", "env", "base_image"))
+            shutil.copy(os.path.join(checkoutdir, "dev_env/gigantum/jupyter-ubuntu-v0_0/jupyter-ubuntu-v0_0.yaml"),
+                        os.path.join(tempdir, "my-temp-labbook", ".gigantum", "env", "dev_env"))
 
         yield os.path.join(tempdir, 'my-temp-labbook')
 

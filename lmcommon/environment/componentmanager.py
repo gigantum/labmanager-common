@@ -85,7 +85,7 @@ chmod 777 /var/run/docker.sock
 
 # Run the Docker Command
 exec gosu lbuser "$@"      
-                """)
+""")
 
             short_message = "Adding missing entrypoint.sh, required for container automation"
             self.labbook.git.add(entrypoint_file)
