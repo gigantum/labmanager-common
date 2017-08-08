@@ -104,12 +104,15 @@ class ImageBuilder(object):
 
     def _post_image_hook(self) -> typing.List[typing.AnyStr]:
         docker_lines = ["# Post-image creation hooks"]
-        docker_lines.append('RUN apt-get -y update; apt-get -y upgrade')
         docker_lines.append('RUN apt-get -y install supervisor curl gosu')
+        docker_lines.append('')
+        docker_lines.append('RUN mkdir /mnt/labbook')
         docker_lines.append('COPY entrypoint.sh /usr/local/bin/entrypoint.sh')
         docker_lines.append('RUN chmod u+x /usr/local/bin/entrypoint.sh')
-        docker_lines.append('ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]')
+        docker_lines.append('RUN /usr/local/bin/entrypoint.sh')
         docker_lines.append('')
+
+        return docker_lines
 
     def assemble_dockerfile(self, write: bool=False) -> typing.AnyStr:
         """Create the content of a Dockerfile per the fields in the indexed data.
@@ -121,7 +124,7 @@ class ImageBuilder(object):
         assembly_pipeline = [self._load_baseimage,
                              self._post_image_hook,
                              self._load_devenv,
-                             self._load_baseimage]
+                             self._load_packages]
 
         # flat map the results of executing the pipeline.
         docker_lines = functools.reduce(lambda a, b: a + b, [f() for f in assembly_pipeline], [])
