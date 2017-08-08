@@ -72,18 +72,18 @@ class ComponentManager(object):
 USER_ID=${LOCAL_USER_ID:-9001}
 
 echo "Starting with UID: $USER_ID"
-useradd --shell /bin/bash -u $USER_ID -o -c "" -m giguser
-export HOME=/home/giguser
+useradd --shell /bin/bash -u $USER_ID -o -c "" -m lbuser
+export HOME=/home/lbuser
 
 # Setup /opt/ as a safe place to put user runnable code
-chown -R giguser:root /opt/
+chown -R lbuser:root /opt/
 
 # Setup docker sock to run as the user
-chown giguser:root /run/docker.sock
+chown lbuser:root /run/docker.sock
 chmod 777 /var/run/docker.sock
 
 # Run the Docker Command
-exec gosu giguser "$@"      
+exec gosu lbuser "$@"      
                 """)
 
             short_message = "Adding missing entrypoint.sh, required for container automation"
