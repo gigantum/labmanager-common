@@ -1,1 +1,1 @@
-from .imagebuilder import ImageBuidler
+from .imagebuilder import ImageBuilder

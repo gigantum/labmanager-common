@@ -31,8 +31,8 @@ import pickle
 import docker
 import git
 
-from lmcommon.imagebuilder import ImageBuidler
-from lmcommon.environment import EnvironmentRepositoryManager
+from lmcommon.imagebuilder import ImageBuilder
+
 
 @pytest.fixture()
 def mock_config_file():
@@ -76,7 +76,7 @@ def labbook_dir_tree():
         with tempfile.TemporaryDirectory() as checkoutdir:
             repo = git.Repo()
             repo.clone_from("https://github.com/gig-dev/environment-components-dev.git", checkoutdir)
-            shutil.copy(os.path.join(checkoutdir, "base_image/gigantum/ubuntu1604-python3/ubuntu1604-python3-v0_1_0.yaml"),
+            shutil.copy(os.path.join(checkoutdir, "base_image/gigantum/ubuntu1604-python3/ubuntu1604-python3-v0_4.yaml"),
                         os.path.join(tempdir, "my-temp-labbook", ".gigantum", "env", "base_image"))
 
         yield os.path.join(tempdir, 'my-temp-labbook')
@@ -86,22 +86,22 @@ class TestImageBuilder(object):
 
     def test_temp_labbook_dir(self, labbook_dir_tree):
         """Make sure that the labbook_dir_tree is created properly and loads into the ImageBuilder. """
-        ib = ImageBuidler(labbook_dir_tree)
+        ib = ImageBuilder(labbook_dir_tree)
 
     def test_load_baseimage(self, labbook_dir_tree):
         """Ensure the FROM line exists in the _load_baseimage function. """
-        ib = ImageBuidler(labbook_dir_tree)
+        ib = ImageBuilder(labbook_dir_tree)
         docker_lines = ib._load_baseimage()
         assert any(["FROM gigdev/ubuntu1604-python3:7a7c9d41-2017-08-03" in l for l in docker_lines])
 
     def test_load_baseimage_only_from(self, labbook_dir_tree):
         """Ensure that _load_baseimage ONLY sets the FROM line, all others are comments or empty"""
-        ib = ImageBuidler(labbook_dir_tree)
+        ib = ImageBuilder(labbook_dir_tree)
         assert len([l for l in ib._load_baseimage() if len(l) > 0 and l[0] != '#']) == 1
 
     def test_validate_dockerfile(self, labbook_dir_tree):
         """Test if the Dockerfile builds and can launch the image. """
-        ib = ImageBuidler(labbook_dir_tree)
+        ib = ImageBuilder(labbook_dir_tree)
 
         with open(os.path.join(labbook_dir_tree, ".gigantum", "env", "Dockerfile"),
                   "w") as dockerfile:
