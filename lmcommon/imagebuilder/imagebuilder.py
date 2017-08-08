@@ -19,6 +19,7 @@
 # SOFTWARE.
 
 import datetime
+import functools
 import typing
 import yaml
 import os
@@ -101,6 +102,15 @@ class ImageBuilder(object):
     def _load_packages(self) -> typing.List[typing.AnyStr]:
         return []
 
+    def _post_image_hook(self) -> typing.List[typing.AnyStr]:
+        docker_lines = ["# Post-image creation hooks"]
+        docker_lines.append('RUN apt-get -y update; apt-get -y upgrade')
+        docker_lines.append('RUN apt-get -y install supervisor curl gosu')
+        docker_lines.append('COPY entrypoint.sh /usr/local/bin/entrypoint.sh')
+        docker_lines.append('RUN chmod u+x /usr/local/bin/entrypoint.sh')
+        docker_lines.append('ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]')
+        docker_lines.append('')
+
     def assemble_dockerfile(self, write: bool=False) -> typing.AnyStr:
         """Create the content of a Dockerfile per the fields in the indexed data.
 
@@ -108,10 +118,13 @@ class ImageBuilder(object):
             typing.AnyStr - Content of Dockerfile.
         """
 
-        baseimage_lines = self._load_baseimage()
-        devenv_lines = self._load_devenv()
-        package_lines = self._load_packages()
-        docker_lines = baseimage_lines + devenv_lines + package_lines
+        assembly_pipeline = [self._load_baseimage,
+                             self._post_image_hook,
+                             self._load_devenv,
+                             self._load_baseimage]
+
+        # flat map the results of executing the pipeline.
+        docker_lines = functools.reduce(lambda a, b: a + b, [f() for f in assembly_pipeline], [])
 
         if write:
             with open(os.path.join(self.labbook_directory, ".gigantum", "env", "Dockerfile"), "w") as dockerfile:
