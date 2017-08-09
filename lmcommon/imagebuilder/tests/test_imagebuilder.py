@@ -101,16 +101,6 @@ class TestImageBuilder(object):
         ib = ImageBuilder(labbook_dir_tree)
         assert len([l for l in ib._load_baseimage() if len(l) > 0 and l[0] != '#']) == 1
 
-    def test_validate_dockerfile(self, labbook_dir_tree):
-        """Test if the Dockerfile builds and can launch the image. """
-        ib = ImageBuilder(labbook_dir_tree)
-
-        with open(os.path.join(labbook_dir_tree, ".gigantum", "env", "Dockerfile"),
-                  "w") as dockerfile:
-            dockerfile.write(ib.assemble_dockerfile())
-        #client = docker.from_env()
-        #client.images.build(path=os.path.join(labbook_dir_tree, ".gigantum", "env"))
-
     def test_package_apt(self, labbook_dir_tree):
         package_manager_dir = os.path.join(labbook_dir_tree, '.gigantum', 'env', 'package_manager')
         with open(os.path.join(package_manager_dir, 'apt_docker.yaml'), 'w') as apt_dep:
@@ -149,3 +139,45 @@ class TestImageBuilder(object):
         assert len([l for l in docker_lines if 'WORKDIR' in l and l[0] != '#']) == 1
         # Ensure only one CMD
         assert len([l for l in docker_lines if 'CMD' in l and l[0] != '#']) == 1
+
+    def test_validate_dockerfile(self, labbook_dir_tree):
+        """Test if the Dockerfile builds and can launch the image. """
+        package_manager_dir = os.path.join(labbook_dir_tree, '.gigantum', 'env', 'package_manager')
+        with open(os.path.join(package_manager_dir, 'pip3_docker.yaml'), 'w') as apt_dep:
+            content = os.linesep.join([
+                'package_manager: pip3',
+                'name: docker',
+                'version: 0.0 this is ignored'
+            ])
+            apt_dep.write(content)
+
+        with open(os.path.join(package_manager_dir, 'apt_docker.yaml'), 'w') as apt_dep:
+            content = os.linesep.join([
+                'package_manager: apt-get',
+                'name: docker',
+                'version: 0.0 this is ignored'
+            ])
+            apt_dep.write(content)
+
+        with open(os.path.join(package_manager_dir, 'pip3_requests.yaml'), 'w') as apt_dep:
+            content = os.linesep.join([
+                'package_manager: pip3',
+                'name: requests',
+                'version: 0.0 this is ignored'
+            ])
+            apt_dep.write(content)
+
+        ib = ImageBuilder(labbook_dir_tree)
+        with open(os.path.join(labbook_dir_tree, ".gigantum", "env", "Dockerfile"),
+                  "w") as dockerfile:
+            dockerfile_text = ib.assemble_dockerfile()
+            print(dockerfile_text)
+            dockerfile.write(dockerfile_text)
+
+        test_lines = ['## Adding individual packages',
+                      'RUN apt-get -y install docker',
+                      'RUN pip3 install docker',
+                      'RUN pip3 install requests']
+
+        for line in test_lines:
+            assert line in dockerfile_text
