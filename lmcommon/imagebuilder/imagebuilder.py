@@ -51,8 +51,8 @@ class ImageBuilder(object):
             if not os.path.exists(os.path.join(self.labbook_directory, *subdir)):
                 raise ValueError("Labbook directory missing subdir `{}'".format(subdir))
 
-    def _load_baseimage(self) -> typing.List[typing.AnyStr]:
-        """Search expected directory structure to find the base image. Only one should exist. """
+    def _import_baseimage_fields(self) -> typing.Dict[typing.AnyStr, typing.Any]:
+        """Load fields from base_image yaml file into a convenient dict. """
         root_dir = os.path.join(self.labbook_directory, '.gigantum', 'env', 'base_image')
         base_images = [os.path.join(root_dir, f) for f in os.listdir(root_dir)
                        if os.path.isfile(os.path.join(root_dir, f))]
@@ -62,6 +62,12 @@ class ImageBuilder(object):
         with open(base_images[0]) as base_image_file:
             fields = yaml.load(base_image_file)
 
+        return fields
+
+    def _load_baseimage(self) -> typing.List[typing.AnyStr]:
+        """Search expected directory structure to find the base image. Only one should exist. """
+
+        fields = self._import_baseimage_fields()
         generation_ts = str(datetime.datetime.now())
         docker_owner_ns = fields['image']['namespace']
         docker_repo = fields['image']['repo']
@@ -108,15 +114,7 @@ class ImageBuilder(object):
     def _load_packages(self) -> typing.List[typing.AnyStr]:
         """Load packages from yaml files in expected location in directory tree. """
         """ Contents of docker setup that must be at end of Dockerfile. """
-        root_dir = os.path.join(self.labbook_directory, '.gigantum', 'env', 'base_image')
-        base_images = [os.path.join(root_dir, f) for f in os.listdir(root_dir)
-                       if os.path.isfile(os.path.join(root_dir, f))]
-
-        assert len(base_images) == 1
-
-        with open(base_images[0]) as base_image_file:
-            fields = yaml.load(base_image_file)
-
+        fields = self._import_baseimage_fields()
         package_managers = {c['name']: c for c in fields['available_package_managers']}
 
         root_dir = os.path.join(self.labbook_directory, '.gigantum', 'env', 'package_manager')
@@ -131,8 +129,6 @@ class ImageBuilder(object):
             manager = pkg_fields.get('package_manager')
             package_name = pkg_fields.get('name')
             package_version = pkg_fields.get('version')
-
-            import pprint; pprint.pprint(package_managers)
             docker_lines.append(package_managers[manager]['docker'].replace('$PKG$', package_name))
 
         return docker_lines
@@ -153,7 +149,7 @@ class ImageBuilder(object):
         base_images = [os.path.join(root_dir, f) for f in os.listdir(root_dir)
                        if os.path.isfile(os.path.join(root_dir, f))]
 
-        assert len(base_images) == 1
+        assert len(base_images) == 1, "Currently only one development environment is supported."
 
         with open(base_images[0]) as base_image_file:
             fields = yaml.load(base_image_file)
