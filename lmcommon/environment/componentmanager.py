@@ -76,8 +76,8 @@ useradd --shell /bin/bash -u $USER_ID -o -c "" -m lbuser
 export HOME=/home/lbuser
 
 # Setup /opt/ as a safe place to put user runnable code
-mkdir /opt/labbook
-chown -R lbuser:root /opt/labbook
+mkdir /mnt/labbook
+chown -R lbuser:root /mnt/labbook
 
 # Setup docker sock to run as the user
 chown lbuser:root /run/docker.sock

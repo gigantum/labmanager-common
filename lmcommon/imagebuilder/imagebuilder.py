@@ -51,12 +51,11 @@ class ImageBuilder(object):
         base_images = [os.path.join(root_dir, f) for f in os.listdir(root_dir)
                        if os.path.isfile(os.path.join(root_dir, f))]
 
-        assert len(base_images) == 1
+        assert len(base_images) == 1, "There should only be one base image in {}".format(self.labbook_directory)
 
         with open(base_images[0]) as base_image_file:
             fields = yaml.load(base_image_file)
 
-        import pprint; pprint.pprint(fields)
         generation_ts = str(datetime.datetime.now())
         docker_owner_ns = fields['image']['namespace']
         docker_repo = fields['image']['repo']
