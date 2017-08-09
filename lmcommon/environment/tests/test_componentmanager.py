@@ -80,6 +80,36 @@ class TestComponentManager(object):
         assert os.path.exists(os.path.join(labbook_dir, '.gigantum', 'env', 'custom')) is True
         assert os.path.exists(os.path.join(labbook_dir, '.gigantum', 'env', 'entrypoint.sh')) is True
 
+    def test_add_package(self, mock_config_file):
+        """Test adding a package such as one from apt-get or pip3. """
+
+        # Build the environment component repo
+        erm = RepositoryManager(mock_config_file[0])
+        erm.update_repositories()
+        erm.index_repositories()
+
+        # Create a labook
+        lb = LabBook(mock_config_file[0])
+
+        # Create Component Manager
+        cm = ComponentManager(lb)
+
+        # Add some sample components
+        cm.add_package("apt-get", "ack")
+        cm.add_package("pip3", "requests")
+        cm.add_package("apt-get", "docker")
+        cm.add_package("pip3", "docker")
+
+        for file in [f for f in os.listdir(lb._root_dir) if os.path.isfile(f)]:
+            with open(f) as package_yaml:
+                fields_dict = yaml.load(package_yaml)
+                for required_field in 'package_manager', 'name', 'version'
+                    assert required_field in fields_dict.keys()
+        else:
+            assert False, "No YAML files generated."
+
+
+
     def test_add_component(self, mock_config_file):
         """Test adding a component to a labbook"""
         # Build the environment component repo
