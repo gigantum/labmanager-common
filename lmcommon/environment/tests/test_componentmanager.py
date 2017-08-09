@@ -105,8 +105,6 @@ class TestComponentManager(object):
         package_path = os.path.join(lb._root_dir, '.gigantum', 'env', 'package_manager')
         assert os.path.exists(package_path)
 
-        import pprint; pprint.pprint(os.listdir(package_path))
-
         package_files = [f for f in os.listdir(package_path)]
         assert len(package_files) == 4
 
