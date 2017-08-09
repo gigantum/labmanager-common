@@ -29,8 +29,8 @@ import yaml
 from lmcommon.environment import RepositoryManager
 
 
-@pytest.fixture()
-def mock_config_file():
+@pytest.fixture(scope="module")
+def setup_index():
     """A pytest fixture that creates a temporary directory and a config file to match. Deletes directory after test"""
     # Create a temporary working directory
     temp_dir = os.path.join(tempfile.tempdir, uuid.uuid4().hex)
@@ -50,36 +50,31 @@ git:
   working_directory: '{}'""".format(temp_dir))
         fp.seek(0)
 
-        yield fp.name, temp_dir  # provide the fixture value
+        # Run clone and index operation
+        erm = RepositoryManager(fp.name)
+        erm.update_repositories()
+        erm.index_repositories()
+
+        yield erm, temp_dir  # provide the fixture value
 
     # Remove the temp_dir
     shutil.rmtree(temp_dir)
 
 
 class TestEnvironmentRepositoryManager(object):
-    def test_update_repositories(self, mock_config_file):
+    def test_update_repositories(self, setup_index):
         """Test building the index"""
-        erm = RepositoryManager(mock_config_file[0])
-
-        erm.update_repositories()
-
-        assert os.path.exists(os.path.join(mock_config_file[1], ".labmanager")) is True
-        assert os.path.exists(os.path.join(mock_config_file[1], ".labmanager", "environment_repositories")) is True
-        assert os.path.exists(os.path.join(mock_config_file[1], ".labmanager", "environment_repositories",
+        assert os.path.exists(os.path.join(setup_index[1], ".labmanager")) is True
+        assert os.path.exists(os.path.join(setup_index[1], ".labmanager", "environment_repositories")) is True
+        assert os.path.exists(os.path.join(setup_index[1], ".labmanager", "environment_repositories",
                                            "gig-dev_environment-components")) is True
-        assert os.path.exists(os.path.join(mock_config_file[1], ".labmanager", "environment_repositories",
+        assert os.path.exists(os.path.join(setup_index[1], ".labmanager", "environment_repositories",
                                            "gig-dev_environment-components", "README.md")) is True
 
-    def test_index_repositories(self, mock_config_file):
-        """Test creating and accessing the detail version of the index"""
-        erm = RepositoryManager(mock_config_file[0])
-
-        erm.update_repositories()
-
-        erm.index_repositories()
-
+    def test_index_repositories_base_image(self, setup_index):
+        """Test creating and accessing the detail version of the base image index"""
         # Verify index file contents
-        with open(os.path.join(erm.local_repo_directory, "base_image_index.pickle"), 'rb') as fh:
+        with open(os.path.join(setup_index[0].local_repo_directory, "base_image_index.pickle"), 'rb') as fh:
             data = pickle.load(fh)
 
         assert "gig-dev_environment-components" in data
@@ -93,18 +88,48 @@ class TestEnvironmentRepositoryManager(object):
         assert "author" in data["gig-dev_environment-components"]["gigantum"]["ubuntu1604-python3"]["0.1"]
         assert "image" in data["gig-dev_environment-components"]["gigantum"]["ubuntu1604-python3"]["0.1"]
         assert "available_package_managers" in data["gig-dev_environment-components"]["gigantum"]["ubuntu1604-python3"]["0.1"]
-        assert "namespace" in data["gig-dev_environment-components"]["gigantum"]["ubuntu1604-python3"]["0.1"]
+        assert "###namespace###" in data["gig-dev_environment-components"]["gigantum"]["ubuntu1604-python3"]["0.1"]
+        assert "###repository###" in data["gig-dev_environment-components"]["gigantum"]["ubuntu1604-python3"]["0.1"]
 
-    def test_index_repositories_list(self, mock_config_file):
-        """Test accessing the list version of the index"""
-        erm = RepositoryManager(mock_config_file[0])
-
-        erm.update_repositories()
-
-        erm.index_repositories()
-
+    def test_index_repositories_dev_env(self, setup_index):
+        """Test creating and accessing the detail version of the dev env index"""
         # Verify index file contents
-        with open(os.path.join(erm.local_repo_directory, "base_image_list_index.pickle"), 'rb') as fh:
+        with open(os.path.join(setup_index[0].local_repo_directory, "dev_env_index.pickle"), 'rb') as fh:
+            data = pickle.load(fh)
+
+        assert "gig-dev_environment-components" in data
+        assert "gigantum" in data["gig-dev_environment-components"]
+        assert "gigantum-dev" in data["gig-dev_environment-components"]
+        assert "info" in data["gig-dev_environment-components"]
+        assert "maintainer" in data["gig-dev_environment-components"]['info']
+        assert "repo" in data["gig-dev_environment-components"]['info']
+        assert "jupyter-ubuntu" in data["gig-dev_environment-components"]["gigantum"]
+        assert "jupyter-ubuntu-dup" in data["gig-dev_environment-components"]["gigantum"]
+        assert "0.0" in data["gig-dev_environment-components"]["gigantum"]["jupyter-ubuntu"]
+        assert "0.1" in data["gig-dev_environment-components"]["gigantum"]["jupyter-ubuntu"]
+        assert "info" in data["gig-dev_environment-components"]["gigantum"]["jupyter-ubuntu"]["0.1"]
+        assert "author" in data["gig-dev_environment-components"]["gigantum"]["jupyter-ubuntu"]["0.1"]
+        assert "install_commands" in data["gig-dev_environment-components"]["gigantum"]["jupyter-ubuntu"]["0.1"]
+        assert "exec_commands" in data["gig-dev_environment-components"]["gigantum"]["jupyter-ubuntu"]["0.1"]
+        assert "exposed_tcp_ports" in data["gig-dev_environment-components"]["gigantum"]["jupyter-ubuntu"]["0.1"]
+        assert "###namespace###" in data["gig-dev_environment-components"]["gigantum"]["jupyter-ubuntu"]["0.1"]
+        assert "###repository###" in data["gig-dev_environment-components"]["gigantum"]["jupyter-ubuntu"]["0.1"]
+
+    def test_index_repositories_base_image_list(self, setup_index):
+        """Test accessing the list version of the base image index"""
+        # Verify index file contents
+        with open(os.path.join(setup_index[0].local_repo_directory, "base_image_list_index.pickle"), 'rb') as fh:
             data = pickle.load(fh)
 
         assert data[0]['info']['name'] == 'ubuntu1604-python3'
+
+    def test_index_repositories_dev_env_list(self, setup_index):
+        """Test accessing the list version of the dev env index"""
+        # Verify index file contents
+        with open(os.path.join(setup_index[0].local_repo_directory, "dev_env_list_index.pickle"), 'rb') as fh:
+            data = pickle.load(fh)
+
+        assert len(data) == 3
+        assert data[0]['info']['name'] == 'jupyter_ubuntu'
+        assert data[1]['info']['name'] == 'jupyter_ubuntu_dup'
+        assert data[2]['info']['name'] == 'jupyter_notebook'

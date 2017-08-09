@@ -112,7 +112,7 @@ class TestComponentManager(object):
         assert data['info']['name'] == 'ubuntu1604-python3'
         assert data['info']['version_major'] == 0
         assert data['info']['version_minor'] == 4
-        assert data['namespace'] == 'gigantum'
+        assert data['###namespace###'] == 'gigantum'
 
         # Verify git/notes
         log = lb.git.log()
@@ -120,6 +120,41 @@ class TestComponentManager(object):
         assert "gtmNOTE" in log[0]["message"]
         assert 'ubuntu1604-python3' in log[0]["message"]
 
+    def test_add_duplicate_component(self, mock_config_file):
+        """Test adding a duplicate component to a labbook"""
+        # Build the environment component repo
+        erm = RepositoryManager(mock_config_file[0])
+        erm.update_repositories()
+        erm.index_repositories()
+
+        # Create a labook
+        lb = LabBook(mock_config_file[0])
+
+        labbook_dir = lb.new(name="labbook1", description="my first labbook",
+                             owner={"username": "test"})
+
+        # Create Component Manager
+        cm = ComponentManager(lb)
+
+        # Add a component
+        cm.add_component("base_image", "gig-dev_environment-components", "gigantum", "ubuntu1604-python3", "0.4")
+
+        # Verify file
+        component_file = os.path.join(labbook_dir,
+                                           '.gigantum',
+                                           'env',
+                                           'base_image',
+                                           "gig-dev_environment-components_gigantum_ubuntu1604-python3.yaml")
+        assert os.path.exists(component_file) is True
+
+        # Add a component
+        with pytest.raises(ValueError):
+            cm.add_component("base_image", "gig-dev_environment-components", "gigantum", "ubuntu1604-python3", "0.4")
+
+        # Force add a component
+        cm.add_component("base_image", "gig-dev_environment-components", "gigantum", "ubuntu1604-python3", "0.4",
+                         force=True)
+        assert os.path.exists(component_file) is True
 
 
 

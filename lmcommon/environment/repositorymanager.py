@@ -117,7 +117,7 @@ class RepositoryManager(object):
                 # Need to update
                 self._update_repo(repo_dir)
 
-    def index_base_images(self, repo_name: str) -> OrderedDict:
+    def index_component_repository(self, repo_name: str, component: str) -> OrderedDict:
         """Method to 'index' a base_image directory in a single environment component repository
 
         Currently, the `index` is simply an ordered dictionary of all of the base image components in the repo
@@ -142,10 +142,10 @@ class RepositoryManager(object):
         """
         # Get full path to repo
         repo_dir = os.path.join(self.local_repo_directory, repo_name)
-        base_image_repo_dir = os.path.join(repo_dir, 'base_image')
+        component_repo_dir = os.path.join(repo_dir, component)
 
         # Get all base image YAML files
-        yaml_files = glob.glob(os.path.join(base_image_repo_dir,
+        yaml_files = glob.glob(os.path.join(component_repo_dir,
                                             "*",
                                             "*",
                                             "*"))
@@ -164,8 +164,10 @@ class RepositoryManager(object):
                 yaml_data = yaml.load(yf_file)
                 _, namespace, component_name, _ = yf.rsplit(os.path.sep, 3)
 
-                yaml_data["namespace"] = namespace
-                yaml_data["repository"] = repo_name
+                # Save the COMPONENT namespace and repository to aid in accessing components via API
+                # Will pack this info into the `component` field for use in mutations to access the component
+                yaml_data["###namespace###"] = namespace
+                yaml_data["###repository###"] = repo_name
 
                 if namespace not in data[repo_name]:
                     data[repo_name][namespace] = OrderedDict()
@@ -228,19 +230,29 @@ class RepositoryManager(object):
         repo_names = [repo_url_to_name(x) for x in repo_urls]
 
         base_image_all_repo_data = OrderedDict()
+        dev_env_all_repo_data = OrderedDict()
         for repo_name in repo_names:
             # Index Base Images
-            base_image_all_repo_data.update(self.index_base_images(repo_name))
+            base_image_all_repo_data.update(self.index_component_repository(repo_name, 'base_image'))
+
+            # Index Base Images
+            dev_env_all_repo_data.update(self.index_component_repository(repo_name, 'dev_env'))
 
             # TODO: Index other categories
 
         # Generate list index
         base_image_list_repo_data = self.build_component_list_index(base_image_all_repo_data)
+        dev_env_list_repo_data = self.build_component_list_index(dev_env_all_repo_data)
 
-        # Write file
+        # Write files
         with open(os.path.join(self.local_repo_directory, "base_image_index.pickle"), 'wb') as fh:
             pickle.dump(base_image_all_repo_data, fh)
         with open(os.path.join(self.local_repo_directory, "base_image_list_index.pickle"), 'wb') as fh:
             pickle.dump(base_image_list_repo_data, fh)
+
+        with open(os.path.join(self.local_repo_directory, "dev_env_index.pickle"), 'wb') as fh:
+            pickle.dump(dev_env_all_repo_data, fh)
+        with open(os.path.join(self.local_repo_directory, "dev_env_list_index.pickle"), 'wb') as fh:
+            pickle.dump(dev_env_list_repo_data, fh)
 
         # TODO: Write other categories to disk
