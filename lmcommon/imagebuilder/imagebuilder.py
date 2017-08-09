@@ -132,7 +132,9 @@ class ImageBuilder(object):
             package_name = pkg_fields.get('name')
             package_version = pkg_fields.get('version')
 
-        return []
+            docker_lines.append(package_managers[manager].replace('$PKG$', package_name))
+
+        return docker_lines
 
     def _post_image_hook(self) -> typing.List[typing.AnyStr]:
         """Contents that must be after baseimages but before development environments. """
