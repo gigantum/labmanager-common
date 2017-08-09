@@ -90,6 +90,8 @@ class TestComponentManager(object):
 
         # Create a labook
         lb = LabBook(mock_config_file[0])
+        labbook_dir = lb.new(name="labbook1", description="my first labbook",
+                             owner={"username": "test"})
 
         # Create Component Manager
         cm = ComponentManager(lb)
@@ -100,15 +102,20 @@ class TestComponentManager(object):
         cm.add_package("apt-get", "docker")
         cm.add_package("pip3", "docker")
 
-        for file in [f for f in os.listdir(lb._root_dir) if os.path.isfile(f)]:
-            with open(f) as package_yaml:
-                fields_dict = yaml.load(package_yaml)
-                for required_field in 'package_manager', 'name', 'version'
+        package_path = os.path.join(lb._root_dir, '.gigantum', 'env', 'package_manager')
+        assert os.path.exists(package_path)
+
+        import pprint; pprint.pprint(os.listdir(package_path))
+
+        package_files = [f for f in os.listdir(package_path)]
+        assert len(package_files) == 4
+
+        for file in package_files:
+            full_path = os.path.join(package_path, file)
+            with open(full_path) as package_yaml:
+                fields_dict = yaml.load(package_yaml.read())
+                for required_field in 'package_manager', 'name', 'version':
                     assert required_field in fields_dict.keys()
-        else:
-            assert False, "No YAML files generated."
-
-
 
     def test_add_component(self, mock_config_file):
         """Test adding a component to a labbook"""
