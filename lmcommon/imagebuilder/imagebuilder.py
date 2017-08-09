@@ -28,7 +28,7 @@ import os
 class ImageBuilder(object):
     """Class to ingest indexes describing base images, environments, and dependencies into Dockerfiles. """
 
-    def __init__(self, labbook_directory: typing.AnyStr) -> None:
+    def __init__(self, labbook_directory: str) -> None:
         """Create a new image builder given the path to labbook.
 
         Args:
@@ -51,7 +51,7 @@ class ImageBuilder(object):
             if not os.path.exists(os.path.join(self.labbook_directory, *subdir)):
                 raise ValueError("Labbook directory missing subdir `{}'".format(subdir))
 
-    def _import_baseimage_fields(self) -> typing.Dict[typing.AnyStr, typing.Any]:
+    def _import_baseimage_fields(self) -> typing.Dict[str, typing.Any]:
         """Load fields from base_image yaml file into a convenient dict. """
         root_dir = os.path.join(self.labbook_directory, '.gigantum', 'env', 'base_image')
         base_images = [os.path.join(root_dir, f) for f in os.listdir(root_dir)
@@ -64,7 +64,7 @@ class ImageBuilder(object):
 
         return fields
 
-    def _load_baseimage(self) -> typing.List[typing.AnyStr]:
+    def _load_baseimage(self) -> typing.List[str]:
         """Search expected directory structure to find the base image. Only one should exist. """
 
         fields = self._import_baseimage_fields()
@@ -73,7 +73,7 @@ class ImageBuilder(object):
         docker_repo = fields['image']['repo']
         docker_tag = fields['image']['tag']
 
-        docker_lines: typing.List[typing.AnyStr] = []
+        docker_lines: typing.List[str] = []
         docker_lines.append("# Dockerfile generated on {}".format(generation_ts))
         docker_lines.append("# Name: {}".format(fields["info"]["human_name"]))
         docker_lines.append("# Description: {}".format(fields["info"]["description"]))
@@ -84,7 +84,7 @@ class ImageBuilder(object):
 
         return docker_lines
 
-    def _load_devenv(self) -> typing.List[typing.AnyStr]:
+    def _load_devenv(self) -> typing.List[str]:
         """Load dev environments from yaml file in expected location. """
 
         root_dir = os.path.join(self.labbook_directory, '.gigantum', 'env', 'dev_env')
@@ -111,7 +111,7 @@ class ImageBuilder(object):
 
         return docker_lines
 
-    def _load_packages(self) -> typing.List[typing.AnyStr]:
+    def _load_packages(self) -> typing.List[str]:
         """Load packages from yaml files in expected location in directory tree. """
         """ Contents of docker setup that must be at end of Dockerfile. """
         fields = self._import_baseimage_fields()
@@ -133,7 +133,7 @@ class ImageBuilder(object):
 
         return docker_lines
 
-    def _post_image_hook(self) -> typing.List[typing.AnyStr]:
+    def _post_image_hook(self) -> typing.List[str]:
         """Contents that must be after baseimages but before development environments. """
         docker_lines = ["# Post-image creation hooks"]
         docker_lines.append('RUN apt-get -y install supervisor curl gosu')
@@ -167,11 +167,11 @@ class ImageBuilder(object):
 
         return docker_lines
 
-    def assemble_dockerfile(self, write: bool=False) -> typing.AnyStr:
+    def assemble_dockerfile(self, write: bool=False) -> str:
         """Create the content of a Dockerfile per the fields in the indexed data.
 
         Returns:
-            typing.AnyStr - Content of Dockerfile in single string using os.linesep as line separator.
+            str - Content of Dockerfile in single string using os.linesep as line separator.
         """
 
         assembly_pipeline = [self._load_baseimage,
