@@ -105,7 +105,6 @@ class ImageBuilder(object):
         docker_lines.append('RUN apt-get -y install supervisor curl gosu')
         docker_lines.append('COPY entrypoint.sh /usr/local/bin/entrypoint.sh')
         docker_lines.append('RUN chmod u+x /usr/local/bin/entrypoint.sh')
-        docker_lines.append('RUN /usr/local/bin/entrypoint.sh')
         docker_lines.append('')
 
         return docker_lines
@@ -122,7 +121,6 @@ class ImageBuilder(object):
 
         docker_lines = ['## Entrypoint hooks']
         docker_lines.append("# Run Environment")
-        docker_lines.extend(["RUN {}".format(cmd) for cmd in fields['exec_commands']])
         docker_lines.append('ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]')
         docker_lines.append('WORKDIR /mnt/labbook')
 
