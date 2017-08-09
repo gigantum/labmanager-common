@@ -108,7 +108,7 @@ class ImageBuilder(object):
     def _load_packages(self) -> typing.List[typing.AnyStr]:
         """Load packages from yaml files in expected location in directory tree. """
         """ Contents of docker setup that must be at end of Dockerfile. """
-        root_dir = os.path.join(self.labbook_directory, '.gigantum', 'env', 'dev_env')
+        root_dir = os.path.join(self.labbook_directory, '.gigantum', 'env', 'base_image')
         base_images = [os.path.join(root_dir, f) for f in os.listdir(root_dir)
                        if os.path.isfile(os.path.join(root_dir, f))]
 
@@ -117,11 +117,15 @@ class ImageBuilder(object):
         with open(base_images[0]) as base_image_file:
             fields = yaml.load(base_image_file)
 
+        import pprint; pprint.pprint(fields)
+
         package_managers = {c['name']: c for c in fields['available_package_managers']}
 
         root_dir = os.path.join(self.labbook_directory, '.gigantum', 'env', 'package_manager')
         package_files = [os.path.join(root_dir, f) for f in os.listdir(root_dir)
-                         if os.path.isfile(os.path.join(root_dir, f))].sort()
+                         if os.path.isfile(os.path.join(root_dir, f))]
+
+        pprint.pprint(package_files)
 
         docker_lines = ['## Adding individual packages']
         for package in sorted(package_files):
