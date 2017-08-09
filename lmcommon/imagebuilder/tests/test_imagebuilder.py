@@ -110,3 +110,14 @@ class TestImageBuilder(object):
             dockerfile.write(ib.assemble_dockerfile())
         #client = docker.from_env()
         #client.images.build(path=os.path.join(labbook_dir_tree, ".gigantum", "env"))
+
+    def test_development_environment_loaded(self):
+        ib = ImageBuilder(labbook_dir_tree)
+        docker_lines = ib.assemble_dockerfile()
+
+        # Ensure only one ENTRYPOINT
+        assert len([l for l in docker_lines if 'ENTRYPOINT' in l and l[0] != '#']) == 1
+        # Ensure only one WORKDIR
+        assert len([l for l in docker_lines if 'WORKDIR' in l and l[0] != '#']) == 1
+        # Ensure only one CMD
+        assert len([l for l in docker_lines if 'CMD' in l and l[0] != '#']) == 1
