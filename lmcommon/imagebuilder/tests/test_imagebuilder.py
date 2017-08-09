@@ -78,7 +78,7 @@ def labbook_dir_tree():
             repo.clone_from("https://github.com/gig-dev/environment-components-dev.git", checkoutdir)
             shutil.copy(os.path.join(checkoutdir, "base_image/gigantum/ubuntu1604-python3/ubuntu1604-python3-v0_4.yaml"),
                         os.path.join(tempdir, "my-temp-labbook", ".gigantum", "env", "base_image"))
-            shutil.copy(os.path.join(checkoutdir, "dev_env/gigantum/jupyter-ubuntu-v0_0/jupyter-ubuntu-v0_0.yaml"),
+            shutil.copy(os.path.join(checkoutdir, "dev_env/gigantum/jupyter-ubuntu/jupyter-ubuntu-v0_0.yaml"),
                         os.path.join(tempdir, "my-temp-labbook", ".gigantum", "env", "dev_env"))
 
         yield os.path.join(tempdir, 'my-temp-labbook')
@@ -111,9 +111,9 @@ class TestImageBuilder(object):
         #client = docker.from_env()
         #client.images.build(path=os.path.join(labbook_dir_tree, ".gigantum", "env"))
 
-    def test_development_environment_loaded(self):
+    def test_development_environment_loaded(self, labbook_dir_tree):
         ib = ImageBuilder(labbook_dir_tree)
-        docker_lines = ib.assemble_dockerfile()
+        docker_lines = ib.assemble_dockerfile().split(os.linesep)
 
         # Ensure only one ENTRYPOINT
         assert len([l for l in docker_lines if 'ENTRYPOINT' in l and l[0] != '#']) == 1
