@@ -91,6 +91,9 @@ exec gosu lbuser "$@"
             self.labbook.git.add(entrypoint_file)
             self.labbook.git.commit(short_message)
 
+    def add_package(self, package_manager: str, package_name: str, package_version: str=None, force=False):
+        pass
+
     def add_component(self, component_class: str, repository: str, namespace: str, component: str, version: str,
                       force=False):
         """Method to add a component to a LabBook's environment
