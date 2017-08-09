@@ -140,7 +140,7 @@ class ComponentRepository(object):
             raise ValueError("Component `{}` not found in repository `{}`.".format(component, repository))
 
         if version not in index_data[repository][namespace][component]:
-            raise ValueError("Version `{}` not found in repository `{}`.".format(component, repository))
+            raise ValueError("Version `{}` not found in repository `{}`.".format(version, repository))
 
         return index_data[repository][namespace][component][version]
 
