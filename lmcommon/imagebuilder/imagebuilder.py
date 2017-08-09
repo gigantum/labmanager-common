@@ -29,6 +29,11 @@ class ImageBuilder(object):
     """Class to ingest indexes describing base images, environments, and dependencies into Dockerfiles. """
 
     def __init__(self, labbook_directory: typing.AnyStr) -> None:
+        """Create a new image builder given the path to labbook.
+
+        Args:
+            labbook_directory(str): Directory path to labook
+        """
         self.labbook_directory = labbook_directory
         if not os.path.exists(self.labbook_directory):
             raise IOError("Labbook directory {} does not exist.".format(self.labbook_directory))
@@ -47,6 +52,7 @@ class ImageBuilder(object):
                 raise ValueError("Labbook directory missing subdir `{}'".format(subdir))
 
     def _load_baseimage(self) -> typing.List[typing.AnyStr]:
+        """Search expected directory structure to find the base image. Only one should exist. """
         root_dir = os.path.join(self.labbook_directory, '.gigantum', 'env', 'base_image')
         base_images = [os.path.join(root_dir, f) for f in os.listdir(root_dir)
                        if os.path.isfile(os.path.join(root_dir, f))]
@@ -73,6 +79,8 @@ class ImageBuilder(object):
         return docker_lines
 
     def _load_devenv(self) -> typing.List[typing.AnyStr]:
+        """Load dev environments from yaml file in expected location. """
+
         root_dir = os.path.join(self.labbook_directory, '.gigantum', 'env', 'dev_env')
         dev_envs = [os.path.join(root_dir, f) for f in os.listdir(root_dir)
                     if os.path.isfile(os.path.join(root_dir, f))]
@@ -98,9 +106,11 @@ class ImageBuilder(object):
         return docker_lines
 
     def _load_packages(self) -> typing.List[typing.AnyStr]:
+        """Load packages from yaml files in expected location in directory tree. """
         return []
 
     def _post_image_hook(self) -> typing.List[typing.AnyStr]:
+        """Contents that must be after baseimages but before development environments. """
         docker_lines = ["# Post-image creation hooks"]
         docker_lines.append('RUN apt-get -y install supervisor curl gosu')
         docker_lines.append('COPY entrypoint.sh /usr/local/bin/entrypoint.sh')
@@ -110,6 +120,7 @@ class ImageBuilder(object):
         return docker_lines
 
     def _entrypoint_hooks(self):
+        """ Contents of docker setup that must be at end of Dockerfile. """
         root_dir = os.path.join(self.labbook_directory, '.gigantum', 'env', 'dev_env')
         base_images = [os.path.join(root_dir, f) for f in os.listdir(root_dir)
                        if os.path.isfile(os.path.join(root_dir, f))]
@@ -136,7 +147,7 @@ class ImageBuilder(object):
         """Create the content of a Dockerfile per the fields in the indexed data.
 
         Returns:
-            typing.AnyStr - Content of Dockerfile.
+            typing.AnyStr - Content of Dockerfile in single string using os.linesep as line separator.
         """
 
         assembly_pipeline = [self._load_baseimage,
@@ -155,5 +166,6 @@ class ImageBuilder(object):
         return os.linesep.join(docker_lines)
 
 if __name__ == '__main__':
+    """Helper utility to run imagebuilder from the command line. """
     ib = ImageBuilder(os.getcwd())
     ib.assemble_dockerfile(write=True)
