@@ -130,6 +130,8 @@ class TestEnvironmentRepositoryManager(object):
             data = pickle.load(fh)
 
         assert len(data) == 3
-        assert data[0]['info']['name'] == 'jupyter_ubuntu'
-        assert data[1]['info']['name'] == 'jupyter_ubuntu_dup'
-        assert data[2]['info']['name'] == 'jupyter_notebook'
+        assert data[0]['info']['name'] == 'jupyter-ubuntu'
+        assert data[0]['###namespace###'] == 'gigantum'
+        assert data[1]['info']['name'] == 'jupyter-ubuntu-dup'
+        assert data[2]['info']['name'] == 'jupyter-ubuntu'
+        assert data[2]['###namespace###'] == 'gigantum-dev'
