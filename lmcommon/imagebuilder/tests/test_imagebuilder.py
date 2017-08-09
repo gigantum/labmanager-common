@@ -111,6 +111,34 @@ class TestImageBuilder(object):
         #client = docker.from_env()
         #client.images.build(path=os.path.join(labbook_dir_tree, ".gigantum", "env"))
 
+    def test_package_apt(self, labbook_dir_tree):
+        package_manager_dir = os.path.join(labbook_dir_tree, '.gigantum', 'env', 'package_manager')
+        with open(os.path.join(package_manager_dir, 'apt_docker.yaml'), 'w') as apt_dep:
+            content = os.linesep.join([
+                'package_manager: apt-get',
+                'name: docker',
+                'version: 0.0 this is ignored'
+            ])
+            apt_dep.write(content)
+
+        ib = ImageBuilder(labbook_dir_tree)
+        pkg_lines = [l for l in ib._load_packages() if 'RUN' in l]
+        assert 'RUN apt-get -y install docker' in pkg_lines
+
+    def test_package_pip3(self, labbook_dir_tree):
+        package_manager_dir = os.path.join(labbook_dir_tree, '.gigantum', 'env', 'package_manager')
+        with open(os.path.join(package_manager_dir, 'pip3_docker.yaml'), 'w') as apt_dep:
+            content = os.linesep.join([
+                'package_manager: pip3',
+                'name: docker',
+                'version: 0.0 this is ignored'
+            ])
+            apt_dep.write(content)
+
+        ib = ImageBuilder(labbook_dir_tree)
+        pkg_lines = [l for l in ib._load_packages() if 'RUN' in l]
+        assert 'RUN pip3 install docker' in pkg_lines
+
     def test_development_environment_loaded(self, labbook_dir_tree):
         ib = ImageBuilder(labbook_dir_tree)
         docker_lines = ib.assemble_dockerfile().split(os.linesep)

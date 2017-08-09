@@ -117,15 +117,11 @@ class ImageBuilder(object):
         with open(base_images[0]) as base_image_file:
             fields = yaml.load(base_image_file)
 
-        import pprint; pprint.pprint(fields)
-
         package_managers = {c['name']: c for c in fields['available_package_managers']}
 
         root_dir = os.path.join(self.labbook_directory, '.gigantum', 'env', 'package_manager')
         package_files = [os.path.join(root_dir, f) for f in os.listdir(root_dir)
                          if os.path.isfile(os.path.join(root_dir, f))]
-
-        pprint.pprint(package_files)
 
         docker_lines = ['## Adding individual packages']
         for package in sorted(package_files):
@@ -136,7 +132,8 @@ class ImageBuilder(object):
             package_name = pkg_fields.get('name')
             package_version = pkg_fields.get('version')
 
-            docker_lines.append(package_managers[manager].replace('$PKG$', package_name))
+            import pprint; pprint.pprint(package_managers)
+            docker_lines.append(package_managers[manager]['docker'].replace('$PKG$', package_name))
 
         return docker_lines
 
