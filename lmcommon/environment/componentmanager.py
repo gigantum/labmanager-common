@@ -75,8 +75,9 @@ echo "Starting with UID: $USER_ID"
 useradd --shell /bin/bash -u $USER_ID -o -c "" -m lbuser
 export HOME=/home/lbuser
 
-# Setup /opt/ as a safe place to put user runnable code
-chown -R lbuser:root /opt/
+# Setup /mnt/ as a safe place to put user runnable code
+mkdir /mnt/labbook
+chown -R lbuser:root /mnt/labbook
 
 # Setup docker sock to run as the user
 chown lbuser:root /run/docker.sock
@@ -84,7 +85,7 @@ chmod 777 /var/run/docker.sock
 
 # Run the Docker Command
 exec gosu lbuser "$@"      
-                """)
+""")
 
             short_message = "Adding missing entrypoint.sh, required for container automation"
             self.labbook.git.add(entrypoint_file)
