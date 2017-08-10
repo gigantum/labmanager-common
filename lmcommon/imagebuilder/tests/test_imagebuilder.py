@@ -31,7 +31,8 @@ import docker
 import git
 
 from lmcommon.imagebuilder import ImageBuilder
-
+from lmcommon.environment import ComponentManager, RepositoryManager
+from lmcommon.labbook import LabBook
 
 @pytest.fixture()
 def mock_config_file():
@@ -181,8 +182,23 @@ class TestImageBuilder(object):
         for line in test_lines:
             assert line in dockerfile_text
 
-    def test_build_docker_image(self, labbook_dir_tree):
-        package_manager_dir = os.path.join(labbook_dir_tree, '.gigantum', 'env', 'package_manager')
+    def test_build_docker_image(self, mock_config_file): # , labbook_dir_tree):
+        # Build the environment component repo
+        erm = RepositoryManager(mock_config_file[0])
+        erm.update_repositories()
+        erm.index_repositories()
+
+        lb = LabBook(mock_config_file[0])
+        lb_dir = lb.new(name="catbook-test-build1", description="Test Builder",
+                             owner={"username": "test"})
+        cm = ComponentManager(lb)
+        cm.add_component("base_image", "gig-dev_environment-components", "gigantum", "ubuntu1604-python3", "0.4")
+
+        ib = ImageBuilder(lb.root_dir)
+
+        assert lb_dir == lb.root_dir
+
+        package_manager_dir = os.path.join(lb_dir, '.gigantum', 'env', 'package_manager')
         with open(os.path.join(package_manager_dir, 'pip3_docker.yaml'), 'w') as apt_dep:
             content = os.linesep.join([
                 'package_manager: pip3',
@@ -207,6 +223,6 @@ class TestImageBuilder(object):
             ])
             apt_dep.write(content)
 
-        ib = ImageBuilder(labbook_dir_tree)
-        unit_test_tag = "UNITTEST-{}".format(str(datetime.datetime.now()))
-        ib.build_image(tag=unit_test_tag)
+        unit_test_tag = "unit-test-please-delete"
+        client = docker.from_env()
+        ib.build_image(docker_client=client, image_tag=unit_test_tag)

@@ -24,6 +24,8 @@ import typing
 import yaml
 import os
 
+from lmcommon.environment.componentmanager import ComponentManager
+
 
 class ImageBuilder(object):
     """Class to ingest indexes describing base images, environments, and dependencies into Dockerfiles. """
