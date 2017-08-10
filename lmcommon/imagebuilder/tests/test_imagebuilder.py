@@ -184,45 +184,24 @@ class TestImageBuilder(object):
 
     def test_build_docker_image(self, mock_config_file): # , labbook_dir_tree):
         # Build the environment component repo
+        # Build the environment component repo
         erm = RepositoryManager(mock_config_file[0])
         erm.update_repositories()
         erm.index_repositories()
 
+        # Create a labook
         lb = LabBook(mock_config_file[0])
-        lb_dir = lb.new(name="catbook-test-build1", description="Test Builder",
+
+        labbook_dir = lb.new(name="labbook1", description="my first labbook",
                              owner={"username": "test"})
+
+        # Create Component Manager
         cm = ComponentManager(lb)
+
+        # Add a component
         cm.add_component("base_image", "gig-dev_environment-components", "gigantum", "ubuntu1604-python3", "0.4")
 
         ib = ImageBuilder(lb.root_dir)
-
-        assert lb_dir == lb.root_dir
-
-        package_manager_dir = os.path.join(lb_dir, '.gigantum', 'env', 'package_manager')
-        with open(os.path.join(package_manager_dir, 'pip3_docker.yaml'), 'w') as apt_dep:
-            content = os.linesep.join([
-                'package_manager: pip3',
-                'name: docker',
-                'version: 0.0 this is ignored'
-            ])
-            apt_dep.write(content)
-
-        with open(os.path.join(package_manager_dir, 'apt_docker.yaml'), 'w') as apt_dep:
-            content = os.linesep.join([
-                'package_manager: apt-get',
-                'name: docker',
-                'version: 0.0 this is ignored'
-            ])
-            apt_dep.write(content)
-
-        with open(os.path.join(package_manager_dir, 'pip3_requests.yaml'), 'w') as apt_dep:
-            content = os.linesep.join([
-                'package_manager: pip3',
-                'name: requests',
-                'version: 0.0 this is ignored'
-            ])
-            apt_dep.write(content)
-
         unit_test_tag = "unit-test-please-delete"
         client = docker.from_env()
         ib.build_image(docker_client=client, image_tag=unit_test_tag)
