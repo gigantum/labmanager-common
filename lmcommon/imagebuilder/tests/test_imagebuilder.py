@@ -17,8 +17,7 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-
-
+import datetime
 import pytest
 import shutil
 import tempfile
@@ -181,3 +180,33 @@ class TestImageBuilder(object):
 
         for line in test_lines:
             assert line in dockerfile_text
+
+    def test_build_docker_image(self, labbook_dir_tree):
+        package_manager_dir = os.path.join(labbook_dir_tree, '.gigantum', 'env', 'package_manager')
+        with open(os.path.join(package_manager_dir, 'pip3_docker.yaml'), 'w') as apt_dep:
+            content = os.linesep.join([
+                'package_manager: pip3',
+                'name: docker',
+                'version: 0.0 this is ignored'
+            ])
+            apt_dep.write(content)
+
+        with open(os.path.join(package_manager_dir, 'apt_docker.yaml'), 'w') as apt_dep:
+            content = os.linesep.join([
+                'package_manager: apt-get',
+                'name: docker',
+                'version: 0.0 this is ignored'
+            ])
+            apt_dep.write(content)
+
+        with open(os.path.join(package_manager_dir, 'pip3_requests.yaml'), 'w') as apt_dep:
+            content = os.linesep.join([
+                'package_manager: pip3',
+                'name: requests',
+                'version: 0.0 this is ignored'
+            ])
+            apt_dep.write(content)
+
+        ib = ImageBuilder(labbook_dir_tree)
+        unit_test_tag = "UNITTEST-{}".format(str(datetime.datetime.now()))
+        ib.build_image(tag=unit_test_tag)
