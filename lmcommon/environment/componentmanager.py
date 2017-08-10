@@ -17,6 +17,7 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
+import datetime
 import os
 import yaml
 
@@ -90,6 +91,41 @@ exec gosu lbuser "$@"
             short_message = "Adding missing entrypoint.sh, required for container automation"
             self.labbook.git.add(entrypoint_file)
             self.labbook.git.commit(short_message)
+
+    def add_package(self, package_manager: str, package_name: str, package_version: str=None, force=False):
+        """Add a new yaml file describing the new package and its context to the labbook.
+
+        Args:
+            package_manager(str): The package manager (eg., "apt" or "pip3")
+            package_name(str): Name of package (e.g., "docker" or "requests")
+            package_version(str): Unique indentifier or version, for now, can be None
+            force(bool): Force overwriting a component if it already exists (e.g. you want to update the version)
+
+        Returns:
+            None
+        """
+        if not package_manager:
+            raise ValueError('Argument package_manager cannot be None or empty')
+
+        if not package_name:
+            raise ValueError('Argument package_name cannot be None or empty')
+
+        yaml_lines = ['# Generated on: {}'.format(str(datetime.datetime.now())),
+                      'package_manager: {}'.format(package_manager),
+                      'name: {}'.format(package_name),
+                      'version: {}'.format(package_version or 'None')]
+
+        version_s = '_{}'.format(package_version) if package_version else ''
+        yaml_filename = '{}_{}{}.yaml'.format(package_manager, package_name, version_s)
+        package_yaml_path = os.path.join(self.env_dir, 'package_manager', yaml_filename)
+
+        # Write the YAML to the file
+        with open(package_yaml_path, 'w') as package_yaml_file:
+            package_yaml_file.write(os.linesep.join(yaml_lines))
+
+        # Validate that the written YAML is valid and parseable.
+        with open(package_yaml_path) as package_read_file:
+            yaml.load(package_read_file)
 
     def add_component(self, component_class: str, repository: str, namespace: str, component: str, version: str,
                       force=False):
