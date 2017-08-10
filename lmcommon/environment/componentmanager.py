@@ -185,7 +185,7 @@ exec gosu lbuser "$@"
                         "objects": []
                         })
 
-    def get_component_list(self, component_class: str) -> typing.List(dict):
+    def get_component_list(self, component_class: str) -> typing.List[dict]:
         """Method to get the YAML contents for a given component class
 
         Args:
@@ -209,13 +209,6 @@ exec gosu lbuser "$@"
         for yf in yaml_files:
             with open(yf, 'rt') as yf_file:
                 yaml_data = yaml.load(yf_file)
-                _, namespace, component_name, _ = yf.rsplit(os.path.sep, 3)
-
-                # Save the COMPONENT namespace and repository to aid in accessing components via API
-                # Will pack this info into the `component` field for use in mutations to access the component
-                yaml_data["###namespace###"] = namespace
-                #yaml_data["###repository###"] = repo_name
-
-                data.append(OrderedDict(yaml_data))
+                data.append(yaml_data)
 
         return data
