@@ -74,8 +74,7 @@ def labbook_dir_tree():
             os.makedirs(os.path.join(tempdir, "my-temp-labbook", *subdir), exist_ok=True)
 
         with tempfile.TemporaryDirectory() as checkoutdir:
-            repo = git.Repo()
-            repo.clone_from("https://github.com/gig-dev/environment-components-dev.git", checkoutdir)
+            repo = git.Repo.clone_from("https://github.com/gig-dev/environment-components-dev.git", checkoutdir)
             shutil.copy(os.path.join(checkoutdir, "base_image/gigantum/ubuntu1604-python3/ubuntu1604-python3-v0_4.yaml"),
                         os.path.join(tempdir, "my-temp-labbook", ".gigantum", "env", "base_image"))
             shutil.copy(os.path.join(checkoutdir, "dev_env/gigantum/jupyter-ubuntu/jupyter-ubuntu-v0_0.yaml"),
