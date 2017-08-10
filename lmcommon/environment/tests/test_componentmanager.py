@@ -52,6 +52,46 @@ git:
         yield fp.name, temp_dir  # provide the fixture value
 
     # Remove the temp_dir
+    shutil.rmtree(temp_dir)@pytest.fixture()
+
+
+@pytest.fixture(scope=module)
+def setup_labbook_env():
+    """A pytest fixture to create a temp working dir, labbook, and populate it's environment"""
+    # Create a temporary working directory
+    temp_dir = os.path.join(tempfile.tempdir, uuid.uuid4().hex)
+    os.makedirs(temp_dir)
+
+    with tempfile.NamedTemporaryFile(mode="wt") as fp:
+        # Write a temporary config file
+        fp.write("""core:
+  team_mode: false 
+  
+environment:
+  repo_url:
+    - "https://github.com/gig-dev/environment-components.git"
+git:
+  backend: 'filesystem'
+  working_directory: '{}'""".format(temp_dir))
+        fp.seek(0)
+
+        # Build the environment component repo
+        erm = RepositoryManager(mock_config_file[0])
+        erm.update_repositories()
+        erm.index_repositories()
+
+        # Create a labook
+        lb = LabBook(mock_config_file[0])
+
+        lb.new(name="labbook2", description="my first labbook",
+               owner={"username": "test"})
+
+        # Create Component Manager
+        cm = ComponentManager(lb)
+
+        yield cm
+
+    # Remove the temp_dir
     shutil.rmtree(temp_dir)
 
 
@@ -193,5 +233,12 @@ class TestComponentManager(object):
                          force=True)
         assert os.path.exists(component_file) is True
 
+    def test_get_component_list_base_image(self, setup_labbook_env):
+        """Test listing base images added a to labbook"""
+        # setup_labbook_env is a ComponentManager Instance
+
+        base_images = setup_labbook_env.get_component_list('base_image')
+
+        assert 1== 1
 
 

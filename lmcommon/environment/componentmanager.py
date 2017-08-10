@@ -20,6 +20,11 @@
 import datetime
 import os
 import yaml
+import typing
+
+import glob
+from collections import OrderedDict
+import operator
 
 from lmcommon.labbook import LabBook
 from lmcommon.environment import ComponentRepository
@@ -179,3 +184,38 @@ exec gosu lbuser "$@"
                         "free_text": long_message,
                         "objects": []
                         })
+
+    def get_component_list(self, component_class: str) -> typing.List(dict):
+        """Method to get the YAML contents for a given component class
+
+        Args:
+            component_class(str): The class of component you want to access
+
+        Returns:
+            list
+        """
+        # Get component dir
+        component_dir = os.path.join(self.env_dir, component_class)
+        if not os.path.exists(component_dir):
+            raise ValueError("No components found for component class: {}".format(component_class))
+
+        # Get all YAML files in dir
+        yaml_files = glob.glob(os.path.join(component_dir, "*.yaml"))
+        yaml_files = sorted(yaml_files)
+
+        data = []
+
+        # Read YAML files and write data to dictionary
+        for yf in yaml_files:
+            with open(yf, 'rt') as yf_file:
+                yaml_data = yaml.load(yf_file)
+                _, namespace, component_name, _ = yf.rsplit(os.path.sep, 3)
+
+                # Save the COMPONENT namespace and repository to aid in accessing components via API
+                # Will pack this info into the `component` field for use in mutations to access the component
+                yaml_data["###namespace###"] = namespace
+                #yaml_data["###repository###"] = repo_name
+
+                data.append(OrderedDict(yaml_data))
+
+        return data
