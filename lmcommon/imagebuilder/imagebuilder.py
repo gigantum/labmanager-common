@@ -189,6 +189,29 @@ class ImageBuilder(object):
 
         return os.linesep.join(docker_lines)
 
+    def build_image(self, docker_client, image_tag: str, assemble: bool=True):
+        """Build docker image according to the Dockerfile just assembled.
+
+        Args:
+            docker_client(docker.client): Docker context
+            image_tag(str): Tag of docker image
+            assemble(bool): Re-assemble the docker file using assemble_dockerfile if True
+
+        Returns:
+            docker image
+        """
+
+        env_dir = os.path.join(self.labbook_directory, '.gigantum', 'env')
+        if not os.path.exists(env_dir):
+            raise ValueError('Expected env directory `{}` does not exist.'.format(env_dir))
+
+        if assemble:
+            self.assemble_dockerfile(write=True)
+
+        docker_image = docker_client.images.build(path=env_dir, tag=image_tag, pull=True)
+        return docker_image
+
+
 if __name__ == '__main__':
     """Helper utility to run imagebuilder from the command line. """
     ib = ImageBuilder(os.getcwd())
