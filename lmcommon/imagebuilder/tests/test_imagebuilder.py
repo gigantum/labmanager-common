@@ -192,7 +192,7 @@ class TestImageBuilder(object):
         # Create a labook
         lb = LabBook(mock_config_file[0])
 
-        labbook_dir = lb.new(name="labbook1", description="my first labbook",
+        labbook_dir = lb.new(name="catbook-test-dockerbuild", description="Testing docker building.",
                              owner={"username": "test"})
 
         # Create Component Manager
@@ -200,8 +200,12 @@ class TestImageBuilder(object):
 
         # Add a component
         cm.add_component("base_image", "gig-dev_environment-components", "gigantum", "ubuntu1604-python3", "0.4")
+        cm.add_component("dev_env", "gig-dev_environment-components", "gigantum", "jupyter-ubuntu", "0.1")
 
         ib = ImageBuilder(lb.root_dir)
         unit_test_tag = "unit-test-please-delete"
         client = docker.from_env()
-        ib.build_image(docker_client=client, image_tag=unit_test_tag)
+
+        docker_image = ib.build_image(docker_client=client, image_tag=unit_test_tag, nocache=True)
+        import pprint; pprint.pprint(dir(docker_image))
+        client.images.remove(docker_image.id, force=True, noprune=False)

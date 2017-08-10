@@ -59,6 +59,7 @@ class ImageBuilder(object):
         base_images = [os.path.join(root_dir, f) for f in os.listdir(root_dir)
                        if os.path.isfile(os.path.join(root_dir, f))]
 
+        #import pprint; pprint.pprint(base_images)
         assert len(base_images) == 1, "There should only be one base image in {}".format(self.labbook_directory)
 
         with open(base_images[0]) as base_image_file:
@@ -148,13 +149,14 @@ class ImageBuilder(object):
     def _entrypoint_hooks(self):
         """ Contents of docker setup that must be at end of Dockerfile. """
         root_dir = os.path.join(self.labbook_directory, '.gigantum', 'env', 'dev_env')
-        base_images = [os.path.join(root_dir, f) for f in os.listdir(root_dir)
+        dev_envs = [os.path.join(root_dir, f) for f in os.listdir(root_dir)
                        if os.path.isfile(os.path.join(root_dir, f))]
 
-        assert len(base_images) == 1, "Currently only one development environment is supported."
+        import pprint; pprint.pprint(dev_envs)
+        assert len(dev_envs) == 1, "Currently only one development environment is supported."
 
-        with open(base_images[0]) as base_image_file:
-            fields = yaml.load(base_image_file)
+        with open(dev_envs[0]) as dev_env_file:
+            fields = yaml.load(dev_env_file)
 
         docker_lines = ['## Entrypoint hooks']
         docker_lines.append("# Run Environment")
@@ -191,7 +193,7 @@ class ImageBuilder(object):
 
         return os.linesep.join(docker_lines)
 
-    def build_image(self, docker_client, image_tag: str, assemble: bool=True):
+    def build_image(self, docker_client, image_tag: str, assemble: bool=True, nocache: bool=False):
         """Build docker image according to the Dockerfile just assembled.
 
         Args:
@@ -210,7 +212,7 @@ class ImageBuilder(object):
         if assemble:
             self.assemble_dockerfile(write=True)
 
-        docker_image = docker_client.images.build(path=env_dir, tag=image_tag, pull=True)
+        docker_image = docker_client.images.build(path=env_dir, tag=image_tag, pull=True, nocache=nocache)
         return docker_image
 
 
