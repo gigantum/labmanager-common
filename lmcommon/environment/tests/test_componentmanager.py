@@ -105,9 +105,11 @@ class TestComponentManager(object):
         package_path = os.path.join(lb._root_dir, '.gigantum', 'env', 'package_manager')
         assert os.path.exists(package_path)
 
+        # Ensure all four packages exist.
         package_files = [f for f in os.listdir(package_path)]
         assert len(package_files) == 4
 
+        # Ensure the fields in each of the 4 packages exist.
         for file in package_files:
             full_path = os.path.join(package_path, file)
             with open(full_path) as package_yaml:

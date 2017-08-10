@@ -127,7 +127,6 @@ exec gosu lbuser "$@"
         with open(package_yaml_path) as package_read_file:
             yaml.load(package_read_file)
 
-
     def add_component(self, component_class: str, repository: str, namespace: str, component: str, version: str,
                       force=False):
         """Method to add a component to a LabBook's environment
