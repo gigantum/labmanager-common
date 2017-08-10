@@ -231,18 +231,21 @@ class RepositoryManager(object):
 
         base_image_all_repo_data = OrderedDict()
         dev_env_all_repo_data = OrderedDict()
+        custom_all_repo_data = OrderedDict()
         for repo_name in repo_names:
             # Index Base Images
             base_image_all_repo_data.update(self.index_component_repository(repo_name, 'base_image'))
 
-            # Index Base Images
+            # Index Dev Envs
             dev_env_all_repo_data.update(self.index_component_repository(repo_name, 'dev_env'))
 
-            # TODO: Index other categories
+            # Index Custom Deps
+            custom_all_repo_data.update(self.index_component_repository(repo_name, 'custom'))
 
         # Generate list index
         base_image_list_repo_data = self.build_component_list_index(base_image_all_repo_data)
         dev_env_list_repo_data = self.build_component_list_index(dev_env_all_repo_data)
+        custom_list_repo_data = self.build_component_list_index(custom_all_repo_data)
 
         # Write files
         with open(os.path.join(self.local_repo_directory, "base_image_index.pickle"), 'wb') as fh:
@@ -255,4 +258,7 @@ class RepositoryManager(object):
         with open(os.path.join(self.local_repo_directory, "dev_env_list_index.pickle"), 'wb') as fh:
             pickle.dump(dev_env_list_repo_data, fh)
 
-        # TODO: Write other categories to disk
+        with open(os.path.join(self.local_repo_directory, "custom_index.pickle"), 'wb') as fh:
+            pickle.dump(custom_all_repo_data, fh)
+        with open(os.path.join(self.local_repo_directory, "custom_list_index.pickle"), 'wb') as fh:
+            pickle.dump(custom_list_repo_data, fh)
