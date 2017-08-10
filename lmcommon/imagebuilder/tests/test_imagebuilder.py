@@ -207,5 +207,4 @@ class TestImageBuilder(object):
         client = docker.from_env()
 
         docker_image = ib.build_image(docker_client=client, image_tag=unit_test_tag, nocache=True)
-        import pprint; pprint.pprint(dir(docker_image))
         client.images.remove(docker_image.id, force=True, noprune=False)
