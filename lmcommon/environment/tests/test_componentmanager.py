@@ -55,6 +55,46 @@ git:
     shutil.rmtree(temp_dir)
 
 
+@pytest.fixture(scope="module")
+def setup_labbook_env():
+    """A pytest fixture to create a temp working dir, labbook, and populate it's environment"""
+    # Create a temporary working directory
+    temp_dir = os.path.join(tempfile.tempdir, uuid.uuid4().hex)
+    os.makedirs(temp_dir)
+
+    with tempfile.NamedTemporaryFile(mode="wt") as fp:
+        # Write a temporary config file
+        fp.write("""core:
+  team_mode: false 
+  
+environment:
+  repo_url:
+    - "https://github.com/gig-dev/environment-components.git"
+git:
+  backend: 'filesystem'
+  working_directory: '{}'""".format(temp_dir))
+        fp.seek(0)
+
+        # Build the environment component repo
+        erm = RepositoryManager(fp.name)
+        erm.update_repositories()
+        erm.index_repositories()
+
+        # Create a labook
+        lb = LabBook(fp.name)
+
+        lb.new(name="labbook2", description="my first labbook",
+               owner={"username": "test"})
+
+        # Create Component Manager
+        cm = ComponentManager(lb)
+
+        yield cm
+
+    # Remove the temp_dir
+    shutil.rmtree(temp_dir)
+
+
 class TestComponentManager(object):
     def test_initalize_labbook(self, mock_config_file):
         """Test preparing an empty labbook"""
@@ -138,10 +178,10 @@ class TestComponentManager(object):
 
         # Verify file
         component_file = os.path.join(labbook_dir,
-                                           '.gigantum',
-                                           'env',
-                                           'base_image',
-                                           "gig-dev_environment-components_gigantum_ubuntu1604-python3.yaml")
+                                      '.gigantum',
+                                      'env',
+                                      'base_image',
+                                      "gig-dev_environment-components_gigantum_ubuntu1604-python3.yaml")
         assert os.path.exists(component_file) is True
         with open(component_file, 'rt') as cf:
             data = yaml.load(cf)
@@ -178,10 +218,10 @@ class TestComponentManager(object):
 
         # Verify file
         component_file = os.path.join(labbook_dir,
-                                           '.gigantum',
-                                           'env',
-                                           'base_image',
-                                           "gig-dev_environment-components_gigantum_ubuntu1604-python3.yaml")
+                                      '.gigantum',
+                                      'env',
+                                      'base_image',
+                                      "gig-dev_environment-components_gigantum_ubuntu1604-python3.yaml")
         assert os.path.exists(component_file) is True
 
         # Add a component
@@ -193,5 +233,67 @@ class TestComponentManager(object):
                          force=True)
         assert os.path.exists(component_file) is True
 
+    def test_get_component_list_base_image(self, setup_labbook_env):
+        """Test listing base images added a to labbook"""
+        # setup_labbook_env is a ComponentManager Instance
+        setup_labbook_env.add_component("base_image",
+                                        "gig-dev_environment-components",
+                                        "gigantum",
+                                        "ubuntu1604-python3",
+                                        "0.4")
+
+        dev_envs = setup_labbook_env.get_component_list('base_image')
+
+        assert len(dev_envs) == 1
+        assert dev_envs[0]['info']['name'] == 'ubuntu1604-python3'
+        assert dev_envs[0]['info']['version_major'] == 0
+        assert dev_envs[0]['info']['version_minor'] == 4
+        assert dev_envs[0]['###namespace###'] == 'gigantum'
+
+    def test_get_component_list_packages(self, setup_labbook_env):
+        """Test listing packages added a to labbook"""
+        # setup_labbook_env is a ComponentManager Instance
+        setup_labbook_env.add_package("apt-get", "ack")
+        setup_labbook_env.add_package("pip3", "requests")
+        setup_labbook_env.add_package("apt-get", "docker")
+        setup_labbook_env.add_package("pip3", "docker")
+
+        packages = setup_labbook_env.get_component_list('package_manager')
+
+        assert len(packages) == 4
+        assert packages[0]['package_manager'] == 'apt-get'
+        assert packages[0]['name'] == 'ack'
+        assert packages[1]['package_manager'] == 'apt-get'
+        assert packages[1]['name'] == 'docker'
+        assert packages[2]['package_manager'] == 'pip3'
+        assert packages[2]['name'] == 'docker'
+        assert packages[3]['package_manager'] == 'pip3'
+        assert packages[3]['name'] == 'requests'
+
+    def test_get_component_list_custom(self, setup_labbook_env):
+        """Test listing custom dependencies added a to labbook"""
+        # setup_labbook_env is a ComponentManager Instance
+        setup_labbook_env.add_component("custom",
+                                        "gig-dev_environment-components",
+                                        "gigantum",
+                                        "ubuntu-python3-pillow",
+                                        "0.3")
+        setup_labbook_env.add_component("custom",
+                                        "gig-dev_environment-components",
+                                        "gigantum",
+                                        "ubuntu-python3-pillow-dup",
+                                        "0.2")
+
+        custom_deps = setup_labbook_env.get_component_list('custom')
+
+        assert len(custom_deps) == 2
+        assert custom_deps[0]['info']['name'] == 'ubuntu-python3-pillow-dup'
+        assert custom_deps[0]['info']['version_major'] == 0
+        assert custom_deps[0]['info']['version_minor'] == 2
+        assert custom_deps[0]['###namespace###'] == 'gigantum'
+        assert custom_deps[1]['info']['name'] == 'ubuntu-python3-pillow'
+        assert custom_deps[1]['info']['version_major'] == 0
+        assert custom_deps[1]['info']['version_minor'] == 3
+        assert custom_deps[1]['###namespace###'] == 'gigantum'
 
 

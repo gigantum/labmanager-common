@@ -20,6 +20,11 @@
 import datetime
 import os
 import yaml
+import typing
+
+import glob
+from collections import OrderedDict
+import operator
 
 from lmcommon.labbook import LabBook
 from lmcommon.environment import ComponentRepository
@@ -113,7 +118,7 @@ exec gosu lbuser "$@"
         yaml_lines = ['# Generated on: {}'.format(str(datetime.datetime.now())),
                       'package_manager: {}'.format(package_manager),
                       'name: {}'.format(package_name),
-                      'version: {}'.format(package_version or 'None')]
+                      'version: {}'.format(package_version or 'null')]
 
         version_s = '_{}'.format(package_version) if package_version else ''
         yaml_filename = '{}_{}{}.yaml'.format(package_manager, package_name, version_s)
@@ -179,3 +184,31 @@ exec gosu lbuser "$@"
                         "free_text": long_message,
                         "objects": []
                         })
+
+    def get_component_list(self, component_class: str) -> typing.List[dict]:
+        """Method to get the YAML contents for a given component class
+
+        Args:
+            component_class(str): The class of component you want to access
+
+        Returns:
+            list
+        """
+        # Get component dir
+        component_dir = os.path.join(self.env_dir, component_class)
+        if not os.path.exists(component_dir):
+            raise ValueError("No components found for component class: {}".format(component_class))
+
+        # Get all YAML files in dir
+        yaml_files = glob.glob(os.path.join(component_dir, "*.yaml"))
+        yaml_files = sorted(yaml_files)
+
+        data = []
+
+        # Read YAML files and write data to dictionary
+        for yf in yaml_files:
+            with open(yf, 'rt') as yf_file:
+                yaml_data = yaml.load(yf_file)
+                data.append(yaml_data)
+
+        return data
