@@ -57,6 +57,7 @@ class ImageBuilder(object):
         subdirs = [['.gigantum'],
                    ['.gigantum', 'env'],
                    ['.gigantum', 'env', 'base_image'],
+                   ['.gigantum', 'env', 'custom'],
                    ['.gigantum', 'env', 'dev_env'],
                    ['.gigantum', 'env', 'package_manager']]
 
@@ -122,6 +123,23 @@ class ImageBuilder(object):
 
             docker_lines.append("# Finished section {}".format(fields['info']['name']))
             docker_lines.append("")
+
+        return docker_lines
+
+    def _load_custom(self) -> typing.List[str]:
+        """Load custom dependencies, specifically the docker snippet"""
+
+        root_dir = os.path.join(self.labbook_directory, '.gigantum', 'env', 'custom')
+        custom_dep_files = [os.path.join(root_dir, f) for f in os.listdir(root_dir)
+                            if os.path.isfile(os.path.join(root_dir, f)) and '.yaml' in f]
+
+        docker_lines = ['## Adding Custom Packages']
+        for custom in sorted(custom_dep_files):
+            pkg_fields = {}
+            with open(custom) as custom_content:
+                pkg_fields.update(yaml.load(custom_content))
+                docker_lines.append('## Installing {}'.format(pkg_fields['info']['description']))
+                docker_lines.extend(pkg_fields['docker'].split(os.linesep))
 
         return docker_lines
 
@@ -191,6 +209,7 @@ class ImageBuilder(object):
         assembly_pipeline = [self._load_baseimage,
                              self._post_image_hook,
                              self._load_devenv,
+                             self._load_custom,
                              self._load_packages,
                              self._entrypoint_hooks]
 
