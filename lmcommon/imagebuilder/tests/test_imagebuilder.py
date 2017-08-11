@@ -21,11 +21,13 @@ import datetime
 import pytest
 import shutil
 import tempfile
+import getpass
 import os
 import uuid
 import shutil
 import yaml
 import pickle
+
 
 import docker
 import git
@@ -205,7 +207,7 @@ class TestImageBuilder(object):
         unit_test_tag = "unit-test-please-delete"
         client = docker.from_env()
 
-        if False:
+        if getpass.getuser() != 'circleci':
             # NOTE: DO NOT run these following lines on CircleCI
             docker_image = ib.build_image(docker_client=client, image_tag=unit_test_tag, nocache=True)
             client.images.remove(docker_image.id, force=True, noprune=False)
