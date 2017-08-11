@@ -24,6 +24,8 @@ import typing
 import yaml
 import os
 
+from lmcommon.environment.componentmanager import ComponentManager
+
 
 class ImageBuilder(object):
     """Class to ingest indexes describing base images, environments, and dependencies into Dockerfiles. """
@@ -56,6 +58,7 @@ class ImageBuilder(object):
         root_dir = os.path.join(self.labbook_directory, '.gigantum', 'env', 'base_image')
         base_images = [os.path.join(root_dir, f) for f in os.listdir(root_dir)
                        if os.path.isfile(os.path.join(root_dir, f))]
+
 
         assert len(base_images) == 1, "There should only be one base image in {}".format(self.labbook_directory)
 
@@ -146,13 +149,13 @@ class ImageBuilder(object):
     def _entrypoint_hooks(self):
         """ Contents of docker setup that must be at end of Dockerfile. """
         root_dir = os.path.join(self.labbook_directory, '.gigantum', 'env', 'dev_env')
-        base_images = [os.path.join(root_dir, f) for f in os.listdir(root_dir)
+        dev_envs = [os.path.join(root_dir, f) for f in os.listdir(root_dir)
                        if os.path.isfile(os.path.join(root_dir, f))]
 
-        assert len(base_images) == 1, "Currently only one development environment is supported."
+        assert len(dev_envs) == 1, "Currently only one development environment is supported."
 
-        with open(base_images[0]) as base_image_file:
-            fields = yaml.load(base_image_file)
+        with open(dev_envs[0]) as dev_env_file:
+            fields = yaml.load(dev_env_file)
 
         docker_lines = ['## Entrypoint hooks']
         docker_lines.append("# Run Environment")
@@ -188,6 +191,29 @@ class ImageBuilder(object):
                 dockerfile.write(os.linesep.join(docker_lines))
 
         return os.linesep.join(docker_lines)
+
+    def build_image(self, docker_client, image_tag: str, assemble: bool=True, nocache: bool=False):
+        """Build docker image according to the Dockerfile just assembled.
+
+        Args:
+            docker_client(docker.client): Docker context
+            image_tag(str): Tag of docker image
+            assemble(bool): Re-assemble the docker file using assemble_dockerfile if True
+
+        Returns:
+            docker image
+        """
+
+        env_dir = os.path.join(self.labbook_directory, '.gigantum', 'env')
+        if not os.path.exists(env_dir):
+            raise ValueError('Expected env directory `{}` does not exist.'.format(env_dir))
+
+        if assemble:
+            self.assemble_dockerfile(write=True)
+
+        docker_image = docker_client.images.build(path=env_dir, tag=image_tag, pull=True, nocache=nocache)
+        return docker_image
+
 
 if __name__ == '__main__':
     """Helper utility to run imagebuilder from the command line. """

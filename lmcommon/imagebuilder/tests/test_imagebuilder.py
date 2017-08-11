@@ -17,8 +17,7 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-
-
+import datetime
 import pytest
 import shutil
 import tempfile
@@ -32,7 +31,8 @@ import docker
 import git
 
 from lmcommon.imagebuilder import ImageBuilder
-
+from lmcommon.environment import ComponentManager, RepositoryManager
+from lmcommon.labbook import LabBook
 
 @pytest.fixture()
 def mock_config_file():
@@ -180,3 +180,32 @@ class TestImageBuilder(object):
 
         for line in test_lines:
             assert line in dockerfile_text
+
+    def test_build_docker_image(self, mock_config_file): # , labbook_dir_tree):
+        # Build the environment component repo
+        # Build the environment component repo
+        erm = RepositoryManager(mock_config_file[0])
+        erm.update_repositories()
+        erm.index_repositories()
+
+        # Create a labook
+        lb = LabBook(mock_config_file[0])
+
+        labbook_dir = lb.new(name="catbook-test-dockerbuild", description="Testing docker building.",
+                             owner={"username": "test"})
+
+        # Create Component Manager
+        cm = ComponentManager(lb)
+
+        # Add a component
+        cm.add_component("base_image", "gig-dev_environment-components", "gigantum", "ubuntu1604-python3", "0.4")
+        cm.add_component("dev_env", "gig-dev_environment-components", "gigantum", "jupyter-ubuntu", "0.1")
+
+        ib = ImageBuilder(lb.root_dir)
+        unit_test_tag = "unit-test-please-delete"
+        client = docker.from_env()
+
+        if False:
+            # NOTE: DO NOT run these following lines on CircleCI
+            docker_image = ib.build_image(docker_client=client, image_tag=unit_test_tag, nocache=True)
+            client.images.remove(docker_image.id, force=True, noprune=False)
