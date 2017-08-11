@@ -132,6 +132,21 @@ exec gosu lbuser "$@"
         with open(package_yaml_path) as package_read_file:
             yaml.load(package_read_file)
 
+        # Add to git
+        short_message = "Add {} managed package: {} v{}".format(package_manager, package_name,
+                                                                package_version or 'Latest')
+        self.labbook.git.add(package_yaml_path)
+        commit = self.labbook.git.commit(short_message)
+
+        ns = NoteStore(self.labbook)
+        ns.create_note({"linked_commit": commit.hexsha,
+                        "message": short_message,
+                        "level": NoteLogLevel.USER_MAJOR,
+                        "tags": ["environment", 'package_manager', package_manager],
+                        "free_text": "",
+                        "objects": []
+                        })
+
     def add_component(self, component_class: str, repository: str, namespace: str, component: str, version: str,
                       force=False):
         """Method to add a component to a LabBook's environment
