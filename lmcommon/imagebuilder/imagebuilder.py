@@ -131,7 +131,7 @@ class ImageBuilder(object):
 
         root_dir = os.path.join(self.labbook_directory, '.gigantum', 'env', 'custom')
         custom_dep_files = [os.path.join(root_dir, f) for f in os.listdir(root_dir)
-                            if os.path.isfile(os.path.join(root_dir, f))]
+                            if os.path.isfile(os.path.join(root_dir, f)) and '.yaml' in f]
 
         docker_lines = ['## Adding Custom Packages']
         for custom in sorted(custom_dep_files):
