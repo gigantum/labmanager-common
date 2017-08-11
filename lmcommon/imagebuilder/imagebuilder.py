@@ -40,6 +40,7 @@ class ImageBuilder(object):
         if not os.path.exists(self.labbook_directory):
             raise IOError("Labbook directory {} does not exist.".format(self.labbook_directory))
         self._validate_labbook_tree()
+        self.env_manager = ComponentManager(labbook_directory)
 
     def _validate_labbook_tree(self) -> None:
         """Throw exception if labbook directory structure not in expected format. """
@@ -214,6 +215,42 @@ class ImageBuilder(object):
         docker_image = docker_client.images.build(path=env_dir, tag=image_tag, pull=True, nocache=nocache)
         return docker_image
 
+    def run_container(self, docker_client, docker_image_id):
+        """Launch docker container from image that was just (re-)built.
+
+        Args:
+            docker_client(docker.client): Docker context
+            docker_image_id(str): Docker image to be launched.
+
+        Returns:
+            Container id (str)
+        """
+
+        base_image_list = self.env_manager.get_component_list('base_image')
+
+        # Ensure that base_image_list is exactly a list of one element.
+        assert base_image_list, 'Expecting a list of one base image.'
+
+        # Produce port mappings to labbook container.
+        # For now, we map host-to-container ports without any indirection
+        # (e.g., port 8888 on the host maps to port 8888 in the container)
+        exposed_ports = {"{}/tcp".format(port): port for port in base_image_list[0]['exposed_ports']}
+
+        # Map volumes - The labbook docker container is unaware of labbook name, all labbooks
+        # map to /mnt/labbook.
+        volumes_dict = {
+            self.labbook_directory: {'bind': '/mnt/labbook', 'mode': 'rw'}
+        }
+
+        # Finally, run the image in a container.
+        container = docker_client.run(docker_image_id,
+                                      detach=True,
+                                      init=True,
+                                      name=docker_image_id,
+                                      ports=exposed_ports,
+                                      volumes=volumes_dict)
+
+        return container
 
 if __name__ == '__main__':
     """Helper utility to run imagebuilder from the command line. """
