@@ -41,9 +41,6 @@ class ImageBuilder(object):
         if not os.path.exists(self.labbook_directory):
             raise IOError("Labbook directory {} does not exist.".format(self.labbook_directory))
         self._validate_labbook_tree()
-        lb = LabBook()
-        lb.from_directory(labbook_directory)
-        self.env_manager = ComponentManager(lb)
 
     def _validate_labbook_tree(self) -> None:
         """Throw exception if labbook directory structure not in expected format. """
@@ -218,18 +215,20 @@ class ImageBuilder(object):
         docker_image = docker_client.images.build(path=env_dir, tag=image_tag, pull=True, nocache=nocache)
         return docker_image
 
-    def run_container(self, docker_client, docker_image_id):
+    def run_container(self, docker_client, docker_image_id, labbook: LabBook):
         """Launch docker container from image that was just (re-)built.
 
         Args:
             docker_client(docker.client): Docker context
             docker_image_id(str): Docker image to be launched.
+            labbook(LabBook): Labbook context.
 
         Returns:
             Container id (str)
         """
 
-        base_image_list = self.env_manager.get_component_list('base_image')
+        env_manager = ComponentManager(labbook)
+        base_image_list = env_manager.get_component_list('base_image')
 
         # Ensure that base_image_list is exactly a list of one element.
         assert base_image_list, 'Expecting a list of one base image.'
