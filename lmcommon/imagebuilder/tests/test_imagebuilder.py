@@ -82,7 +82,7 @@ def labbook_dir_tree():
                         os.path.join(tempdir, "my-temp-labbook", ".gigantum", "env", "base_image"))
             shutil.copy(os.path.join(checkoutdir, "dev_env/gigantum/jupyter-ubuntu/jupyter-ubuntu-v0_0.yaml"),
                         os.path.join(tempdir, "my-temp-labbook", ".gigantum", "env", "dev_env"))
-            shutil.copy(os.path.join(checkoutdir, "dev_env/gigantum/ubuntu-python3-pillow/ubuntu-python3-pillow-v0_3.yaml"),
+            shutil.copy(os.path.join(checkoutdir, "custom/gigantum/ubuntu-python3-pillow/ubuntu-python3-pillow-v0_3.yaml"),
                         os.path.join(tempdir, "my-temp-labbook", ".gigantum", "env", "custom"))
 
         yield os.path.join(tempdir, 'my-temp-labbook')
@@ -190,9 +190,9 @@ class TestImageBuilder(object):
         package_manager_dir = os.path.join(labbook_dir_tree, '.gigantum', 'env', 'custom')
 
         ib = ImageBuilder(labbook_dir_tree)
-        pkg_lines = [l for l in ib._load_custom() if 'RUN' in l]
+        pkg_lines = [l.strip() for l in ib._load_custom() if 'RUN' in l]
 
-        assert 'RUN apt-get -y install libjpeg-dev ' in pkg_lines
+        assert 'RUN apt-get -y install libjpeg-dev libtiff5-dev zlib1g-dev libfreetype6-dev liblcms2-dev libopenjpeg-dev' in pkg_lines
         assert 'RUN pip3 install Pillow==4.2.1' in pkg_lines
 
 

@@ -138,7 +138,7 @@ class ImageBuilder(object):
             pkg_fields = {}
             with open(custom) as custom_content:
                 pkg_fields.update(yaml.load(custom_content))
-                docker_lines.append('## Installing {}'.format(pkg_fields['description']))
+                docker_lines.append('## Installing {}'.format(pkg_fields['info']['description']))
                 docker_lines.extend(pkg_fields['docker'].split(os.linesep))
 
         return docker_lines
