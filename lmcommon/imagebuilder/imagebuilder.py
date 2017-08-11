@@ -26,6 +26,7 @@ import os
 import re
 
 from lmcommon.environment.componentmanager import ComponentManager
+from lmcommon.configuration import Configuration
 from lmcommon.labbook import LabBook
 
 
@@ -269,10 +270,13 @@ class ImageBuilder(object):
         for dev_env in dev_envs_list:
             exposed_ports.update({"{}/tcp".format(port): port for port in dev_env['exposed_tcp_ports']})
 
+        mnt_point = labbook.root_dir.replace('/mnt/labmanager', Configuration().config['git']['working_directory'])
+        mnt_point = dockerize_volume_path(os.path.normpath(mnt_point))
+
         # Map volumes - The labbook docker container is unaware of labbook name, all labbooks
         # map to /mnt/labbook.
         volumes_dict = {
-            dockerize_volume_path(self.labbook_directory): {'bind': '/mnt/labbook', 'mode': 'rw'}
+            mnt_point: {'bind': '/mnt/labbook', 'mode': 'rw'}
         }
 
         # Finally, run the image in a container.
