@@ -23,9 +23,19 @@ import functools
 import typing
 import yaml
 import os
+import re
 
 from lmcommon.environment.componentmanager import ComponentManager
 from lmcommon.labbook import LabBook
+
+
+def dockerize_volume_path(volpath: str) -> str:
+    # TODO - This must be removed and replaced.
+    if os.path.__name__ == 'ntpath':
+        # for windows switch the slashes and then sub the drive letter
+        return re.sub('(^[A-Z]):(.*$)', '//\g<1>\g<2>', volpath.replace('\\', '/'))
+    else:
+        return volpath
 
 
 class ImageBuilder(object):
@@ -241,7 +251,7 @@ class ImageBuilder(object):
         # Map volumes - The labbook docker container is unaware of labbook name, all labbooks
         # map to /mnt/labbook.
         volumes_dict = {
-            self.labbook_directory: {'bind': '/mnt/labbook', 'mode': 'rw'}
+            dockerize_volume_path(self.labbook_directory): {'bind': '/mnt/labbook', 'mode': 'rw'}
         }
 
         # Finally, run the image in a container.
