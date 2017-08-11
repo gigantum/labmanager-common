@@ -270,8 +270,7 @@ class ImageBuilder(object):
         for dev_env in dev_envs_list:
             exposed_ports.update({"{}/tcp".format(port): port for port in dev_env['exposed_tcp_ports']})
 
-        mnt_point = labbook.root_dir.replace('/mnt/gigantum', Configuration().config['git']['working_directory'])
-        mnt_point = dockerize_volume_path(os.path.normpath(mnt_point))
+        mnt_point = labbook.root_dir.replace('/mnt/gigantum', os.environ.get('HOST_WORK_DIR'))
 
         # Map volumes - The labbook docker container is unaware of labbook name, all labbooks
         # map to /mnt/labbook.
