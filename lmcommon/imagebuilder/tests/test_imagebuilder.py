@@ -70,6 +70,7 @@ def labbook_dir_tree():
                    ['.gigantum', 'env'],
                    ['.gigantum', 'env', 'base_image'],
                    ['.gigantum', 'env', 'dev_env'],
+                   ['.gigantum', 'env', 'custom'],
                    ['.gigantum', 'env', 'package_manager']]
 
         for subdir in subdirs:
@@ -81,6 +82,8 @@ def labbook_dir_tree():
                         os.path.join(tempdir, "my-temp-labbook", ".gigantum", "env", "base_image"))
             shutil.copy(os.path.join(checkoutdir, "dev_env/gigantum/jupyter-ubuntu/jupyter-ubuntu-v0_0.yaml"),
                         os.path.join(tempdir, "my-temp-labbook", ".gigantum", "env", "dev_env"))
+            shutil.copy(os.path.join(checkoutdir, "dev_env/gigantum/ubuntu-python3-pillow/ubuntu-python3-pillow-v0_3.yaml"),
+                        os.path.join(tempdir, "my-temp-labbook", ".gigantum", "env", "custom"))
 
         yield os.path.join(tempdir, 'my-temp-labbook')
 
@@ -182,6 +185,16 @@ class TestImageBuilder(object):
 
         for line in test_lines:
             assert line in dockerfile_text
+
+    def test_custom_package(self, labbook_dir_tree):
+        package_manager_dir = os.path.join(labbook_dir_tree, '.gigantum', 'env', 'custom')
+
+        ib = ImageBuilder(labbook_dir_tree)
+        pkg_lines = [l for l in ib._load_custom() if 'RUN' in l]
+
+        assert 'RUN apt-get -y install libjpeg-dev ' in pkg_lines
+        assert 'RUN pip3 install Pillow==4.2.1' in pkg_lines
+
 
     def test_build_docker_image(self, mock_config_file): # , labbook_dir_tree):
         # Build the environment component repo
