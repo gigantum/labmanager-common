@@ -164,11 +164,13 @@ exec gosu lbuser "$@"
         commit = self.labbook.git.commit(short_message)
 
         # Create a Note record
-        long_message = "Added a {} class environment component to the LabBook.\n".format(component_class)
+        long_message = "Added a `{}` class environment component {}\n".format(component_class, component)
+        long_message = "{}\n{}\n\n".format(long_message, component_data['info']['description'])
         long_message = "{}  - repository: {}\n".format(long_message, repository)
         long_message = "{}  - namespace: {}\n".format(long_message, namespace)
         long_message = "{}  - component: {}\n".format(long_message, component)
         long_message = "{}  - version: {}\n".format(long_message, version)
+
         ns = NoteStore(self.labbook)
         ns.create_note({"linked_commit": commit.hexsha,
                         "message": short_message,

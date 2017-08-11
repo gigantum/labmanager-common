@@ -115,12 +115,36 @@ class TestEnvironmentRepositoryManager(object):
         assert "###namespace###" in data["gig-dev_environment-components"]["gigantum"]["jupyter-ubuntu"]["0.1"]
         assert "###repository###" in data["gig-dev_environment-components"]["gigantum"]["jupyter-ubuntu"]["0.1"]
 
+    def test_index_repositories_custom(self, setup_index):
+        """Test creating and accessing the detail version of the dev env index"""
+        # Verify index file contents
+        with open(os.path.join(setup_index[0].local_repo_directory, "custom_index.pickle"), 'rb') as fh:
+            data = pickle.load(fh)
+
+        assert "gig-dev_environment-components" in data
+        assert "gigantum" in data["gig-dev_environment-components"]
+        assert "info" in data["gig-dev_environment-components"]
+        assert "maintainer" in data["gig-dev_environment-components"]['info']
+        assert "repo" in data["gig-dev_environment-components"]['info']
+        assert "ubuntu-python3-pillow" in data["gig-dev_environment-components"]["gigantum"]
+        assert "ubuntu-python3-pillow-dup" in data["gig-dev_environment-components"]["gigantum"]
+        assert "0.1" in data["gig-dev_environment-components"]["gigantum"]["ubuntu-python3-pillow"]
+        assert "0.2" in data["gig-dev_environment-components"]["gigantum"]["ubuntu-python3-pillow"]
+        assert "0.3" in data["gig-dev_environment-components"]["gigantum"]["ubuntu-python3-pillow"]
+        assert "info" in data["gig-dev_environment-components"]["gigantum"]["ubuntu-python3-pillow"]["0.3"]
+        assert "author" in data["gig-dev_environment-components"]["gigantum"]["ubuntu-python3-pillow"]["0.3"]
+        assert "docker" in data["gig-dev_environment-components"]["gigantum"]["ubuntu-python3-pillow"]["0.3"]
+        assert "Pillow==4.2.1 " in data["gig-dev_environment-components"]["gigantum"]["ubuntu-python3-pillow"]["0.3"]["docker"]
+        assert "###namespace###" in data["gig-dev_environment-components"]["gigantum"]["ubuntu-python3-pillow"]["0.3"]
+        assert "###repository###" in data["gig-dev_environment-components"]["gigantum"]["ubuntu-python3-pillow"]["0.3"]
+
     def test_index_repositories_base_image_list(self, setup_index):
         """Test accessing the list version of the base image index"""
         # Verify index file contents
         with open(os.path.join(setup_index[0].local_repo_directory, "base_image_list_index.pickle"), 'rb') as fh:
             data = pickle.load(fh)
 
+        assert len(data) == 2
         assert data[0]['info']['name'] == 'ubuntu1604-python3'
 
     def test_index_repositories_dev_env_list(self, setup_index):
@@ -135,3 +159,15 @@ class TestEnvironmentRepositoryManager(object):
         assert data[1]['info']['name'] == 'jupyter-ubuntu-dup'
         assert data[2]['info']['name'] == 'jupyter-ubuntu'
         assert data[2]['###namespace###'] == 'gigantum-dev'
+
+    def test_index_repositories_custom_list(self, setup_index):
+        """Test accessing the list version of the dev env index"""
+        # Verify index file contents
+        with open(os.path.join(setup_index[0].local_repo_directory, "custom_list_index.pickle"), 'rb') as fh:
+            data = pickle.load(fh)
+
+        assert len(data) == 2
+        assert data[0]['info']['name'] == 'ubuntu-python3-pillow'
+        assert data[0]['###namespace###'] == 'gigantum'
+        assert data[1]['info']['name'] == 'ubuntu-python3-pillow-dup'
+
