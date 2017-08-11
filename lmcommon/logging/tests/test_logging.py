@@ -23,7 +23,7 @@ import tempfile
 from unittest.mock import PropertyMock, patch
 from lmcommon.logging import LMLogger
 import logging
-
+import os
 
 @pytest.fixture(scope="module")
 def mock_config_file():
@@ -79,7 +79,12 @@ class TestLogging(object):
         lmlog = LMLogger()
 
         assert type(lmlog) is LMLogger
-        assert lmlog.config_file.rsplit("/", 1)[1] == "logging.json.default"
+
+        if os.path.exists(LMLogger.CONFIG_INSTALLED_LOCATION):
+            assert lmlog.config_file.rsplit("/", 1)[1] == "logging.json"
+        else:
+            assert lmlog.config_file.rsplit("/", 1)[1] == "logging.json.default"
+
         assert type(lmlog.logger) is logging.Logger
 
     def test_init_load_from_install(self, mock_config_file):
