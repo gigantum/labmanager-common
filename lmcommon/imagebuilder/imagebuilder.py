@@ -23,8 +23,19 @@ import functools
 import typing
 import yaml
 import os
+import re
 
 from lmcommon.environment.componentmanager import ComponentManager
+from lmcommon.labbook import LabBook
+
+
+def dockerize_volume_path(volpath: str) -> str:
+    # TODO - This must be removed and replaced.
+    if os.path.__name__ == 'ntpath':
+        # for windows switch the slashes and then sub the drive letter
+        return re.sub('(^[A-Z]):(.*$)', '//\g<1>\g<2>', volpath.replace('\\', '/'))
+    else:
+        return volpath
 
 
 class ImageBuilder(object):
@@ -214,6 +225,44 @@ class ImageBuilder(object):
         docker_image = docker_client.images.build(path=env_dir, tag=image_tag, pull=True, nocache=nocache)
         return docker_image
 
+    def run_container(self, docker_client, docker_image_id, labbook: LabBook):
+        """Launch docker container from image that was just (re-)built.
+
+        Args:
+            docker_client(docker.client): Docker context
+            docker_image_id(str): Docker image to be launched.
+            labbook(LabBook): Labbook context.
+
+        Returns:
+            Container id (str)
+        """
+
+        env_manager = ComponentManager(labbook)
+        base_image_list = env_manager.get_component_list('base_image')
+
+        # Ensure that base_image_list is exactly a list of one element.
+        assert base_image_list, 'Expecting a list of one base image.'
+
+        # Produce port mappings to labbook container.
+        # For now, we map host-to-container ports without any indirection
+        # (e.g., port 8888 on the host maps to port 8888 in the container)
+        exposed_ports = {"{}/tcp".format(port): port for port in base_image_list[0]['exposed_ports']}
+
+        # Map volumes - The labbook docker container is unaware of labbook name, all labbooks
+        # map to /mnt/labbook.
+        volumes_dict = {
+            dockerize_volume_path(self.labbook_directory): {'bind': '/mnt/labbook', 'mode': 'rw'}
+        }
+
+        # Finally, run the image in a container.
+        container = docker_client.run(docker_image_id,
+                                      detach=True,
+                                      init=True,
+                                      name=docker_image_id,
+                                      ports=exposed_ports,
+                                      volumes=volumes_dict)
+
+        return container
 
 if __name__ == '__main__':
     """Helper utility to run imagebuilder from the command line. """
