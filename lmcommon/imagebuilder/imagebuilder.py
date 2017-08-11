@@ -26,8 +26,8 @@ import os
 import re
 
 from lmcommon.environment.componentmanager import ComponentManager
-from lmcommon.configuration import Configuration
 from lmcommon.labbook import LabBook
+from lmcommon.notes import NoteLogLevel, NoteStore
 
 
 def dockerize_volume_path(volpath: str) -> str:
@@ -218,8 +218,28 @@ class ImageBuilder(object):
         docker_lines = functools.reduce(lambda a, b: a + b, [f() for f in assembly_pipeline], [])
 
         if write:
-            with open(os.path.join(self.labbook_directory, ".gigantum", "env", "Dockerfile"), "w") as dockerfile:
+            dockerfile_name = os.path.join(self.labbook_directory, ".gigantum", "env", "Dockerfile")
+            with open(dockerfile_name, "w") as dockerfile:
                 dockerfile.write(os.linesep.join(docker_lines))
+
+            # Get a LabBook instance
+            lb = LabBook()
+            lb.from_directory(self.labbook_directory)
+
+            # Add updated dockerfile to git
+            short_message = "Re-Generated Dockerfile"
+            lb.git.add(dockerfile_name)
+            commit = lb.git.commit(short_message)
+
+            # Create a note record
+            ns = NoteStore(lb)
+            ns.create_note({"linked_commit": commit.hexsha,
+                            "message": short_message,
+                            "level": NoteLogLevel.AUTO_MINOR,
+                            "tags": ["environment", 'dockerfile'],
+                            "free_text": "",
+                            "objects": []
+                            })
 
         return os.linesep.join(docker_lines)
 
