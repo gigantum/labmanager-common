@@ -25,6 +25,7 @@ import yaml
 import os
 
 from lmcommon.environment.componentmanager import ComponentManager
+from lmcommon.labbook import LabBook
 
 
 class ImageBuilder(object):
@@ -40,7 +41,9 @@ class ImageBuilder(object):
         if not os.path.exists(self.labbook_directory):
             raise IOError("Labbook directory {} does not exist.".format(self.labbook_directory))
         self._validate_labbook_tree()
-        self.env_manager = ComponentManager(labbook_directory)
+        lb = LabBook()
+        lb.from_directory(labbook_directory)
+        self.env_manager = ComponentManager(lb)
 
     def _validate_labbook_tree(self) -> None:
         """Throw exception if labbook directory structure not in expected format. """
