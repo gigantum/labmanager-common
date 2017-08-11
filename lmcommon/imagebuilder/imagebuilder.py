@@ -238,15 +238,17 @@ class ImageBuilder(object):
         """
 
         env_manager = ComponentManager(labbook)
-        base_image_list = env_manager.get_component_list('base_image')
+        dev_envs_list = env_manager.get_component_list('dev_env')
 
         # Ensure that base_image_list is exactly a list of one element.
-        assert base_image_list, 'Expecting a list of one base image.'
+        assert dev_envs_list, 'Expecting a list of one base image.'
 
         # Produce port mappings to labbook container.
         # For now, we map host-to-container ports without any indirection
         # (e.g., port 8888 on the host maps to port 8888 in the container)
-        exposed_ports = {"{}/tcp".format(port): port for port in base_image_list[0]['exposed_ports']}
+        exposed_ports = {}
+        for dev_env in dev_envs_list:
+            exposed_ports.update({"{}/tcp".format(port): port for port in dev_env['exposed_tcp_ports']})
 
         # Map volumes - The labbook docker container is unaware of labbook name, all labbooks
         # map to /mnt/labbook.
@@ -255,12 +257,12 @@ class ImageBuilder(object):
         }
 
         # Finally, run the image in a container.
-        container = docker_client.run(docker_image_id,
-                                      detach=True,
-                                      init=True,
-                                      name=docker_image_id,
-                                      ports=exposed_ports,
-                                      volumes=volumes_dict)
+        container = docker_client.containers.run(docker_image_id,
+                                                 detach=True,
+                                                 init=True,
+                                                 name=docker_image_id,
+                                                 ports=exposed_ports,
+                                                 volumes=volumes_dict)
 
         return container
 
