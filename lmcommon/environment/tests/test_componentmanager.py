@@ -157,6 +157,14 @@ class TestComponentManager(object):
                 for required_field in 'package_manager', 'name', 'version':
                     assert required_field in fields_dict.keys()
 
+        # Verify git/notes
+        log = lb.git.log()
+        assert len(log) == 10
+        assert "gtmNOTE" in log[0]["message"]
+        assert 'docker' in log[0]["message"]
+        assert "gtmNOTE" in log[4]["message"]
+        assert 'requests' in log[4]["message"]
+
     def test_add_component(self, mock_config_file):
         """Test adding a component to a labbook"""
         # Build the environment component repo
