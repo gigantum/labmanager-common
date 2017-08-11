@@ -118,7 +118,7 @@ exec gosu lbuser "$@"
         yaml_lines = ['# Generated on: {}'.format(str(datetime.datetime.now())),
                       'package_manager: {}'.format(package_manager),
                       'name: {}'.format(package_name),
-                      'version: {}'.format(package_version or 'None')]
+                      'version: {}'.format(package_version or 'null')]
 
         version_s = '_{}'.format(package_version) if package_version else ''
         yaml_filename = '{}_{}{}.yaml'.format(package_manager, package_name, version_s)
