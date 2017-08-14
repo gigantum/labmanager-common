@@ -167,6 +167,22 @@ exec gosu lbuser "$@"
         Returns:
             None
         """
+
+        if not component_class:
+            raise ValueError('component_class cannot be None or empty')
+
+        if not repository:
+            raise ValueError('component_class cannot be None or empty')
+
+        if not namespace:
+            raise ValueError('namespace cannot be None or empty')
+
+        if not component:
+            raise ValueError('component cannot be None or empty')
+
+        if not version:
+            raise ValueError('version cannot be None or empty')
+
         # Get the component
         component_data = self.components.get_component(component_class, repository, namespace, component, version)
 

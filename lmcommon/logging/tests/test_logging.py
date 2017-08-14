@@ -142,12 +142,11 @@ class TestLogging(object):
         """Test that the logging of exceptions appear as expected. """
         with patch('lmcommon.logging.LMLogger.CONFIG_INSTALLED_LOCATION', new_callable=PropertyMock,
                    return_value=mock_config_file):
+            # NOTE!! This should be the standard way to load the logger in each package.
+            # Do NOT use LMLogger().logger because you will lose the stack context and knowledge
+            # of source package, method, and line.
             lmlog = LMLogger()
-
-        # NOTE!! This should be the standard way to load the logger in each package.
-        # Do NOT use LMLogger().logger because you will lose the stack context and knowledge
-        # of source package, method, and line.
-        logger = logging.getLogger("labmanager")
+            logger = LMLogger.get_logger()
 
         try:
             1/0
@@ -164,8 +163,7 @@ class TestLogging(object):
         with patch('lmcommon.logging.LMLogger.CONFIG_INSTALLED_LOCATION', new_callable=PropertyMock,
                    return_value=mock_config_file):
             lmlog = LMLogger()
-
-        logger = logging.getLogger("labmanager")
+            logger = LMLogger.get_logger()
 
         try:
             assert False
