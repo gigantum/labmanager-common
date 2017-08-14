@@ -264,6 +264,7 @@ class ImageBuilder(object):
             build_container.remove()
         except NotFound:
             # Container isn't running, so just move on
+            # TODO: Add logging.info to indicate building a non-running container
             pass
 
         env_dir = os.path.join(self.labbook_directory, '.gigantum', 'env')
