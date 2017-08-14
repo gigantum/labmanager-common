@@ -144,6 +144,9 @@ class TestLogging(object):
                    return_value=mock_config_file):
             lmlog = LMLogger()
 
+        # NOTE!! This should be the standard way to load the logger in each package.
+        # Do NOT use LMLogger().logger because you will lose the stack context and knowledge
+        # of source package, method, and line.
         logger = logging.getLogger("labmanager")
 
         try:
