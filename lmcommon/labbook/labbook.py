@@ -28,7 +28,7 @@ from lmcommon.configuration import Configuration
 from lmcommon.logging import LMLogger
 
 GIT_IGNORE_DEFAULT = """.DS_Store"""
-logger = LMLogger.logger
+logger = LMLogger.get_logger()
 
 
 class LabBook(object):
