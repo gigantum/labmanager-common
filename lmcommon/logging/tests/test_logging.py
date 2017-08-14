@@ -56,7 +56,7 @@ def mock_config_file():
       },
       "formatters": {
         "labmanagerFormatter": {
-          "format": "%(levelname)s - %(asctime)s - %(message)s"
+          "format": "%(asctime)s %(levelname)-10s %(filename)s in %(funcName)s (line %(lineno)d): %(message)s"
         }
       }
     }""".replace("<LOGFILE>", log_file.name))
@@ -123,3 +123,56 @@ class TestLogging(object):
             assert "WARNING" in data[1]
             assert "##ER_ROR##" in data[2]
             assert "ERROR" in data[2]
+
+    def test_load_logger_by_name(self, mock_config_file):
+        """Test loading the logger by name rather than by LMLogger.logger. """
+        with patch('lmcommon.logging.LMLogger.CONFIG_INSTALLED_LOCATION', new_callable=PropertyMock,
+                   return_value=mock_config_file):
+            lmlog = LMLogger()
+
+        logger = logging.getLogger("labmanager")
+        logger.warning('test_load_logger_by_name')
+
+        with open(lmlog.log_file, 'rt') as test_file:
+            data = test_file.readlines()
+
+            assert any(['test_load_logger_by_name' in d for d in data])
+
+    def test_log_exception(self, mock_config_file):
+        """Test that the logging of exceptions appear as expected. """
+        with patch('lmcommon.logging.LMLogger.CONFIG_INSTALLED_LOCATION', new_callable=PropertyMock,
+                   return_value=mock_config_file):
+            lmlog = LMLogger()
+
+        logger = logging.getLogger("labmanager")
+
+        try:
+            1/0
+        except ZeroDivisionError as e:
+            logger.exception(e)
+
+        with open(lmlog.log_file, 'rt') as test_file:
+            data = test_file.readlines()
+
+            assert any(['Traceback (most recent call last)' in d for d in data])
+
+    def test_log_exception_using_error_to_log(self, mock_config_file):
+        """Test that the logging of exceptions appear as expected. """
+        with patch('lmcommon.logging.LMLogger.CONFIG_INSTALLED_LOCATION', new_callable=PropertyMock,
+                   return_value=mock_config_file):
+            lmlog = LMLogger()
+
+        logger = logging.getLogger("labmanager")
+
+        try:
+            assert False
+        except AssertionError as e:
+            # Note, using exc_info=True additionally prints the current stack context.
+            logger.error(e, exc_info=True)
+
+        with open(lmlog.log_file, 'rt') as test_file:
+            data = test_file.readlines()
+
+            assert any(['AssertionError' in d for d in data])
+            import pprint; pprint.pprint(data)
+            assert False
