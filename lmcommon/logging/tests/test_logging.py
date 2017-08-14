@@ -174,5 +174,3 @@ class TestLogging(object):
             data = test_file.readlines()
 
             assert any(['AssertionError' in d for d in data])
-            import pprint; pprint.pprint(data)
-            assert False
