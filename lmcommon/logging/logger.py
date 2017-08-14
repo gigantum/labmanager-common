@@ -53,7 +53,13 @@ class LMLogger(object):
         # Get the logger
         self.logger = logging.getLogger('labmanager')
 
-    def _make_log_dir(self, log_file_dir):
+    @classmethod
+    def get_logger(cls, config_file=None):
+        logger = cls(config_file)
+        return logger.logger
+
+    @staticmethod
+    def _make_log_dir(log_file_dir):
       """Create directory tree to log file if it does not exist. """
       if not os.path.exists(log_file_dir):
         os.makedirs(log_file_dir, exist_ok=True)
