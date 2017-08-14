@@ -195,7 +195,6 @@ class TestImageBuilder(object):
         assert 'RUN apt-get -y install libjpeg-dev libtiff5-dev zlib1g-dev libfreetype6-dev liblcms2-dev libopenjpeg-dev' in pkg_lines
         assert 'RUN pip3 install Pillow==4.2.1' in pkg_lines
 
-
     def test_build_docker_image(self, mock_config_file): # , labbook_dir_tree):
         # Build the environment component repo
         # Build the environment component repo
@@ -224,3 +223,40 @@ class TestImageBuilder(object):
             # NOTE: DO NOT run these following lines on CircleCI
             docker_image = ib.build_image(docker_client=client, image_tag=unit_test_tag, nocache=True)
             client.images.remove(docker_image.id, force=True, noprune=False)
+
+    @pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Cannot build images on CircleCI")
+    def test_rebuild_docker_image(self, mock_config_file):
+        # NOTE: DO NOT run test on CircleCI
+        # Build the environment component repo
+        erm = RepositoryManager(mock_config_file[0])
+        erm.update_repositories()
+        erm.index_repositories()
+
+        # Create a labook
+        lb = LabBook(mock_config_file[0])
+
+        labbook_dir = lb.new(name="catbook-test-dockerbuild", description="Testing docker building.",
+                             owner={"username": "test"})
+
+        # Create Component Manager
+        cm = ComponentManager(lb)
+
+        # Add a component
+        cm.add_component("base_image", "gig-dev_environment-components", "gigantum", "ubuntu1604-python3", "0.4")
+        cm.add_component("dev_env", "gig-dev_environment-components", "gigantum", "jupyter-ubuntu", "0.1")
+
+        ib = ImageBuilder(lb.root_dir)
+        unit_test_tag = "unit-test-please-delete"
+        client = docker.from_env()
+
+        # Build image once
+        ib.build_image(docker_client=client, image_tag=unit_test_tag)
+
+        # Start container
+        docker_container = client.containers.run(unit_test_tag, detach=True, name=unit_test_tag)
+
+        # Try to build it again
+        docker_image = ib.build_image(docker_client=client, image_tag=unit_test_tag)
+
+        # Clean up
+        client.images.remove(docker_image.id, force=True, noprune=False)

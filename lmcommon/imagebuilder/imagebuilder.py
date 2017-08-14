@@ -24,6 +24,8 @@ import typing
 import yaml
 import os
 import re
+from docker.errors import NotFound
+
 
 from lmcommon.environment.componentmanager import ComponentManager
 from lmcommon.labbook import LabBook
@@ -250,10 +252,20 @@ class ImageBuilder(object):
             docker_client(docker.client): Docker context
             image_tag(str): Tag of docker image
             assemble(bool): Re-assemble the docker file using assemble_dockerfile if True
+            nocache(bool): Don't user the Docker cache if True
 
         Returns:
             docker image
         """
+        # Make sure image isn't running in container currently. If so, stop it.
+        try:
+            build_container = docker_client.containers.get(image_tag)
+            build_container.stop()
+            build_container.remove()
+        except NotFound:
+            # Container isn't running, so just move on
+            # TODO: Add logging.info to indicate building a non-running container
+            pass
 
         env_dir = os.path.join(self.labbook_directory, '.gigantum', 'env')
         if not os.path.exists(env_dir):
