@@ -202,6 +202,8 @@ class LabBook(object):
             logger.warning("Using owner username `{}` when making new labbook".format(owner['username']))
             username = owner["username"]
 
+        logger.info("Creating new labbook on disk for {}/{}/{} ...".format(username, owner, name))
+
         # Build data file contents
         self._data = {"labbook": {"id": uuid.uuid4().hex,
                                   "name": name,
