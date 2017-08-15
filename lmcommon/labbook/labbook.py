@@ -35,7 +35,7 @@ class LabBook(object):
     """Class representing a single LabBook"""
 
     def __init__(self, config_file=None):
-        logger.info("Creating labbook from config file {}".format(config_file or '<None>'))
+        logger.info("Initializing empty labbook from config file {}".format(config_file or '<None>'))
 
         self.labmanager_config = Configuration(config_file)
 
@@ -317,8 +317,8 @@ class LabBook(object):
         if not labbook_name:
             raise ValueError("labbook_name cannot be None or empty")
 
-        logger.info("Populating LabBook from name -- username: {}, owner: {}, labbook_name: {}".format(username, owner,
-                                                                                                       labbook_name))
+        logger.info("Populating LabBook from username/owner/labbook_name {}/{}/{}".format(username, owner,
+                                                                                          labbook_name))
 
         labbook_path = os.path.expanduser(os.path.join(self.labmanager_config.config["git"]["working_directory"],
                                                        username,
