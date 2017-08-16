@@ -225,8 +225,8 @@ class ImageBuilder(object):
             logger.error('Component file missing key: {}'.format(e))
             raise
 
+        dockerfile_name = os.path.join(self.labbook_directory, ".gigantum", "env", "Dockerfile")
         if write:
-            dockerfile_name = os.path.join(self.labbook_directory, ".gigantum", "env", "Dockerfile")
             logger.info("Writing Dockerfile to {}".format(dockerfile_name))
 
             with open(dockerfile_name, "w") as dockerfile:
@@ -250,6 +250,8 @@ class ImageBuilder(object):
                             "free_text": "",
                             "objects": []
                             })
+        else:
+            logger.info("Dockerfile NOT being written; write=False; {}".format(dockerfile_name))
 
         return os.linesep.join(docker_lines)
 
@@ -298,7 +300,8 @@ class ImageBuilder(object):
         dev_envs_list = env_manager.get_component_list('dev_env')
 
         # Ensure that base_image_list is exactly a list of one element.
-        assert dev_envs_list, 'Expecting a list of one development environment'
+        if not dev_envs_list:
+            logger.error('No development environment in labbok at {}'.format(labbook.root_dir))
 
         # Produce port mappings to labbook container.
         # For now, we map host-to-container ports without any indirection
