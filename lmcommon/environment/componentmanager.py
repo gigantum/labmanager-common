@@ -200,7 +200,8 @@ exec gosu lbuser "$@"
         with open(component_file, 'wt') as cf:
             cf.write(yaml.dump(component_data, default_flow_style=False))
 
-        logger.info("Added {} environment for component {}".format(component_class, component_filename))
+        logger.info(
+            "Added {} environment component YAML file to Labbook {}".format(component_class, component_filename))
 
         # Add to git
         short_message = "Add {} environment component: {} v{}".format(component_class, component, version)

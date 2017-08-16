@@ -477,12 +477,12 @@ class GitFilesystem(GitRepoInterface):
             ValueError
         """
         if not commit:
-            raise ValueError("commit cannot be None")
+            raise ValueError("commit cannot be None or empty")
 
         try:
             entry = self.repo.commit(commit)
         except BadName:
-            logger.error("Cannot make log entry: {}".format(BadName))
+            logger.error("Commit hash {} not found: {}".format(commit, BadName))
             raise ValueError("Commit {} not found".format(commit))
 
         return {
