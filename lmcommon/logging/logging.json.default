@@ -24,7 +24,7 @@
   },
   "formatters": {
     "labmanagerFormatter": {
-      "format": "%(levelname)-10s %(asctime)s :: %(message)s"
+      "format": "%(asctime)s %(levelname)-10s %(filename)s in %(funcName)s (line %(lineno)d): %(message)s"
     }
   }
 }

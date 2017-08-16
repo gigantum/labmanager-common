@@ -30,6 +30,9 @@ from docker.errors import NotFound
 from lmcommon.environment.componentmanager import ComponentManager
 from lmcommon.labbook import LabBook
 from lmcommon.notes import NoteLogLevel, NoteStore
+from lmcommon.logging import LMLogger
+
+logger = LMLogger.get_logger()
 
 
 def dockerize_volume_path(volpath: str) -> str:
@@ -74,9 +77,10 @@ class ImageBuilder(object):
         base_images = [os.path.join(root_dir, f) for f in os.listdir(root_dir)
                        if os.path.isfile(os.path.join(root_dir, f))]
 
+        logger.debug("Searching {} for base image file".format(root_dir))
+        assert len(base_images) == 1, "There should only be one base image in {}".format(root_dir)
 
-        assert len(base_images) == 1, "There should only be one base image in {}".format(self.labbook_directory)
-
+        logger.info("Using {} as base image file for labbook at {}.".format(base_images[0], self.labbook_directory))
         with open(base_images[0]) as base_image_file:
             fields = yaml.load(base_image_file)
 
@@ -217,10 +221,16 @@ class ImageBuilder(object):
                              self._entrypoint_hooks]
 
         # flat map the results of executing the pipeline.
-        docker_lines = functools.reduce(lambda a, b: a + b, [f() for f in assembly_pipeline], [])
+        try:
+            docker_lines = functools.reduce(lambda a, b: a + b, [f() for f in assembly_pipeline], [])
+        except KeyError as e:
+            logger.error('Component file missing key: {}'.format(e))
+            raise
 
+        dockerfile_name = os.path.join(self.labbook_directory, ".gigantum", "env", "Dockerfile")
         if write:
-            dockerfile_name = os.path.join(self.labbook_directory, ".gigantum", "env", "Dockerfile")
+            logger.info("Writing Dockerfile to {}".format(dockerfile_name))
+
             with open(dockerfile_name, "w") as dockerfile:
                 dockerfile.write(os.linesep.join(docker_lines))
 
@@ -242,6 +252,8 @@ class ImageBuilder(object):
                             "free_text": "",
                             "objects": []
                             })
+        else:
+            logger.info("Dockerfile NOT being written; write=False; {}".format(dockerfile_name))
 
         return os.linesep.join(docker_lines)
 
@@ -267,7 +279,11 @@ class ImageBuilder(object):
             # TODO: Add logging.info to indicate building a non-running container
             pass
 
+        if not image_tag:
+            raise ValueError("image_tag cannot be None or empty")
+
         env_dir = os.path.join(self.labbook_directory, '.gigantum', 'env')
+        logger.info("Building labbook image (tag {}) from Dockerfile in {}".format(image_tag, env_dir))
         if not os.path.exists(env_dir):
             raise ValueError('Expected env directory `{}` does not exist.'.format(env_dir))
 
@@ -289,11 +305,15 @@ class ImageBuilder(object):
             Container id (str)
         """
 
+        if not docker_image_id:
+            raise ValueError("docker_image_id cannot be None or empty")
+
         env_manager = ComponentManager(labbook)
         dev_envs_list = env_manager.get_component_list('dev_env')
 
         # Ensure that base_image_list is exactly a list of one element.
-        assert dev_envs_list, 'Expecting a list of one base image.'
+        if not dev_envs_list:
+            logger.error('No development environment in labbok at {}'.format(labbook.root_dir))
 
         # Produce port mappings to labbook container.
         # For now, we map host-to-container ports without any indirection
@@ -311,6 +331,10 @@ class ImageBuilder(object):
         }
 
         # Finally, run the image in a container.
+        logger.info(
+            "Running container id {} -- ports {} -- volumes {}".format(docker_image_id, ', '.join(exposed_ports.keys()),
+                                                                       ', '.join(volumes_dict.keys())))
+
         container = docker_client.containers.run(docker_image_id,
                                                  detach=True,
                                                  init=True,

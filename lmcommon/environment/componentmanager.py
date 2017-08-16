@@ -29,6 +29,9 @@ import operator
 from lmcommon.labbook import LabBook
 from lmcommon.environment import ComponentRepository
 from lmcommon.notes import NoteStore, NoteLogLevel
+from lmcommon.logging import LMLogger
+
+logger = LMLogger.get_logger()
 
 
 class ComponentManager(object):
@@ -132,6 +135,8 @@ exec gosu lbuser "$@"
         with open(package_yaml_path) as package_read_file:
             yaml.load(package_read_file)
 
+        logger.info("Added package {} to labbook at {}".format(package_name, self.labbook.root_dir))
+
         # Add to git
         short_message = "Add {} managed package: {} v{}".format(package_manager, package_name,
                                                                 package_version or 'Latest')
@@ -162,21 +167,41 @@ exec gosu lbuser "$@"
         Returns:
             None
         """
+
+        if not component_class:
+            raise ValueError('component_class cannot be None or empty')
+
+        if not repository:
+            raise ValueError('component_class cannot be None or empty')
+
+        if not namespace:
+            raise ValueError('namespace cannot be None or empty')
+
+        if not component:
+            raise ValueError('component cannot be None or empty')
+
+        if not version:
+            raise ValueError('version cannot be None or empty')
+
         # Get the component
         component_data = self.components.get_component(component_class, repository, namespace, component, version)
 
         # Write to /.gigantum/env
-        component_file = os.path.join(self.env_dir, component_class, "{}_{}_{}.yaml".format(repository,
-                                                                                            namespace,
-                                                                                            component))
+        component_filename = "{}_{}_{}.yaml".format(repository, namespace, component)
+        component_file = os.path.join(self.env_dir, component_class, component_filename)
 
         if os.path.exists(component_file):
             if not force:
                 raise ValueError("The component {} already exists in this LabBook." +
                                  " Use `force` to overwrite".format(component))
+            else:
+                logger.warning("Overwriting component file at {}".format(component_file))
 
         with open(component_file, 'wt') as cf:
             cf.write(yaml.dump(component_data, default_flow_style=False))
+
+        logger.info(
+            "Added {} environment component YAML file to Labbook {}".format(component_class, component_filename))
 
         # Add to git
         short_message = "Add {} environment component: {} v{}".format(component_class, component, version)

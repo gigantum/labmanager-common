@@ -22,6 +22,9 @@ import os
 import yaml
 from pkg_resources import resource_filename
 
+from lmcommon.logging import LMLogger
+
+logger = LMLogger.get_logger()
 
 class Configuration(object):
     """Class to interact with LabManager configuration files    
@@ -111,5 +114,6 @@ class Configuration(object):
         if not config_file:
             config_file = self.config_file
 
+        logger.info("Writing config file to {}".format(self.config_file))
         with open(config_file, "wt") as cf:
             cf.write(yaml.dump(self.config, default_flow_style=False))
