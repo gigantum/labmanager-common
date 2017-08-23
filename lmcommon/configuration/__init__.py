@@ -21,6 +21,8 @@
 import subprocess
 import os
 
+import docker
+
 from .configuration import Configuration
 
 
@@ -28,7 +30,7 @@ def _get_docker_server_api_version() -> str:
     """Retrieve the Docker server API version. """
 
     # Returns the lines of output, even if command is invalid
-    output_lines = subprocess.getoutput("docker version")
+    output_lines = subprocess.getoutput("docker version").split(os.linesep)
 
     # We must infer if docker server is installed since subprocess is not returning a status code
     if not any(['API version' in l for l in output_lines]):
@@ -54,9 +56,15 @@ def _get_docker_server_api_version() -> str:
             # "API version:  1.30 (minimum version 1.12)"
             return line.strip().split(':')[1].strip().split(' ')[0]
     else:
+        # Impossible to get here (cause we've checked that 'API version' exists in line)
+        # but just put this clause in here for closure.
         assert False, "Docker API version should have been found"
 
 
-def get_docker_client():
-    
-    pass
+def get_docker_client(check_server_version=True):
+    """Return a docker client with proper version to match server API. """
+    if check_server_version:
+        docker_server_api_version = _get_docker_server_api_version()
+        return docker.from_env(version=docker_server_api_version)
+    else:
+        return docker.from_env()
