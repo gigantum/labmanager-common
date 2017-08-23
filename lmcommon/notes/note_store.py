@@ -22,6 +22,7 @@ import json
 import re
 from enum import Enum
 import base64
+import uuid
 
 import plyvel
 
@@ -31,6 +32,7 @@ from lmcommon.labbook import LabBook
 class NoteLogLevel(Enum):
     """Enumeration representing the note 'level' in the hierarchy"""
     # User generated Notes
+    USER_NOTE = 10
     USER_MAJOR = 11
     USER_MINOR = 12
 
@@ -154,6 +156,10 @@ class NoteStore(object):
         Returns:
             (list): a list of strings
         """
+        # allow for no tags
+        if not tags:
+            return []
+
         # Remove duplicate tags
         tags = list(set(tags))
 
@@ -190,9 +196,16 @@ class NoteStore(object):
         # Verify log level is valid
         NoteLogLevel(note_data['level'])
 
+        # If there isn't a linked commit, generate a UUID to uniquely ID the data in levelDB that will never
+        # collide with the actual git hash space by making it 32 char vs. 40 for git
+        if not note_data['linked_commit']:
+            linked_commit_hash = uuid.uuid4().hex
+        else:
+            linked_commit_hash = str(note_data['linked_commit'])
+
         # Prep log message
         note_metadata = {'level': note_data['level'],
-                         'linked_commit': note_data['linked_commit'],
+                         'linked_commit': linked_commit_hash,
                          'tags': self._validate_tags(note_data['tags'])}
 
         # format note metadata into message
@@ -200,7 +213,7 @@ class NoteStore(object):
                                                                                                 cls=NoteRecordEncoder))
 
         # Create record using the linked_commit hash as the reference
-        self.put_detail_record(str(note_data['linked_commit']),
+        self.put_detail_record(linked_commit_hash,
                                note_data['free_text'],
                                note_data['objects'])
 
@@ -253,12 +266,19 @@ class NoteStore(object):
             # summary data from git log
             message = m.group(1)
             note_metadata = json.loads(m.group(2))
+
+            # Sort tags if there are any
+            if note_metadata['tags']:
+                tags = sorted(note_metadata["tags"])
+            else:
+                tags = []
+
             return {"note_commit": entry["commit"],
                     "linked_commit": note_metadata["linked_commit"],
                     "message": message,
                     "level": NoteLogLevel(note_metadata["level"]),
                     "timestamp": entry["committed_on"],
-                    "tags": sorted(note_metadata["tags"]),
+                    "tags": tags,
                     "author": entry["author"]
                     }
         else:
@@ -349,9 +369,10 @@ class NoteStore(object):
 
         # Populate Objects
         objects = []
-        for obj_data in value["objects"]:
-            objects.append(NoteDetailObject(obj_data["key"],
-                                            obj_data["type"],
-                                            base64.b64decode(obj_data["value"])))
+        if value["objects"]:
+            for obj_data in value["objects"]:
+                objects.append(NoteDetailObject(obj_data["key"],
+                                                obj_data["type"],
+                                                base64.b64decode(obj_data["value"])))
 
         return {"free_text": value["free_text"], "objects": objects}
