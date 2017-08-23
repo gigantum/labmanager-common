@@ -46,10 +46,10 @@ def _get_docker_server_api_version() -> str:
     content_lines = response_data.decode().split('\r\n')
 
     version_dict = json.loads(content_lines[-1])
-    if 'Api-Version' not in version_dict.keys():
-        raise ValueError('Api-Version not in Docker version config data')
+    if 'ApiVersion' not in version_dict.keys():
+        raise ValueError('ApiVersion not in Docker version config data')
     else:
-        return version_dict['Api-Version']
+        return version_dict['ApiVersion']
 
 
 def get_docker_client(check_server_version=True, fallback=True):
