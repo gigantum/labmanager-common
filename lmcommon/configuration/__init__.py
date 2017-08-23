@@ -25,13 +25,21 @@ import os
 import docker
 
 from .configuration import Configuration
+from lmcommon.logging import LMLogger
+
+
+logger = LMLogger.get_logger()
 
 
 def _get_docker_server_api_version() -> str:
     """Retrieve the Docker server API version. """
 
+    socket_path = '/var/run/docker.sock'
+    if not os.path.exists(socket_path):
+        raise ValueError('No docker.sock on machine (is a Docker server installed?)')
+
     socket_connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    socket_connection.connect('/var/run/docker.sock')
+    socket_connection.connect(socket_path)
     socket_connection.send(b'GET http://*/version HTTP/1.1\r\nHost: *\r\n\r\n')
 
     response_data = socket_connection.recv(4000)
@@ -44,10 +52,18 @@ def _get_docker_server_api_version() -> str:
         raise ValueError('Docker API Client version not in response')
 
 
-def get_docker_client(check_server_version=True):
+def get_docker_client(check_server_version=True, fallback=True):
     """Return a docker client with proper version to match server API. """
+
     if check_server_version:
-        docker_server_api_version = _get_docker_server_api_version()
-        return docker.from_env(version=docker_server_api_version)
+        try:
+            docker_server_api_version = _get_docker_server_api_version()
+            return docker.from_env(version=docker_server_api_version)
+        except ValueError as e:
+            if fallback:
+                return docker.from_env()
+            else:
+                logger.error()
+                raise e
     else:
         return docker.from_env()
