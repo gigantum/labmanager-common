@@ -3,3 +3,4 @@ pyyaml
 GitPython
 plyvel
 docker==2.4.2
+requests-unixsocket==0.1.5
