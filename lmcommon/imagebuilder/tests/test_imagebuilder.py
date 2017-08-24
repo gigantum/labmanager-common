@@ -35,6 +35,7 @@ import git
 from lmcommon.imagebuilder import ImageBuilder
 from lmcommon.environment import ComponentManager, RepositoryManager
 from lmcommon.labbook import LabBook
+from lmcommon.configuration import get_docker_client
 
 @pytest.fixture()
 def mock_config_file():
@@ -217,7 +218,7 @@ class TestImageBuilder(object):
 
         ib = ImageBuilder(lb.root_dir)
         unit_test_tag = "unit-test-please-delete"
-        client = docker.from_env()
+        client = get_docker_client()
 
         if getpass.getuser() != 'circleci':
             # NOTE: DO NOT run these following lines on CircleCI
@@ -247,7 +248,7 @@ class TestImageBuilder(object):
 
         ib = ImageBuilder(lb.root_dir)
         unit_test_tag = "unit-test-please-delete"
-        client = docker.from_env()
+        client = get_docker_client()
 
         # Build image once
         ib.build_image(docker_client=client, image_tag=unit_test_tag)
