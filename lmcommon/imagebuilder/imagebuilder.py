@@ -28,6 +28,7 @@ from docker.errors import NotFound
 
 
 from lmcommon.environment.componentmanager import ComponentManager
+from lmcommon.dispatcher import Dispatcher, jobs
 from lmcommon.labbook import LabBook
 from lmcommon.notes import NoteLogLevel, NoteStore
 from lmcommon.logging import LMLogger
@@ -257,7 +258,7 @@ class ImageBuilder(object):
 
         return os.linesep.join(docker_lines)
 
-    def build_image(self, docker_client, image_tag: str, assemble: bool=True, nocache: bool=False):
+    def build_image(self, docker_client, image_tag: str, assemble: bool=True, nocache: bool=False, background=False):
         """Build docker image according to the Dockerfile just assembled.
 
         Args:
@@ -265,9 +266,11 @@ class ImageBuilder(object):
             image_tag(str): Tag of docker image
             assemble(bool): Re-assemble the docker file using assemble_dockerfile if True
             nocache(bool): Don't user the Docker cache if True
+            background(bool): Run the task in the background using the dispatcher.
 
         Returns:
-            docker image
+            dict: Contains the following keys, 'background_job_key' and 'docker_image_id', depending
+                  if run in the background or foreground, respectively.
         """
         # Make sure image isn't running in container currently. If so, stop it.
         try:
@@ -290,19 +293,32 @@ class ImageBuilder(object):
         if assemble:
             self.assemble_dockerfile(write=True)
 
-        docker_image = docker_client.images.build(path=env_dir, tag=image_tag, pull=True, nocache=nocache)
-        return docker_image
+        return_keys = {
+            'background_job_key': None,
+            'docker_image_id': None
+        }
 
-    def run_container(self, docker_client, docker_image_id, labbook: LabBook):
+        if background:
+            job_dispatcher = Dispatcher()
+            job_key = job_dispatcher.dispatch_task(jobs.build_docker_image, args=(env_dir, image_tag, True, nocache))
+            return_keys['background_job_key'] = job_key
+        else:
+            docker_image = docker_client.images.build(path=env_dir, tag=image_tag, pull=True, nocache=nocache)
+            return_keys['docker_image_id'] = docker_image.id
+
+        return return_keys
+
+    def run_container(self, docker_client, docker_image_id, labbook: LabBook, background=False):
         """Launch docker container from image that was just (re-)built.
 
         Args:
             docker_client(docker.client): Docker context
             docker_image_id(str): Docker image to be launched.
             labbook(LabBook): Labbook context.
+            background(bool): Run the task in the background using the dispatcher
 
         Returns:
-            Container id (str)
+            dict: Sets keys 'background_job_key' or 'docker_container_id' if background is True, respectively.
         """
 
         if not docker_image_id:
@@ -335,14 +351,37 @@ class ImageBuilder(object):
             "Running container id {} -- ports {} -- volumes {}".format(docker_image_id, ', '.join(exposed_ports.keys()),
                                                                        ', '.join(volumes_dict.keys())))
 
-        container = docker_client.containers.run(docker_image_id,
-                                                 detach=True,
-                                                 init=True,
-                                                 name=docker_image_id,
-                                                 ports=exposed_ports,
-                                                 volumes=volumes_dict)
+        return_keys = {
+            'background_job_key': None,
+            'docker_container_id': None
+        }
 
-        return container
+        if background:
+            job_dispatcher = Dispatcher()
+            key = job_dispatcher.dispatch_task(jobs.start_docker_container, args=(docker_image_id,), kwargs={
+                'detach': True,
+                'init': True,
+                'name': docker_image_id,
+                'ports': exposed_ports,
+                'volumes': volumes_dict
+            })
+            return_keys['background_job_key'] = key
+        else:
+            if float(docker_client.version()['ApiVersion']) < 1.25:
+                container = docker_client.containers.run(docker_image_id,
+                                                         detach=True,
+                                                         name=docker_image_id,
+                                                         ports=exposed_ports,
+                                                         volumes=volumes_dict)
+            else:
+                container = docker_client.containers.run(docker_image_id,
+                                                         detach=True,
+                                                         init=True,
+                                                         name=docker_image_id,
+                                                         ports=exposed_ports,
+                                                         volumes=volumes_dict)
+            return_keys['docker_container_id'] = container.id
+        return return_keys
 
 if __name__ == '__main__':
     """Helper utility to run imagebuilder from the command line. """

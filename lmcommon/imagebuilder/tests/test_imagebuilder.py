@@ -222,8 +222,8 @@ class TestImageBuilder(object):
 
         if getpass.getuser() != 'circleci':
             # NOTE: DO NOT run these following lines on CircleCI
-            docker_image = ib.build_image(docker_client=client, image_tag=unit_test_tag, nocache=True)
-            client.images.remove(docker_image.id, force=True, noprune=False)
+            docker_image_id = ib.build_image(docker_client=client, image_tag=unit_test_tag, nocache=True)['docker_image_id']
+            client.images.remove(docker_image_id, force=True, noprune=False)
 
     @pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Cannot build images on CircleCI")
     def test_rebuild_docker_image(self, mock_config_file):
@@ -257,7 +257,7 @@ class TestImageBuilder(object):
         docker_container = client.containers.run(unit_test_tag, detach=True, name=unit_test_tag)
 
         # Try to build it again
-        docker_image = ib.build_image(docker_client=client, image_tag=unit_test_tag)
+        docker_image_id = ib.build_image(docker_client=client, image_tag=unit_test_tag)['docker_image_id']
 
         # Clean up
-        client.images.remove(docker_image.id, force=True, noprune=False)
+        client.images.remove(docker_image_id, force=True, noprune=False)
