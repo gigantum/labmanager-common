@@ -58,7 +58,7 @@ def build_docker_image(path, tag, pull, nocache) -> str:
         raise
 
 
-def start_docker_container(docker_image_id, exposed_ports, volumes_dict) -> str:
+def start_docker_container(docker_image_id, ports, volumes) -> str:
     """Return a dictionary of metadata pertaining to the given task's Redis key.
 
     Args:
@@ -94,16 +94,16 @@ def start_docker_container(docker_image_id, exposed_ports, volumes_dict) -> str:
             container = docker_client.containers.run(img,
                                                      detach=True,
                                                      name=docker_image_id,
-                                                     ports=exposed_ports,
-                                                     volumes=volumes_dict)
+                                                     ports=ports,
+                                                     volumes=volumes)
         else:
             docker_client.containers.prune()
             container = docker_client.containers.run(img,
                                                      detach=True,
                                                      init=True,
                                                      name=docker_image_id,
-                                                     ports=exposed_ports,
-                                                     volumes=volumes_dict)
+                                                     ports=ports,
+                                                     volumes=volumes)
         logger.info("Completed launch_docker_container in pid {}: {}".format(os.getpid(), str(container)))
         return str(container)
     except Exception as e:
