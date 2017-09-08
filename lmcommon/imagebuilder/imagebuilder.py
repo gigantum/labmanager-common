@@ -359,9 +359,6 @@ class ImageBuilder(object):
         if background:
             job_dispatcher = Dispatcher()
             key = job_dispatcher.dispatch_task(jobs.start_docker_container, args=(docker_image_id,), kwargs={
-                'detach': True,
-                'init': True,
-                'name': docker_image_id,
                 'ports': exposed_ports,
                 'volumes': volumes_dict
             })
