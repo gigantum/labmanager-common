@@ -276,8 +276,8 @@ class TestDispatcher(object):
 
         docker_kwargs = {
             'docker_image_id': "{}".format(unit_test_tag),
-            'exposed_ports': {},
-            'volumes_dict': {}
+            'ports': {},
+            'volumes': {}
         }
 
         ## Start the docker container, and then wait till it's done.
