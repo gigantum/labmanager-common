@@ -105,6 +105,18 @@ class Dispatcher(object):
 
         return decoded_dict
 
+    def unschedule_task(self, job_id:str):
+        """Cancel a scheduled task. Note, this does NOT cancel "dispatched" tasks, only ones created
+           via `schedule_task`.
+
+        Args:
+            job_id(str): ID of the task that was returned via `schedule_task`.
+
+        Returns:
+            None
+        """
+        pass
+
     def schedule_task(self, method_reference, args=(), kwargs={}, scheduled_time=None, repeat=0,
                       interval=None) -> str:
         """Schedule at task to run at a particular time in the future, and/or with certain recurrence.
