@@ -23,6 +23,8 @@ import json
 import time
 import shutil
 import pytest
+import datetime
+
 import multiprocessing
 import tempfile
 import uuid
@@ -322,7 +324,7 @@ class TestDispatcher(object):
 
         w.terminate()
 
-    def test_schedule(self, temporary_worker, mock_config_file):
+    def test_simple_scheduler(self, temporary_worker, mock_config_file):
         w, d = temporary_worker
 
         path = "/tmp/labmanager-unit-test-{}".format(os.getpid())
@@ -340,4 +342,23 @@ class TestDispatcher(object):
             raise e
         finally:
             pass
-            #os.remove(path)
+
+    def test_run_only_once(self, temporary_worker, mock_config_file):
+        w, d = temporary_worker
+
+        path = "/tmp/labmanager-unit-test-{}".format(os.getpid())
+        if os.path.exists(path):
+            os.remove(path)
+
+        future_t = datetime.datetime.utcnow() + datetime.timedelta(seconds=2)
+        jr = d.schedule_task(bg_jobs.test_incr, scheduled_time=future_t, args=(path,), repeat=0)
+
+        time.sleep(4)
+
+        try:
+            with open(path) as fp:
+                assert json.load(fp)['amt'] == 1
+        except Exception as e:
+            raise e
+        finally:
+            pass

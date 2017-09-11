@@ -61,7 +61,7 @@ class Dispatcher(object):
         failed = {}
         # Note - there might be a more clever one-liner to do this, but this is straightforward.
         for k in jobs.keys():
-            if jobs[k]['status'] == 'failed':
+            if jobs[k].get('status') == 'failed':
                 failed[k] = jobs[k]
 
         return failed
@@ -73,7 +73,7 @@ class Dispatcher(object):
         complete = {}
         # Note - there might be a more clever one-liner to do this, but this is straightforward.
         for k in jobs.keys():
-            if jobs[k]['status'] == 'finished':
+            if jobs[k].get('status') == 'finished':
                 complete[k] = jobs[k]
 
         return complete
@@ -156,10 +156,10 @@ class Dispatcher(object):
         if type(scheduled_time) not in (datetime.datetime, type(None)):
             raise ValueError("scheduled_time `{}` must be a Datetime object or None".format(scheduled_time))
 
-        if type(repeat) not in (int, type(None)) or repeat < 0:
+        if type(repeat) not in (int, type(None)) or (repeat and repeat < 0):
             raise ValueError('repeat `{}` must be a non-negative integer or None'.format(repeat))
 
-        if type(interval) not in (int, type(None)) or interval <= 0:
+        if type(interval) not in (int, type(None)) or (interval and interval <= 0):
             raise ValueError('interval `{}` ({}) must be a positive integer or None'.format(interval, type(interval)))
 
         job_ref = self._scheduler.schedule(scheduled_time=scheduled_time or datetime.datetime.utcnow(),
