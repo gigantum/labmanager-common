@@ -35,12 +35,11 @@ class Dispatcher(object):
     """
 
     DEFAULT_JOB_QUEUE = 'labmanager_jobs'
-    SCHEDULER_JOB_QUEUE = 'labmanager_scheduled'
 
-    def __init__(self, queue_name=DEFAULT_JOB_QUEUE, scheduled_queue_name=SCHEDULER_JOB_QUEUE):
+    def __init__(self, queue_name=DEFAULT_JOB_QUEUE):
         self._redis_conn = redis.Redis()
         self._job_queue = rq.Queue(queue_name, connection=self._redis_conn)
-        self._scheduler = rq_scheduler.Scheduler(connection=self._redis_conn)
+        self._scheduler = rq_scheduler.Scheduler(queue_name=queue_name, connection=self._redis_conn)
 
     @staticmethod
     def _is_job_in_registry(method_reference):
@@ -113,7 +112,7 @@ class Dispatcher(object):
             job_id(str): ID of the task that was returned via `schedule_task`.
 
         Returns:
-            bool: True if task scheduled succesfully, False if task not found.
+            bool: True if task scheduled successfully, False if task not found.
         """
 
         if not job_id:
@@ -158,12 +157,12 @@ class Dispatcher(object):
             raise ValueError("scheduled_time `{}` must be a Datetime object or None".format(scheduled_time))
 
         if type(repeat) not in (int, type(None)) or repeat < 0:
-            raise ValueError('repeat `{}` must be a non-negative integer or none'.format(repeat))
+            raise ValueError('repeat `{}` must be a non-negative integer or None'.format(repeat))
 
         if type(interval) not in (int, type(None)) or interval <= 0:
-            raise ValueError('interval `{}` must be a positive integer or none'.format(repeat))
+            raise ValueError('interval `{}` ({}) must be a positive integer or None'.format(interval, type(interval)))
 
-        job_ref = self._scheduler.schedule(scheduled_time=scheduled_time,
+        job_ref = self._scheduler.schedule(scheduled_time=scheduled_time or datetime.datetime.utcnow(),
                                            func=method_reference,
                                            args=args,
                                            kwargs=kwargs,

@@ -19,6 +19,7 @@
 # SOFTWARE.
 import getpass
 import threading
+import json
 import time
 import shutil
 import pytest
@@ -321,5 +322,22 @@ class TestDispatcher(object):
 
         w.terminate()
 
-    def test_schedule(self):
-        pass
+    def test_schedule(self, temporary_worker, mock_config_file):
+        w, d = temporary_worker
+
+        path = "/tmp/labmanager-unit-test-{}".format(os.getpid())
+        if os.path.exists(path):
+            os.remove(path)
+
+        d.schedule_task(bg_jobs.test_incr, args=(path,), repeat=3, interval=2)
+
+        time.sleep(8)
+
+        try:
+            with open(path) as fp:
+                assert json.load(fp)['amt'] == 3
+        except Exception as e:
+            raise e
+        finally:
+            pass
+            #os.remove(path)
