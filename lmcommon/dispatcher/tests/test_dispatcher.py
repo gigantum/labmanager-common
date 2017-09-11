@@ -27,6 +27,7 @@ import tempfile
 import uuid
 import os
 
+import rq_scheduler
 import rq
 
 from lmcommon.imagebuilder import ImageBuilder
@@ -319,3 +320,6 @@ class TestDispatcher(object):
         assert res.get('status') == 'finished'
 
         w.terminate()
+
+    def test_schedule(self):
+        pass

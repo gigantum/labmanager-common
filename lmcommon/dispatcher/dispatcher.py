@@ -105,7 +105,7 @@ class Dispatcher(object):
 
         return decoded_dict
 
-    def unschedule_task(self, job_id:str):
+    def unschedule_task(self, job_id: str) -> bool:
         """Cancel a scheduled task. Note, this does NOT cancel "dispatched" tasks, only ones created
            via `schedule_task`.
 
@@ -113,9 +113,26 @@ class Dispatcher(object):
             job_id(str): ID of the task that was returned via `schedule_task`.
 
         Returns:
-            None
+            bool: True if task scheduled succesfully, False if task not found.
         """
-        pass
+
+        if not job_id:
+            raise ValueError("job_id cannot be None or empty")
+
+        if type(job_id) == bytes:
+            raise ValueError("job_id must be a decoded str")
+
+        # Encode job_id as byes from regular string.
+        enc_job_id = job_id.encode()
+
+        if enc_job_id in self._scheduler:
+            logger.info("Job `{}` found in scheduler, cancelling".format(job_id))
+            self._scheduler.cancel(enc_job_id)
+            logger.info("Unscheduled job `{}`".format(job_id))
+            return True
+        else:
+            logger.warning("Job `{}` NOT FOUND in scheduler, nothing to cancel".format(job_id))
+            return False
 
     def schedule_task(self, method_reference, args=(), kwargs={}, scheduled_time=None, repeat=0,
                       interval=None) -> str:
@@ -135,7 +152,7 @@ class Dispatcher(object):
         # Only allowed and certified methods may be dispatched to the background.
         # These methods are in the jobs.py package.
         if not Dispatcher._is_job_in_registry(method_reference):
-            raise ValueError("Method {} not in available registry".format(method_reference.__name__))
+            raise ValueError("Method `{}` not in available registry".format(method_reference.__name__))
 
         if type(scheduled_time) not in (datetime.datetime, type(None)):
             raise ValueError("scheduled_time `{}` must be a Datetime object or None".format(scheduled_time))
