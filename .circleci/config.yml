@@ -27,6 +27,7 @@ jobs:
           name: Run unit and coverage tests
           command: |
             redis-server &
+            rqscheduler --interval=2 2> /dev/null &
             pytest --cov=lmcommon .
             coveralls
 
