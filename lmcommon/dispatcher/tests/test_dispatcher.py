@@ -401,6 +401,7 @@ class TestDispatcher(object):
         except Exception as e:
             raise e
         finally:
+            w.terminate()
             pass
 
     def test_unschedule_task(self, temporary_worker, mock_config_file):
@@ -421,3 +422,5 @@ class TestDispatcher(object):
         time.sleep(5)
 
         assert not os.path.exists(path=path)
+
+        w.terminate()
