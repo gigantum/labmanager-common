@@ -350,7 +350,7 @@ class TestDispatcher(object):
         if os.path.exists(path):
             os.remove(path)
 
-        future_t = datetime.datetime.utcnow() + datetime.timedelta(seconds=2)
+        future_t = datetime.datetime.utcnow() + datetime.timedelta(seconds=1)
         jr = d.schedule_task(bg_jobs.test_incr, scheduled_time=future_t, args=(path,), repeat=0)
 
         time.sleep(4)
@@ -362,3 +362,62 @@ class TestDispatcher(object):
             raise e
         finally:
             pass
+
+    def test_run_only_once(self, temporary_worker, mock_config_file):
+        w, d = temporary_worker
+
+        path = "/tmp/labmanager-unit-test-{}".format(os.getpid())
+        if os.path.exists(path):
+            os.remove(path)
+
+        future_t = datetime.datetime.utcnow() + datetime.timedelta(seconds=1)
+        jr = d.schedule_task(bg_jobs.test_incr, scheduled_time=future_t, args=(path,), repeat=0)
+
+        time.sleep(4)
+
+        try:
+            with open(path) as fp:
+                assert json.load(fp)['amt'] == 1
+        except Exception as e:
+            raise e
+        finally:
+            pass
+
+    def test_run_only_once(self, temporary_worker, mock_config_file):
+        w, d = temporary_worker
+
+        path = "/tmp/labmanager-unit-test-{}".format(os.getpid())
+        if os.path.exists(path):
+            os.remove(path)
+
+        future_t = datetime.datetime.utcnow() + datetime.timedelta(seconds=1)
+        jr = d.schedule_task(bg_jobs.test_incr, scheduled_time=future_t, args=(path,), repeat=0)
+
+        time.sleep(4)
+
+        try:
+            with open(path) as fp:
+                assert json.load(fp)['amt'] == 1
+        except Exception as e:
+            raise e
+        finally:
+            pass
+
+    def test_unschedule_task(self, temporary_worker, mock_config_file):
+        w, d = temporary_worker
+
+        path = "/tmp/labmanager-unit-test-{}".format(os.getpid())
+        if os.path.exists(path):
+            os.remove(path)
+
+        future_t = datetime.datetime.utcnow() + datetime.timedelta(seconds=5)
+        jr = d.schedule_task(bg_jobs.test_incr, scheduled_time=future_t, args=(path,), repeat=4, interval=1)
+
+        time.sleep(2)
+
+        n = d.unschedule_task(jr)
+        assert n, "Task should have been cancelled, instead it was not found."
+
+        time.sleep(5)
+
+        assert not os.path.exists(path=path)
