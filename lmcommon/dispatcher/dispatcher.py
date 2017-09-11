@@ -121,16 +121,16 @@ class Dispatcher(object):
         if type(job_id) == bytes:
             raise ValueError("job_id must be a decoded str")
 
-        # Encode job_id as byes from regular string.
-        enc_job_id = job_id.encode()
-
+        # Encode job_id as byes from regular string, strip off the "rq:job" prefix.
+        enc_job_id = job_id.split(':')[-1].encode()
+        
         if enc_job_id in self._scheduler:
-            logger.info("Job `{}` found in scheduler, cancelling".format(job_id))
+            logger.info("Job `{}` found in scheduler, cancelling".format(enc_job_id))
             self._scheduler.cancel(enc_job_id)
-            logger.info("Unscheduled job `{}`".format(job_id))
+            logger.info("Unscheduled job `{}`".format(enc_job_id))
             return True
         else:
-            logger.warning("Job `{}` NOT FOUND in scheduler, nothing to cancel".format(job_id))
+            logger.warning("Job `{}` NOT FOUND in scheduler, nothing to cancel".format(enc_job_id))
             return False
 
     def schedule_task(self, method_reference, args=(), kwargs={}, scheduled_time=None, repeat=0,
