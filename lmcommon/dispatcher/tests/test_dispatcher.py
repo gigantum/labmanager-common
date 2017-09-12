@@ -392,12 +392,13 @@ class TestDispatcher(object):
             os.remove(path)
 
         try:
-            future_t = None # i.e., start right now.
-            jr = d.schedule_task(bg_jobs.test_incr, scheduled_time=future_t, args=(path,), repeat=6, interval=1)
-            time.sleep(3.5)
+            future_t = None  # i.e., start right now.
+            jr = d.schedule_task(bg_jobs.test_incr, scheduled_time=future_t, args=(path,), repeat=6, interval=5)
+            time.sleep(8)
             n = d.unschedule_task(jr)
             assert n, "Task should have been cancelled, instead it was not found."
+            time.sleep(5)
             with open(path) as fp:
-                assert json.load(fp)['amt'] in [3, 4]
+                assert json.load(fp)['amt'] in [2]
         finally:
             w.terminate()
