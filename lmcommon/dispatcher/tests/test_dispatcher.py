@@ -325,6 +325,7 @@ class TestDispatcher(object):
         w.terminate()
 
     def test_simple_scheduler(self, temporary_worker, mock_config_file):
+        # Run a simple tasks that increments the integer contained in a file.
         w, d = temporary_worker
 
         path = "/tmp/labmanager-unit-test-{}".format(os.getpid())
@@ -344,46 +345,7 @@ class TestDispatcher(object):
             pass
 
     def test_run_only_once(self, temporary_worker, mock_config_file):
-        w, d = temporary_worker
-
-        path = "/tmp/labmanager-unit-test-{}".format(os.getpid())
-        if os.path.exists(path):
-            os.remove(path)
-
-        future_t = datetime.datetime.utcnow() + datetime.timedelta(seconds=1)
-        jr = d.schedule_task(bg_jobs.test_incr, scheduled_time=future_t, args=(path,), repeat=0)
-
-        time.sleep(4)
-
-        try:
-            with open(path) as fp:
-                assert json.load(fp)['amt'] == 1
-        except Exception as e:
-            raise e
-        finally:
-            pass
-
-    def test_run_only_once(self, temporary_worker, mock_config_file):
-        w, d = temporary_worker
-
-        path = "/tmp/labmanager-unit-test-{}".format(os.getpid())
-        if os.path.exists(path):
-            os.remove(path)
-
-        future_t = datetime.datetime.utcnow() + datetime.timedelta(seconds=1)
-        jr = d.schedule_task(bg_jobs.test_incr, scheduled_time=future_t, args=(path,), repeat=0)
-
-        time.sleep(4)
-
-        try:
-            with open(path) as fp:
-                assert json.load(fp)['amt'] == 1
-        except Exception as e:
-            raise e
-        finally:
-            pass
-
-    def test_run_only_once(self, temporary_worker, mock_config_file):
+        # Assert that this method only gets called once.
         w, d = temporary_worker
 
         path = "/tmp/labmanager-unit-test-{}".format(os.getpid())
@@ -411,16 +373,31 @@ class TestDispatcher(object):
         if os.path.exists(path):
             os.remove(path)
 
-        future_t = datetime.datetime.utcnow() + datetime.timedelta(seconds=5)
-        jr = d.schedule_task(bg_jobs.test_incr, scheduled_time=future_t, args=(path,), repeat=4, interval=1)
+        try:
+            future_t = datetime.datetime.utcnow() + datetime.timedelta(seconds=5)
+            jr = d.schedule_task(bg_jobs.test_incr, scheduled_time=future_t, args=(path,), repeat=4, interval=1)
+            time.sleep(2)
+            n = d.unschedule_task(jr)
+            assert n, "Task should have been cancelled, instead it was not found."
+            time.sleep(5)
+            assert not os.path.exists(path=path)
+        finally:
+            w.terminate()
 
-        time.sleep(2)
+    def test_unschedule_midway_through(self, temporary_worker, mock_config_file):
+        w, d = temporary_worker
 
-        n = d.unschedule_task(jr)
-        assert n, "Task should have been cancelled, instead it was not found."
+        path = "/tmp/labmanager-unit-test-{}".format(os.getpid())
+        if os.path.exists(path):
+            os.remove(path)
 
-        time.sleep(5)
-
-        assert not os.path.exists(path=path)
-
-        w.terminate()
+        try:
+            future_t = None # i.e., start right now.
+            jr = d.schedule_task(bg_jobs.test_incr, scheduled_time=future_t, args=(path,), repeat=6, interval=1)
+            time.sleep(3.5)
+            n = d.unschedule_task(jr)
+            assert n, "Task should have been cancelled, instead it was not found."
+            with open(path) as fp:
+                assert json.load(fp)['amt'] in [3, 4]
+        finally:
+            w.terminate()
