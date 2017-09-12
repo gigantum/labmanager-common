@@ -366,6 +366,24 @@ class TestDispatcher(object):
             w.terminate()
             pass
 
+    def test_schedule_with_repeat_is_zero(self, temporary_worker, mock_config_file):
+        # When repeat is zero, it should run only once.
+        w, d = temporary_worker
+
+        path = "/tmp/labmanager-unit-test-{}".format(os.getpid())
+        if os.path.exists(path):
+            os.remove(path)
+
+        try:
+            jr = d.schedule_task(bg_jobs.test_incr, args=(path,), repeat=0, interval=4)
+            time.sleep(6)
+            n = d.unschedule_task(jr)
+            time.sleep(5)
+            with open(path) as fp:
+                assert json.load(fp)['amt'] in [1], "When repeat=0, the task should run only once."
+        finally:
+            w.terminate()
+
     def test_unschedule_task(self, temporary_worker, mock_config_file):
         w, d = temporary_worker
 
