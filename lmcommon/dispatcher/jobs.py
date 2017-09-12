@@ -17,6 +17,7 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
+import json
 import time
 import sys
 import os
@@ -162,4 +163,28 @@ def test_sleep(n):
         return 0
     except Exception as e:
         logger.error("Error on test_sleep in pid {}: {}".format(os.getpid(), e))
+        raise
+
+
+def test_incr(path):
+    logger = LMLogger.get_logger()
+    logger.info("Starting test_incr({}) in pid {}".format(path, os.getpid()))
+
+    try:
+        amt = 1
+        if not os.path.exists(path):
+            logger.info("Creating {}".format(path))
+            with open(path, 'w') as fp:
+                json.dump({'amt': amt}, fp)
+        else:
+            logger.info("Loading {}".format(path))
+            with open(path, 'r') as fp:
+                amt_dict = json.load(fp)
+            logger.info("Amt = {}")
+            with open(path, 'w') as fp:
+                amt_dict['amt'] = amt_dict['amt'] + 1
+                json.dump(amt_dict, fp)
+            logger.info("Set amt = {} in {}".format(amt_dict['amt'], path))
+    except Exception as e:
+        logger.error("Error on test_incr in pid {}: {}".format(os.getpid(), e))
         raise

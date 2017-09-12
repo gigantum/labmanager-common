@@ -17,8 +17,10 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
+import datetime
 import pickle
 
+import rq_scheduler
 import redis
 import rq
 
@@ -37,6 +39,7 @@ class Dispatcher(object):
     def __init__(self, queue_name=DEFAULT_JOB_QUEUE):
         self._redis_conn = redis.Redis()
         self._job_queue = rq.Queue(queue_name, connection=self._redis_conn)
+        self._scheduler = rq_scheduler.Scheduler(queue_name=queue_name, connection=self._redis_conn)
 
     @staticmethod
     def _is_job_in_registry(method_reference):
@@ -58,7 +61,7 @@ class Dispatcher(object):
         failed = {}
         # Note - there might be a more clever one-liner to do this, but this is straightforward.
         for k in jobs.keys():
-            if jobs[k]['status'] == 'failed':
+            if jobs[k].get('status') == 'failed':
                 failed[k] = jobs[k]
 
         return failed
@@ -70,7 +73,7 @@ class Dispatcher(object):
         complete = {}
         # Note - there might be a more clever one-liner to do this, but this is straightforward.
         for k in jobs.keys():
-            if jobs[k]['status'] == 'finished':
+            if jobs[k].get('status') == 'finished':
                 complete[k] = jobs[k]
 
         return complete
@@ -101,8 +104,78 @@ class Dispatcher(object):
 
         return decoded_dict
 
+    def unschedule_task(self, job_id: str) -> bool:
+        """Cancel a scheduled task. Note, this does NOT cancel "dispatched" tasks, only ones created
+           via `schedule_task`.
+
+        Args:
+            job_id(str): ID of the task that was returned via `schedule_task`.
+
+        Returns:
+            bool: True if task scheduled successfully, False if task not found.
+        """
+
+        if not job_id:
+            raise ValueError("job_id cannot be None or empty")
+
+        if type(job_id) == bytes:
+            raise ValueError("job_id must be a decoded str")
+
+        # Encode job_id as byes from regular string, strip off the "rq:job" prefix.
+        enc_job_id = job_id.split(':')[-1].encode()
+        
+        if enc_job_id in self._scheduler:
+            logger.info("Job `{}` found in scheduler, cancelling".format(enc_job_id))
+            self._scheduler.cancel(enc_job_id)
+            logger.info("Unscheduled job `{}`".format(enc_job_id))
+            return True
+        else:
+            logger.warning("Job `{}` NOT FOUND in scheduler, nothing to cancel".format(enc_job_id))
+            return False
+
+    def schedule_task(self, method_reference, args=(), kwargs={}, scheduled_time=None, repeat=0,
+                      interval=None) -> str:
+        """Schedule at task to run at a particular time in the future, and/or with certain recurrence.
+
+        Args:
+            method_reference(Callable): The method in dispatcher.jobs to run
+            args(list): Arguments to method_reference
+            kwargs(dict): Keyword Argument to method_reference
+            scheduled_time(datetime.datetime): UTC timestamp of time to run this task, None indicates now
+            repeat(int): Number of times to re-run the task (None indicates repeat forever)
+            interval(int): Seconds between invocations of the task (None indicates no recurrence)
+
+        Returns:
+            str: unique key of dispatched task
+        """
+        # Only allowed and certified methods may be dispatched to the background.
+        # These methods are in the jobs.py package.
+        if not Dispatcher._is_job_in_registry(method_reference):
+            raise ValueError("Method `{}` not in available registry".format(method_reference.__name__))
+
+        if type(scheduled_time) not in (datetime.datetime, type(None)):
+            raise ValueError("scheduled_time `{}` must be a Datetime object or None".format(scheduled_time))
+
+        if type(repeat) not in (int, type(None)) or (repeat and repeat < 0):
+            raise ValueError('repeat `{}` must be a non-negative integer or None'.format(repeat))
+
+        if type(interval) not in (int, type(None)) or (interval and interval <= 0):
+            raise ValueError('interval `{}` ({}) must be a positive integer or None'.format(interval, type(interval)))
+
+        job_ref = self._scheduler.schedule(scheduled_time=scheduled_time or datetime.datetime.utcnow(),
+                                           func=method_reference,
+                                           args=args,
+                                           kwargs=kwargs,
+                                           interval=interval,
+                                           repeat=repeat)
+
+        logger.info("Scheduled job `{}`, job={}".format(method_reference.__name__, str(job_ref)))
+
+        # job_ref.key is in bytes.. should be decode()-ed to form a python string.
+        return job_ref.key.decode()
+
     def dispatch_task(self, method_reference, args=(), kwargs={}) -> str:
-        """Dispatch new task to run in background.
+        """Dispatch new task to run in background, which runs as soon as it can.
 
         Args:
             method_reference(Callable): The method in dispatcher.jobs to run
@@ -121,10 +194,10 @@ class Dispatcher(object):
         if not Dispatcher._is_job_in_registry(method_reference):
             raise ValueError("Method {} not in available registry".format(method_reference.__name__))
 
-        job = self._job_queue.enqueue(method_reference, args=args, kwargs=kwargs)
+        job_ref = self._job_queue.enqueue(method_reference, args=args, kwargs=kwargs)
         logger.info(
             "Dispatched job `{}` to queue '{}', job={}".format(method_reference.__name__, self._job_queue.name,
-                                                               str(job)))
+                                                               str(job_ref)))
 
         # job.key is in bytes.. should be decode()-ed to form a python string.
-        return job.key.decode()
+        return job_ref.key.decode()
