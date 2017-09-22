@@ -21,12 +21,16 @@ import json
 import time
 import sys
 import os
+import importlib
 
 from rq import get_current_job
 from docker.errors import NotFound
 
 from lmcommon.configuration import get_docker_client
 from lmcommon.logging import LMLogger
+
+from lmcommon.activity.monitors.devenv import DevEnvMonitorManager
+
 
 # PLEASE NOTE -- No global variables!
 #
@@ -60,13 +64,14 @@ def build_docker_image(path, tag, pull, nocache) -> str:
         raise
 
 
-def start_docker_container(docker_image_id, ports, volumes) -> str:
+def start_docker_container(docker_image_id, ports, volumes, environment) -> str:
     """Return a dictionary of metadata pertaining to the given task's Redis key.
 
     Args:
         docker_image_id(str): Name of docker image to launch into container
         ports(dict): Dictionary mapping of exposed ports - pass through to docker container run
         volumes(dict): Dictionary of mapped directories between guest and host -- pass through to docker run.
+        environment(list): List of environment variables - pass through to docker run
 
     Returns:
         Docker container desc
@@ -101,7 +106,8 @@ def start_docker_container(docker_image_id, ports, volumes) -> str:
                                                      detach=True,
                                                      name=docker_image_id,
                                                      ports=ports,
-                                                     volumes=volumes)
+                                                     volumes=volumes,
+                                                     environment=environment)
         else:
             docker_client.containers.prune()
             container = docker_client.containers.run(img,
@@ -109,7 +115,8 @@ def start_docker_container(docker_image_id, ports, volumes) -> str:
                                                      init=True,
                                                      name=docker_image_id,
                                                      ports=ports,
-                                                     volumes=volumes)
+                                                     volumes=volumes,
+                                                     environment=environment)
         logger.info("Completed launch_docker_container in pid {}: {}".format(os.getpid(), str(container)))
         return str(container)
     except Exception as e:
@@ -140,6 +147,61 @@ def stop_docker_container(image_tag):
     except Exception as e:
         logger.error("Error on stop_docker_container in pid {}: {}".format(os.getpid(), e))
         raise
+
+
+def run_dev_env_monitor(dev_env_name, key):
+    """Run method to check if new Activity Monitors for a given dev env need to be started/stopped
+
+        Args:
+            dev_env_name(str): Name of the dev env to monitor
+            key(str): The unique string used as the key in redis to track this DevEnvMonitor instance
+
+    Returns:
+        0 to indicate no failure
+    """
+
+    logger = LMLogger.get_logger()
+    logger.debug("Checking Dev Env `{}` for activity monitors in PID {}".format(dev_env_name, os.getpid()))
+
+    try:
+        demm = DevEnvMonitorManager()
+        dev_env = demm.get_monitor_instance(dev_env_name)
+        dev_env.run(key)
+        return 0
+    except Exception as e:
+        logger.error("Error on run_dev_env_monitor in pid {}: {}".format(os.getpid(), e))
+        raise e
+
+
+def start_and_run_activity_monitor(module_name, class_name, user, owner, labbook_name, monitor_key, session_metadata):
+    """Run method to run the activity monitor. It is a long running job.
+
+        Args:
+            dev_env_name(str): Name of the dev env to monitor
+            key(str): The unique string used as the key in redis to track this DevEnvMonitor instance
+
+    Returns:
+        0 to indicate no failure
+    """
+    logger = LMLogger.get_logger()
+    logger.info("Starting Activity Monitor `{}` in PID {}".format(class_name, os.getpid()))
+
+    try:
+        # Import the monitor class
+        m = importlib.import_module(module_name)
+        # get the class
+        monitor_cls = getattr(m, class_name)
+
+        # Instantiate monitor class
+        monitor = monitor_cls(user, owner, labbook_name, monitor_key)
+
+        # Start the monitor
+        monitor.start(session_metadata)
+
+        return 0
+    except Exception as e:
+        logger.error("Error on start_and_run_activity_monitor in pid {}: {}".format(os.getpid(), e))
+        raise e
 
 
 def index_labbook_filesystem():

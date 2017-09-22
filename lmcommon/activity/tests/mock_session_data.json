@@ -1,0 +1,49 @@
+[
+    {
+        "id": "c8de93df-607e-4eb1-bb37-4034a854674c",
+        "path": "Untitled2.ipynb",
+        "name": "Untitled2.ipynb",
+        "type": "notebook",
+        "kernel": {
+            "id": "6e529520-2a6d-4adb-a2a1-de10b85b86a6",
+            "name": "python3",
+            "last_activity": "2017-09-11T15:07:37.865780Z",
+            "execution_state": "idle",
+            "connections": 1
+        },
+        "notebook": {
+            "path": "Untitled2.ipynb",
+            "name": "Untitled2.ipynb"
+        }
+    },
+    {
+        "id": "47935283-43a2-4548-83bc-67dfbbb5adc0",
+        "path": "code/Untitled.ipynb",
+        "name": "Untitled.ipynb",
+        "type": "notebook",
+        "kernel": {
+            "id": "146444cd-b4ec-4c00-b29c-d8cef4a503b0",
+            "name": "python3",
+            "last_activity": "2017-09-11T15:07:59.263973Z",
+            "execution_state": "idle",
+            "connections": 1
+        },
+        "notebook": {
+            "path": "code/Untitled.ipynb",
+            "name": "Untitled.ipynb"
+        }
+    },
+    {
+        "id": "7e7cb1e7-1099-4f50-8ddd-9ccb2c0fdb85",
+        "path": "/console-1-10ea1f16a7b2325e6a1673f562592091",
+        "name": "Console 1",
+        "type": "console",
+        "kernel": {
+            "id": "b3dde7e5-a4bc-46e0-9b6f-dd2e9765ecc8",
+            "name": "python3",
+            "last_activity": "2017-09-11T15:10:52.687054Z",
+            "execution_state": "idle",
+            "connections": 1
+        }
+    }
+]

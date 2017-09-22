@@ -5,4 +5,13 @@ plyvel
 docker==2.5.1
 redis==2.10.6
 rq==0.8.1
+jupyter==1.0.0
+hiredis==0.2.0
+requests==2.18.3
 rq-scheduler==0.7.0
+
+# Testing support
+mockredispy==2.9.3
+pytest-mock==1.6.2
+responses==0.7.0
+pytest-responses==0.2.0
