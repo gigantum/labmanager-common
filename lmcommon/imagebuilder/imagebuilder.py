@@ -20,12 +20,12 @@
 
 import datetime
 import functools
-import typing
 import yaml
 import os
 import re
-from docker.errors import NotFound
 
+from docker.errors import NotFound
+from typing import (Any, Dict, List, Union)
 
 from lmcommon.environment.componentmanager import ComponentManager
 from lmcommon.dispatcher import Dispatcher, jobs
@@ -72,7 +72,7 @@ class ImageBuilder(object):
             if not os.path.exists(os.path.join(self.labbook_directory, *subdir)):
                 raise ValueError("Labbook directory missing subdir `{}'".format(subdir))
 
-    def _import_baseimage_fields(self) -> typing.Dict[str, typing.Any]:
+    def _import_baseimage_fields(self) -> Dict[str, Any]:
         """Load fields from base_image yaml file into a convenient dict. """
         root_dir = os.path.join(self.labbook_directory, '.gigantum', 'env', 'base_image')
         base_images = [os.path.join(root_dir, f) for f in os.listdir(root_dir)
@@ -87,7 +87,7 @@ class ImageBuilder(object):
 
         return fields
 
-    def _load_baseimage(self) -> typing.List[str]:
+    def _load_baseimage(self) -> List[str]:
         """Search expected directory structure to find the base image. Only one should exist. """
 
         fields = self._import_baseimage_fields()
@@ -96,7 +96,7 @@ class ImageBuilder(object):
         docker_repo = fields['image']['repo']
         docker_tag = fields['image']['tag']
 
-        docker_lines: typing.List[str] = []
+        docker_lines: List[str] = []
         docker_lines.append("# Dockerfile generated on {}".format(generation_ts))
         docker_lines.append("# Name: {}".format(fields["info"]["human_name"]))
         docker_lines.append("# Description: {}".format(fields["info"]["description"]))
@@ -107,7 +107,7 @@ class ImageBuilder(object):
 
         return docker_lines
 
-    def _load_devenv(self) -> typing.List[str]:
+    def _load_devenv(self) -> List[str]:
         """Load dev environments from yaml file in expected location. """
 
         root_dir = os.path.join(self.labbook_directory, '.gigantum', 'env', 'dev_env')
@@ -134,7 +134,7 @@ class ImageBuilder(object):
 
         return docker_lines
 
-    def _load_custom(self) -> typing.List[str]:
+    def _load_custom(self) -> List[str]:
         """Load custom dependencies, specifically the docker snippet"""
 
         root_dir = os.path.join(self.labbook_directory, '.gigantum', 'env', 'custom')
@@ -151,7 +151,7 @@ class ImageBuilder(object):
 
         return docker_lines
 
-    def _load_packages(self) -> typing.List[str]:
+    def _load_packages(self) -> List[str]:
         """Load packages from yaml files in expected location in directory tree. """
         """ Contents of docker setup that must be at end of Dockerfile. """
         fields = self._import_baseimage_fields()
@@ -173,7 +173,7 @@ class ImageBuilder(object):
 
         return docker_lines
 
-    def _post_image_hook(self) -> typing.List[str]:
+    def _post_image_hook(self) -> List[str]:
         """Contents that must be after baseimages but before development environments. """
         docker_lines = ["# Post-image creation hooks"]
         docker_lines.append('RUN apt-get -y install supervisor curl gosu')
@@ -293,14 +293,19 @@ class ImageBuilder(object):
         if assemble:
             self.assemble_dockerfile(write=True)
 
-        return_keys = {
+        return_keys: Dict[str, Union[str, Any]] = {
             'background_job_key': None,
             'docker_image_id': None
         }
 
         if background:
             job_dispatcher = Dispatcher()
-            job_key = job_dispatcher.dispatch_task(jobs.build_docker_image, args=(env_dir, image_tag, True, nocache))
+            # FIXME -- Labbook owner and user should be properly loaded and not be "default"
+            job_metadata = {
+                'labbook': "{}-{}-{}".format("default", "default", self.labbook_directory.split('/')[-1]),
+                'method': 'build_image'}
+            job_key = job_dispatcher.dispatch_task(jobs.build_docker_image, args=(env_dir, image_tag, True, nocache),
+                                                   metadata=job_metadata)
             return_keys['background_job_key'] = job_key
         else:
             docker_image = docker_client.images.build(path=env_dir, tag=image_tag, pull=True, nocache=nocache)
@@ -351,19 +356,30 @@ class ImageBuilder(object):
             "Running container id {} -- ports {} -- volumes {}".format(docker_image_id, ', '.join(exposed_ports.keys()),
                                                                        ', '.join(volumes_dict.keys())))
 
-        return_keys = {
+        return_keys: Dict[str, Union[Any, str]] = {
             'background_job_key': None,
             'docker_container_id': None
         }
 
         if background:
+            logger.info("Launching container in background for container {}".format(docker_image_id))
             job_dispatcher = Dispatcher()
-            key = job_dispatcher.dispatch_task(jobs.start_docker_container, args=(docker_image_id,), kwargs={
-                'ports': exposed_ports,
-                'volumes': volumes_dict
-            })
+            # FIXME XXX TODO -- Note that labbook.user throws an excpetion, so putting in labbook.owner for now
+            job_metadata = {'labbook': '{}-{}-{}'.format(labbook.owner, labbook.owner, labbook.name),
+                            'method': 'run_container'}
+
+            try:
+                key = job_dispatcher.dispatch_task(jobs.start_docker_container,
+                                                   args=(docker_image_id, exposed_ports, volumes_dict),
+                                                   metadata=job_metadata)
+            except Exception as e:
+                logger.exception(e, exc_info=True)
+                raise
+
+            logger.info("Background job key for run_container: {}".format(key))
             return_keys['background_job_key'] = key
         else:
+            logger.info("Launching container in-process for container {}".format(docker_image_id))
             if float(docker_client.version()['ApiVersion']) < 1.25:
                 container = docker_client.containers.run(docker_image_id,
                                                          detach=True,
@@ -379,6 +395,7 @@ class ImageBuilder(object):
                                                          volumes=volumes_dict)
             return_keys['docker_container_id'] = container.id
         return return_keys
+
 
 if __name__ == '__main__':
     """Helper utility to run imagebuilder from the command line. """

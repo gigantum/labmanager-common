@@ -22,6 +22,7 @@ import time
 import sys
 import os
 
+from rq import get_current_job
 from docker.errors import NotFound
 
 from lmcommon.configuration import get_docker_client
@@ -64,15 +65,19 @@ def start_docker_container(docker_image_id, ports, volumes) -> str:
 
     Args:
         docker_image_id(str): Name of docker image to launch into container
-        exposed_ports(dict): Dictionary mapping of exposed ports - pass through to docker container run
-        volumes_dict(bool): Dictionary of mapped directories between guest and host -- pass through to docker run.
+        ports(dict): Dictionary mapping of exposed ports - pass through to docker container run
+        volumes(dict): Dictionary of mapped directories between guest and host -- pass through to docker run.
 
     Returns:
         Docker container desc
     """
 
     logger = LMLogger.get_logger()
-    logger.info("Starting launch_docker_image({}) in pid {}".format(docker_image_id, os.getpid()))
+    logger.info(
+        "Starting launch_docker_image(docker_image_id={}, ports={}, volumes={}) in pid {}".format(docker_image_id,
+                                                                                                  str(ports),
+                                                                                                  str(volumes),
+                                                                                                  os.getpid()))
 
     try:
         docker_client = get_docker_client()

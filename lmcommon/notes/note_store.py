@@ -63,7 +63,7 @@ class NoteRecordEncoder(json.JSONEncoder):
 
 class NoteDetailObject(object):
     """A class to represent note detail objects that can be stored in a note entry"""
-    def __init__(self, key: str, blob_type: str, value: bytes):
+    def __init__(self, key: str, blob_type: str, value: bytes) -> None:
         """Constructor
 
         Args:
@@ -129,7 +129,7 @@ class NoteStore(object):
     The linked commit is the commit hash of the original commit that contained the changes made to the repository.
     """
 
-    def __init__(self, labbook: LabBook):
+    def __init__(self, labbook: LabBook) -> None:
         """ Load the database for the specified labbook
 
         Args:

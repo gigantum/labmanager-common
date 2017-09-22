@@ -18,7 +18,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 import datetime
-import pickle
+from typing import (Any, Callable, Dict, List, Tuple)
 
 import rq_scheduler
 import redis
@@ -36,26 +36,29 @@ class Dispatcher(object):
 
     DEFAULT_JOB_QUEUE = 'labmanager_jobs'
 
-    def __init__(self, queue_name=DEFAULT_JOB_QUEUE):
+    def __init__(self, queue_name=DEFAULT_JOB_QUEUE) -> None:
         self._redis_conn = redis.Redis()
         self._job_queue = rq.Queue(queue_name, connection=self._redis_conn)
         self._scheduler = rq_scheduler.Scheduler(queue_name=queue_name, connection=self._redis_conn)
 
+    def __str__(self) -> str:
+        return "<Dispatcher: {}>".format(self._job_queue)
+
     @staticmethod
-    def _is_job_in_registry(method_reference):
+    def _is_job_in_registry(method_reference: Callable) -> bool:
         """Return True if `method_reference` in the set of acceptable background jobs. """
         job_list = [getattr(lmcommon.dispatcher.jobs, n) for n in dir(lmcommon.dispatcher.jobs)]
         return any([method_reference == n for n in job_list])
 
     @property
-    def all_jobs(self):
+    def all_jobs(self) -> Dict[str, Any]:
         """Return a list of dicts containing information about all jobs in the backend. """
         redis_keys = self._redis_conn.keys("rq:job:*")
 
         return {q.decode(): self.query_task(q) for q in redis_keys}
 
     @property
-    def failed_jobs(self):
+    def failed_jobs(self) -> Dict[str, str]:
         """Return all explicity-failed jobs. """
         jobs = self.all_jobs
         failed = {}
@@ -67,7 +70,7 @@ class Dispatcher(object):
         return failed
 
     @property
-    def completed_jobs(self):
+    def completed_jobs(self) -> Dict[str, Any]:
         """Return a list of all jobs that are considered "complete" (i.e., no error). """
         jobs = self.all_jobs
         complete = {}
@@ -78,7 +81,15 @@ class Dispatcher(object):
 
         return complete
 
-    def query_task(self, key) -> dict:
+    def get_jobs_for_labbook(self, labbook_key: str) -> List[str]:
+        """Return all background job keys pertaining to the given labbook, as indexed by its root_directory. """
+        def is_match(j):
+            job_s = self.query_task(j)
+            return job_s.get('meta') and job_s['meta'].get('labbook') == labbook_key
+
+        return [job for job in self.all_jobs if is_match(job)]
+
+    def query_task(self, key) -> Dict[str, str]:
         """Return a dictionary of metadata pertaining to the given task's Redis key.
 
         Args:
@@ -133,8 +144,8 @@ class Dispatcher(object):
             logger.warning("Job `{}` NOT FOUND in scheduler, nothing to cancel".format(enc_job_id))
             return False
 
-    def schedule_task(self, method_reference, args=(), kwargs={}, scheduled_time=None, repeat=0,
-                      interval=None) -> str:
+    def schedule_task(self, method_reference: Callable, args: Tuple[Any] = None, kwargs: Dict[str, Any] = None,
+                      scheduled_time=None, repeat=0, interval=None) -> str:
         """Schedule at task to run at a particular time in the future, and/or with certain recurrence.
 
         Args:
@@ -162,6 +173,12 @@ class Dispatcher(object):
         if type(interval) not in (int, type(None)) or (interval and interval <= 0):
             raise ValueError('interval `{}` ({}) must be a positive integer or None'.format(interval, type(interval)))
 
+        if not args:
+            args = ()
+
+        if not kwargs:
+            kwargs = {}
+
         job_ref = self._scheduler.schedule(scheduled_time=scheduled_time or datetime.datetime.utcnow(),
                                            func=method_reference,
                                            args=args,
@@ -174,13 +191,16 @@ class Dispatcher(object):
         # job_ref.key is in bytes.. should be decode()-ed to form a python string.
         return job_ref.key.decode()
 
-    def dispatch_task(self, method_reference, args=(), kwargs={}) -> str:
+    def dispatch_task(self, method_reference: Callable, args: Tuple[Any, ...] = None, kwargs: Dict[str, Any] = None,
+                      metadata: Dict[str, Any] = None, persist: bool = False) -> str:
         """Dispatch new task to run in background, which runs as soon as it can.
 
         Args:
             method_reference(Callable): The method in dispatcher.jobs to run
             args(list): Arguments to method_reference
             kwargs(dict): Keyword Argument to method_reference
+            metadata(dict): Optional dict of metadata
+            persist(bool): Never timeout if True, otherwise abort after 5 minutes.
 
         Returns:
             str: unique key of dispatched task
@@ -194,7 +214,32 @@ class Dispatcher(object):
         if not Dispatcher._is_job_in_registry(method_reference):
             raise ValueError("Method {} not in available registry".format(method_reference.__name__))
 
-        job_ref = self._job_queue.enqueue(method_reference, args=args, kwargs=kwargs)
+        if not args:
+            args = ()
+
+        if not kwargs:
+            kwargs = {}
+
+        if not metadata:
+            metadata = {}
+
+        if persist:
+            # Currently, one month.
+            timeout = '730h'
+        else:
+            timeout = '10m'
+
+        logger.info(
+            f"Dispatching {'persistent' if persist else 'ephemeral'} task `{method_reference.__name__}` to queue")
+
+        try:
+            job_ref = self._job_queue.enqueue(method_reference, args=args, kwargs=kwargs, timeout=timeout)
+        except Exception as e:
+            logger.error("Cannot enqueue job `{}`: {}".format(method_reference.__name__, e))
+            raise
+
+        job_ref.meta = metadata
+        job_ref.save_meta()
         logger.info(
             "Dispatched job `{}` to queue '{}', job={}".format(method_reference.__name__, self._job_queue.name,
                                                                str(job_ref)))

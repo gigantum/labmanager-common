@@ -47,7 +47,7 @@ class RepositoryManager(object):
     """Class to manage local copies of Environment Component Repositories
     """
 
-    def __init__(self, config_file: str=None):
+    def __init__(self, config_file: str=None) -> None:
         """Constructor
 
         Args:

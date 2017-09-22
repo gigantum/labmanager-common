@@ -249,14 +249,20 @@ class TestDispatcher(object):
 
         client = get_docker_client()
         img_list = client.images.list()
-        import pprint; pprint.pprint(img_list)
 
         try:
             client.images.remove("{}".format(unit_test_tag))
         except:
             pass
 
-        job_ref = d.dispatch_task(bg_jobs.build_docker_image, kwargs=docker_kwargs)
+        m = {'method': 'build_image',
+             'labbook': 'test-test-catbook-test-dockerbuild'}
+
+        job_ref = d.dispatch_task(bg_jobs.build_docker_image, kwargs=docker_kwargs, metadata=m)
+
+        j = d.query_task(job_ref)
+        assert 'meta' in j.keys()
+        assert j.get('meta').get('labbook') == 'test-test-catbook-test-dockerbuild'
 
         elapsed_time = 0
         while True:
