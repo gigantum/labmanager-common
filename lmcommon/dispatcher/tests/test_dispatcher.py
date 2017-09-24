@@ -280,6 +280,7 @@ class TestDispatcher(object):
 
         res = d.query_task(job_ref)
         assert res
+        print(res.get('status'))
         assert res.get('status') == 'finished'
 
         ## Finish building image
@@ -287,7 +288,8 @@ class TestDispatcher(object):
         docker_kwargs = {
             'docker_image_id': "{}".format(unit_test_tag),
             'ports': {},
-            'volumes': {}
+            'volumes': {},
+            'environment': {}
         }
 
         ## Start the docker container, and then wait till it's done.

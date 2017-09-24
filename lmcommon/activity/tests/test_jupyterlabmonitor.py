@@ -17,23 +17,21 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-import pytest
-#import responses
-from pytest_responses import responses
 import json
 from pkg_resources import resource_filename
 import os
-from lmcommon.activity.tests.fixtures import get_redis_client_mock, redis_client
+import requests
+from lmcommon.activity.tests.fixtures import get_redis_client_mock, redis_client, MockSessionsResponse
 
 from lmcommon.activity.monitors.monitor_jupyterlab import JupyterLabMonitor
 
 
 class TestJupyterLabMonitor(object):
 
-    def setup_responses(self, obj):
+    def mock_sessions_request(self):
         with open(os.path.join(resource_filename("lmcommon", "activity/tests"), "mock_session_data.json"), 'rt') as j:
             data = json.load(j)
-        obj.add(obj.GET, 'http://172.17.0.1:8888/api/sessions', json=data, status=200)
+        return data
 
     def test_supported_names(self, redis_client):
         """Test getting the supported names of the dev env monitor"""
@@ -42,9 +40,9 @@ class TestJupyterLabMonitor(object):
         assert len(monitor.get_dev_env_name()) == 1
         assert monitor.get_dev_env_name()[0] == 'jupyterlab-ubuntu1604'
 
-    def test_get_sessions(self, redis_client, responses):
+    def test_get_sessions(self, redis_client, monkeypatch):
         """Test getting the session information from jupyterlab"""
-        self.setup_responses(responses)
+        monkeypatch.setattr(requests, 'get', MockSessionsResponse)
         monitor = JupyterLabMonitor()
 
         sessions = monitor.get_sessions()
@@ -58,9 +56,9 @@ class TestJupyterLabMonitor(object):
         assert sessions['146444cd-b4ec-4c00-b29c-d8cef4a503b0']['kernel_type'] == 'notebook'
         assert sessions['146444cd-b4ec-4c00-b29c-d8cef4a503b0']['path'] == 'code/Untitled.ipynb'
 
-    def test_run(self, redis_client, responses):
+    def test_run(self, redis_client, monkeypatch):
         """Test running the monitor process"""
-        self.setup_responses(responses)
+        monkeypatch.setattr(requests, 'get', MockSessionsResponse)
         # TODO: Mock dispatch methods once added
         monitor = JupyterLabMonitor()
 

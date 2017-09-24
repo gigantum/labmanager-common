@@ -17,14 +17,7 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-import pytest
-#import responses
-from pytest_responses import responses
-import json
-from pkg_resources import resource_filename
-import os
 from lmcommon.activity.tests.fixtures import mock_labbook, redis_client, mock_kernel
-import jupyter_client
 import uuid
 
 from lmcommon.activity.monitors.monitor_jupyterlab import JupyterLabNotebookMonitor, BasicJupyterLabProcessor

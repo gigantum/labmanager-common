@@ -12,6 +12,3 @@ rq-scheduler==0.7.0
 
 # Testing support
 mockredispy==2.9.3
-pytest-mock==1.6.2
-responses==0.7.0
-pytest-responses==0.2.0

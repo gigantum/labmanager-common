@@ -27,6 +27,9 @@ import tempfile
 import uuid
 import shutil
 from jupyter_client.manager import start_new_kernel
+import json
+from pkg_resources import resource_filename
+
 
 REDIS_TEST_CLIENT = None
 
@@ -41,9 +44,9 @@ def get_redis_client_mock(db=1):
 
 
 @pytest.fixture()
-def redis_client(mocker):
+def redis_client(monkeypatch):
     """A pytest fixture to manage getting a redis client for test purposes"""
-    mocker.patch('redis.Redis', get_redis_client_mock)
+    monkeypatch.setattr(redis, 'Redis', get_redis_client_mock)
 
     redis_conn = redis.Redis(db=1)
 
@@ -92,3 +95,14 @@ def mock_kernel():
     yield kc, km
 
     km.shutdown_kernel(now=True)
+
+
+class MockSessionsResponse(object):
+    """A mock for the session query request call in monitor_juptyerlab.py"""
+    def __init__(self, url):
+        self.status_code = 200
+
+    def json(self):
+        with open(os.path.join(resource_filename("lmcommon", "activity/tests"), "mock_session_data.json"), 'rt') as j:
+            data = json.load(j)
+        return data
