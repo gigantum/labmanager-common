@@ -129,8 +129,9 @@ def stop_dev_env_monitors(dev_env_key: str, redis_conn: redis.Redis, labbook_nam
     # Unschedule dev env monitor
     d = Dispatcher()
     process_id = redis_conn.hget(dev_env_key, "process_id")
-    d.unschedule_task(process_id)
-
+    logger.info("Dev env process id to stop: `{}` ".format(process_id))
+    d.unschedule_task(process_id.decode())
+    
     _, dev_env_name = dev_env_key.rsplit(":", 1)
     logger.info("Stopped dev env monitor `{}` for lab book `{}`. PID {}".format(dev_env_name, labbook_name,
                                                                                 process_id))
@@ -155,10 +156,11 @@ def stop_labbook_monitor(labbook: LabBook, database=1) -> None:
     dev_envs = cm.get_component_list('dev_env')
 
     for de in dev_envs:
-        dev_env_monitor_key = "dev_env_monitor:{}:{}:{}:{}".format(labbook.user,
-                                                                   labbook.owner,
+        # TODO: Fix username once auth implemented properly
+        dev_env_monitor_key = "dev_env_monitor:{}:{}:{}:{}".format("default",
+                                                                   labbook.owner['username'],
                                                                    labbook.name,
-                                                                   de['name'])
+                                                                   de['info']['name'])
 
         stop_dev_env_monitors(dev_env_monitor_key, redis_conn, labbook.name)
 
