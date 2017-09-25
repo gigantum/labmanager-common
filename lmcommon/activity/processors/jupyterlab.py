@@ -45,24 +45,28 @@ class BasicJupyterLabProcessor(ActivityProcessor):
             ActivityNote
         """
         # If there was some code, assume a cell was executed
-        if code["code"]:
-            result_obj.message = "Executed cell in notebook {}".format(metadata['path'])
+        if code:
+            if code["code"]:
+                result_obj.message = "Executed cell in notebook {}".format(metadata['path'])
 
-            # Lets just capture the first 512 characters of the output for now...smarter stuff coming in the future
-            if result:
-                if len(result['data']["text/plain"]) <= 512:
-                    result_obj.free_text = result['data']["text/plain"]
-                else:
-                    result_obj.free_text = result['data']["text/plain"][:512] + " ...\n\n <result truncated>"
+                # Lets just capture the first 512 characters of the output for now...smarter stuff coming in the future
+                if result:
+                    if len(result['data']["text/plain"]) <= 512:
+                        result_obj.free_text = result['data']["text/plain"]
+                    else:
+                        result_obj.free_text = result['data']["text/plain"][:512] + " ...\n\n <result truncated>"
 
-                if len(result['data']["text/plain"]) > 0:
-                    result_obj.log_level = NoteLogLevel.AUTO_MAJOR
+                    if len(result['data']["text/plain"]) > 0:
+                        result_obj.log_level = NoteLogLevel.AUTO_MAJOR
+                    else:
+                        result_obj.log_level = NoteLogLevel.AUTO_MINOR
                 else:
                     result_obj.log_level = NoteLogLevel.AUTO_MINOR
-            else:
-                result_obj.log_level = NoteLogLevel.AUTO_MINOR
 
-            return result_obj
+                return result_obj
+            else:
+                logger.info("Processed activity with no code executed")
+                raise StopProcessingException("No code executed. Nothing to process")
         else:
             logger.info("Processed activity with no code executed")
             raise StopProcessingException("No code executed. Nothing to process")

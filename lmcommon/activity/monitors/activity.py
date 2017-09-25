@@ -20,6 +20,7 @@
 import abc
 from lmcommon.logging import LMLogger
 from typing import (Any, Dict, List)
+import git
 
 from lmcommon.activity.processors.processor import ActivityNote
 from lmcommon.activity.processors.processor import ActivityProcessor
@@ -77,7 +78,12 @@ class ActivityMonitor(metaclass=abc.ABCMeta):
         Returns:
             str
         """
-        self.labbook.git.add(filename)
+        try:
+            self.labbook.git.add(filename)
+        except git.exc.GitCommandError:
+            # TODO: REMOVE WHEN POLLING FIXED possible polling got in the way. try again just in case.
+            self.labbook.git.add(filename)
+
         commit = self.labbook.git.commit("Auto-commit due to activity monitoring")
         return commit.hexsha
 
