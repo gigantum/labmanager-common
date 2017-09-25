@@ -65,13 +65,17 @@ def start_labbook_monitor(labbook: LabBook, database=1) -> None:
     # Clean up after Lab Books that have "closed" by checking if the container is running
     docker_client = get_docker_client()
     for key in dev_env_monitors:
+        if "activity_monitor" in key.decode():
+            # Ignore all associated activity monitors, as they'll get cleaned up with the dev env monitor
+            continue
+
         container_name = redis_conn.hget(key, 'container_name')
         try:
-            docker_client.containers.get(container_name)
+            docker_client.containers.get(container_name.decode())
         except NotFound:
             # Container isn't running, clean up
-            logger.warn("Shutting down zombie Activity Monitoring for {}.".format(key))
-            stop_dev_env_monitors(key, redis_conn, labbook.name)
+            logger.warn("Shutting down zombie Activity Monitoring for {}.".format(key.decode()))
+            stop_dev_env_monitors(key.decode(), redis_conn, labbook.name)
 
     # Check Lab Book for Development Environments
     cm = ComponentManager(labbook)
@@ -131,7 +135,7 @@ def stop_dev_env_monitors(dev_env_key: str, redis_conn: redis.Redis, labbook_nam
     process_id = redis_conn.hget(dev_env_key, "process_id")
     logger.info("Dev env process id to stop: `{}` ".format(process_id))
     d.unschedule_task(process_id.decode())
-    
+
     _, dev_env_name = dev_env_key.rsplit(":", 1)
     logger.info("Stopped dev env monitor `{}` for lab book `{}`. PID {}".format(dev_env_name, labbook_name,
                                                                                 process_id))
