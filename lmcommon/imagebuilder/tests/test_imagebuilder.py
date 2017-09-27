@@ -35,6 +35,7 @@ import git
 from lmcommon.imagebuilder import ImageBuilder
 from lmcommon.environment import ComponentManager, RepositoryManager
 from lmcommon.labbook import LabBook
+from lmcommon.configuration import get_docker_client
 
 @pytest.fixture()
 def mock_config_file():
@@ -217,12 +218,12 @@ class TestImageBuilder(object):
 
         ib = ImageBuilder(lb.root_dir)
         unit_test_tag = "unit-test-please-delete"
-        client = docker.from_env()
+        client = get_docker_client()
 
         if getpass.getuser() != 'circleci':
             # NOTE: DO NOT run these following lines on CircleCI
-            docker_image = ib.build_image(docker_client=client, image_tag=unit_test_tag, nocache=True)
-            client.images.remove(docker_image.id, force=True, noprune=False)
+            docker_image_id = ib.build_image(docker_client=client, image_tag=unit_test_tag, nocache=True)['docker_image_id']
+            client.images.remove(docker_image_id, force=True, noprune=False)
 
     @pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Cannot build images on CircleCI")
     def test_rebuild_docker_image(self, mock_config_file):
@@ -247,7 +248,7 @@ class TestImageBuilder(object):
 
         ib = ImageBuilder(lb.root_dir)
         unit_test_tag = "unit-test-please-delete"
-        client = docker.from_env()
+        client = get_docker_client()
 
         # Build image once
         ib.build_image(docker_client=client, image_tag=unit_test_tag)
@@ -256,7 +257,7 @@ class TestImageBuilder(object):
         docker_container = client.containers.run(unit_test_tag, detach=True, name=unit_test_tag)
 
         # Try to build it again
-        docker_image = ib.build_image(docker_client=client, image_tag=unit_test_tag)
+        docker_image_id = ib.build_image(docker_client=client, image_tag=unit_test_tag)['docker_image_id']
 
         # Clean up
-        client.images.remove(docker_image.id, force=True, noprune=False)
+        client.images.remove(docker_image_id, force=True, noprune=False)

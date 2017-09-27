@@ -25,9 +25,10 @@ import yaml
 
 from lmcommon.gitlib import get_git_interface, GitAuthor
 from lmcommon.configuration import Configuration
-
+from lmcommon.logging import LMLogger
 
 GIT_IGNORE_DEFAULT = """.DS_Store"""
+logger = LMLogger.get_logger()
 
 
 class LabBook(object):
@@ -196,7 +197,10 @@ class LabBook(object):
             raise ValueError("You must provide owner details when creating a LabBook.")
 
         if not username:
+            logger.warning("Using owner username `{}` when making new labbook".format(owner['username']))
             username = owner["username"]
+
+        logger.info("Creating new labbook on disk for {}/{}/{} ...".format(username, owner, name))
 
         # Build data file contents
         self._data = {"labbook": {"id": uuid.uuid4().hex,
@@ -232,6 +236,9 @@ class LabBook(object):
 
         # Create LabBook subdirectory
         new_root_dir = os.path.join(owner_dir, name)
+
+        logger.info("Making labbook directory in {}".format(new_root_dir))
+
         os.makedirs(new_root_dir)
         self._set_root_dir(new_root_dir)
 
@@ -279,6 +286,9 @@ class LabBook(object):
         Returns:
             LabBook
         """
+
+        logger.info("Populating LabBook from directory {}".format(root_dir))
+
         # Update root dir
         self._set_root_dir(root_dir)
 
@@ -297,6 +307,16 @@ class LabBook(object):
         Returns:
             LabBook
         """
+
+        if not username:
+            raise ValueError("Username cannot be None or empty")
+
+        if not owner:
+            raise ValueError("owner cannot be None or empty")
+
+        if not labbook_name:
+            raise ValueError("labbook_name cannot be None or empty")
+
         labbook_path = os.path.expanduser(os.path.join(self.labmanager_config.config["git"]["working_directory"],
                                                        username,
                                                        owner,

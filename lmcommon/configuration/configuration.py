@@ -20,15 +20,19 @@
 
 import os
 import yaml
+import typing
 from pkg_resources import resource_filename
 
+from lmcommon.logging import LMLogger
+
+logger = LMLogger.get_logger()
 
 class Configuration(object):
     """Class to interact with LabManager configuration files    
     """
     INSTALLED_LOCATION = "/etc/gigantum/labmanager.yaml"
 
-    def __init__(self, config_file=None):
+    def __init__(self, config_file: str=None) -> None:
         """
         
         Args:
@@ -42,7 +46,7 @@ class Configuration(object):
         self.config = self.load(self.config_file)
 
     @staticmethod
-    def find_default_config():
+    def find_default_config() -> str:
         """Method to find the default configuration file
         
         Returns:
@@ -55,7 +59,7 @@ class Configuration(object):
             # Load default file out of python package
             return os.path.join(resource_filename("lmcommon", "configuration/config"), "labmanager.yaml.default")
 
-    def _read_config_file(self, config_file):
+    def _read_config_file(self, config_file: str) -> typing.Dict:
         """Method to read a config file into a dictionary
 
         Args:
@@ -83,7 +87,7 @@ class Configuration(object):
 
         return data
 
-    def load(self, config_file=None):
+    def load(self, config_file: str=None) -> typing.Dict:
         """Method to load a config file
         
         Args:
@@ -96,10 +100,9 @@ class Configuration(object):
             config_file = self.config_file
 
         data = self._read_config_file(config_file)
-        Configuration
         return data
 
-    def save(self, config_file=None):
+    def save(self, config_file: str=None) -> None:
         """Method to save a configuration to file
         
         Args:
@@ -111,5 +114,6 @@ class Configuration(object):
         if not config_file:
             config_file = self.config_file
 
+        logger.info("Writing config file to {}".format(self.config_file))
         with open(config_file, "wt") as cf:
             cf.write(yaml.dump(self.config, default_flow_style=False))

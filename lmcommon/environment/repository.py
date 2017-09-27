@@ -29,7 +29,7 @@ class ComponentRepository(object):
     """Class to interface with local copies of environment component repositories
     """
 
-    def __init__(self, config_file: str=None):
+    def __init__(self, config_file: str=None) -> None:
         """Constructor
 
         Args:
