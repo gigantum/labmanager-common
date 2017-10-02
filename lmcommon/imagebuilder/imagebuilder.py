@@ -358,15 +358,11 @@ class ImageBuilder(object):
 
         mnt_point = labbook.root_dir.replace('/mnt/gigantum', os.environ.get('HOST_WORK_DIR'))
 
-        # Setup mount point for "application" share dir. A mount shared between lab book and labmanager containers
-        app_share_mnt_point = os.path.join(os.environ.get('HOST_WORK_DIR'), '.labmanager', 'share')
-        logger.info("Kicking of container, share: {}".format(app_share_mnt_point))
-
         # Map volumes - The labbook docker container is unaware of labbook name, all labbooks
         # map to /mnt/labbook.
         volumes_dict = {
-            mnt_point: {'bind': '/mnt/labbook', 'mode': 'rw'},
-            app_share_mnt_point:  {'bind': '/mnt/share', 'mode': 'rw'}
+            mnt_point: {'bind': '/mnt/labbook', 'mode': 'cached'},
+            'labmanager_share_vol':  {'bind': '/mnt/share', 'mode': 'rw'}
         }
 
         # If re-mapping permissions, be sure to configure the container
@@ -374,7 +370,7 @@ class ImageBuilder(object):
             env_var = ["LOCAL_USER_ID={}".format(os.environ['LOCAL_USER_ID'])]
             logger.info("Starting labbook container with user: {}".format(env_var))
         else:
-            env_var = []
+            env_var = ["WINDOWS_HOST=1"]
 
         # If using Jupyter, set work dir (TEMPORARY HARD CODE)
         if 'JUPYTER_RUNTIME_DIR' in os.environ:
