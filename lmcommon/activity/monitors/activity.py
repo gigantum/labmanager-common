@@ -18,9 +18,9 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 import abc
-from lmcommon.logging import LMLogger
-from typing import (Any, Dict, List)
 import git
+from lmcommon.logging import LMLogger
+from typing import (Any, Dict, List, Optional)
 
 from lmcommon.activity.processors.processor import ActivityNote
 from lmcommon.activity.processors.processor import ActivityProcessor
@@ -136,7 +136,7 @@ class ActivityMonitor(metaclass=abc.ABCMeta):
 
         return note
 
-    def get_container_ip(self) -> str:
+    def get_container_ip(self) -> Optional[str]:
         """Method to get the monitored lab book container's IP address on the Docker bridge network
 
         Returns:

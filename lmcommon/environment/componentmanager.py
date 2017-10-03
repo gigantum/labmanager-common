@@ -20,14 +20,12 @@
 import datetime
 import os
 import yaml
-import typing
-
+from typing import (Any, List, Dict)
 import glob
-from collections import OrderedDict
-import operator
+
 
 from lmcommon.labbook import LabBook
-from lmcommon.environment import ComponentRepository
+from lmcommon.environment import ComponentRepository # type: ignore
 from lmcommon.notes import NoteStore, NoteLogLevel
 from lmcommon.logging import LMLogger
 
@@ -38,7 +36,7 @@ class ComponentManager(object):
     """Class to manage the Environment Components of a given LabBook
     """
 
-    def __init__(self, labbook: LabBook):
+    def __init__(self, labbook: LabBook) -> None:
         """Constructor
 
         Args:
@@ -52,11 +50,11 @@ class ComponentManager(object):
         self._initialize_env_dir()
 
     @property
-    def env_dir(self):
+    def env_dir(self) -> str:
         """The environment directory in the given labbook"""
         return os.path.join(self.labbook.root_dir, '.gigantum', 'env')
 
-    def _initialize_env_dir(self):
+    def _initialize_env_dir(self) -> None:
         """Method to populate the environment directory if any content is missing
 
         Returns:
@@ -103,7 +101,8 @@ exec gosu giguser "$@"
             self.labbook.git.add(entrypoint_file)
             self.labbook.git.commit(short_message)
 
-    def add_package(self, package_manager: str, package_name: str, package_version: str=None, force=False):
+    def add_package(self, package_manager: str, package_name: str, package_version: str = None,
+                    force: bool = False) -> None:
         """Add a new yaml file describing the new package and its context to the labbook.
 
         Args:
@@ -156,7 +155,7 @@ exec gosu giguser "$@"
                         })
 
     def add_component(self, component_class: str, repository: str, namespace: str, component: str, version: str,
-                      force=False):
+                      force: bool = False) -> None:
         """Method to add a component to a LabBook's environment
 
         Args:
@@ -228,7 +227,7 @@ exec gosu giguser "$@"
                         "objects": []
                         })
 
-    def get_component_list(self, component_class: str) -> typing.List[dict]:
+    def get_component_list(self, component_class: str) -> List[Dict[str, Any]]:
         """Method to get the YAML contents for a given component class
 
         Args:

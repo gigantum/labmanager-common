@@ -24,6 +24,10 @@ jobs:
             sudo pip install coveralls pytest-cov
 
       - run:
+          name: Run mypy type checker
+          command: |
+            python -m mypy . --ignore-missing-imports --strict-optional
+      - run:
           name: Run unit and coverage tests
           command: |
             redis-server &

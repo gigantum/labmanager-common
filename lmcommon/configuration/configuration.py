@@ -20,19 +20,21 @@
 
 import os
 import yaml
-import typing
+
+from typing import (Any, Dict)
 from pkg_resources import resource_filename
 
 from lmcommon.logging import LMLogger
 
 logger = LMLogger.get_logger()
 
+
 class Configuration(object):
     """Class to interact with LabManager configuration files    
     """
     INSTALLED_LOCATION = "/etc/gigantum/labmanager.yaml"
 
-    def __init__(self, config_file: str=None) -> None:
+    def __init__(self, config_file: str = None) -> None:
         """
         
         Args:
@@ -59,7 +61,7 @@ class Configuration(object):
             # Load default file out of python package
             return os.path.join(resource_filename("lmcommon", "configuration/config"), "labmanager.yaml.default")
 
-    def _read_config_file(self, config_file: str) -> typing.Dict:
+    def _read_config_file(self, config_file: str) -> Dict[str, Any]:
         """Method to read a config file into a dictionary
 
         Args:
@@ -87,7 +89,7 @@ class Configuration(object):
 
         return data
 
-    def load(self, config_file: str=None) -> typing.Dict:
+    def load(self, config_file: str = None) -> Dict[str, Any]:
         """Method to load a config file
         
         Args:
@@ -102,7 +104,7 @@ class Configuration(object):
         data = self._read_config_file(config_file)
         return data
 
-    def save(self, config_file: str=None) -> None:
+    def save(self, config_file: str = None) -> None:
         """Method to save a configuration to file
         
         Args:

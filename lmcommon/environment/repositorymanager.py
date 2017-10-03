@@ -26,6 +26,8 @@ import operator
 import os
 import yaml
 
+from typing import (Any, List, Dict)
+
 from lmcommon.configuration import Configuration
 
 
@@ -150,7 +152,7 @@ class RepositoryManager(object):
                                             "*",
                                             "*"))
 
-        data = OrderedDict()
+        data: OrderedDict[str, Any] = OrderedDict()
         data[repo_name] = OrderedDict()
 
         # Set repository info
@@ -195,7 +197,7 @@ class RepositoryManager(object):
                                                                    key=operator.itemgetter(0), reverse=True))
         return data
 
-    def build_component_list_index(self, index_data: OrderedDict) -> list:
+    def build_component_list_index(self, index_data: OrderedDict) -> List:
         """Method to convert the structured index of all versions into a flat list with only the latest version
 
         Returns:
@@ -217,7 +219,7 @@ class RepositoryManager(object):
 
         return component_list
 
-    def index_repositories(self):
+    def index_repositories(self) -> None:
         """Method to index repos using a naive approach
 
         Stores index data in a pickled dictionaries in <working_directory>/.labmanager/environment_repositories/.index/
@@ -229,9 +231,9 @@ class RepositoryManager(object):
         repo_urls = self.config.config["environment"]["repo_url"]
         repo_names = [repo_url_to_name(x) for x in repo_urls]
 
-        base_image_all_repo_data = OrderedDict()
-        dev_env_all_repo_data = OrderedDict()
-        custom_all_repo_data = OrderedDict()
+        base_image_all_repo_data: OrderedDict = OrderedDict()
+        dev_env_all_repo_data: OrderedDict = OrderedDict()
+        custom_all_repo_data: OrderedDict = OrderedDict()
         for repo_name in repo_names:
             # Index Base Images
             base_image_all_repo_data.update(self.index_component_repository(repo_name, 'base_image'))

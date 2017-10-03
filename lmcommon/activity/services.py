@@ -46,7 +46,7 @@ logger = LMLogger.get_logger()
 #       process_id: <id for the background task>
 #        ... custom fields for the specific activity monitor class
 
-def start_labbook_monitor(labbook: LabBook, database=1) -> None:
+def start_labbook_monitor(labbook: LabBook, database: int = 1) -> None:
     """Method to start Development Environment Monitors for a given Lab Book if available
 
     Args:
@@ -141,7 +141,7 @@ def stop_dev_env_monitors(dev_env_key: str, redis_conn: redis.Redis, labbook_nam
                                                                                 process_id))
 
 
-def stop_labbook_monitor(labbook: LabBook, database=1) -> None:
+def stop_labbook_monitor(labbook: LabBook, database: int = 1) -> None:
     """Method to stop a Development Environment Monitors for a given Lab Book
 
     Args:

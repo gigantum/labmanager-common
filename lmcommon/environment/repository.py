@@ -19,6 +19,7 @@
 # SOFTWARE.
 import pickle
 from collections import OrderedDict
+from typing import (Any, List, Dict)
 
 import os
 
@@ -40,10 +41,10 @@ class ComponentRepository(object):
                                                        ".labmanager", "environment_repositories"))
 
         # Dictionary to hold loaded index files in memory
-        self.list_index_data = {}
-        self.detail_index_data = {}
+        self.list_index_data: Dict[str, Any] = {}
+        self.detail_index_data: Dict[str, Any] = {}
 
-    def _get_list_index_data(self, component_class: str) -> list:
+    def _get_list_index_data(self, component_class: str) -> List[str]:
         """Private method to get list index data from either the file or memory
 
         Args:
@@ -60,7 +61,7 @@ class ComponentRepository(object):
 
         return self.list_index_data[component_class]
 
-    def _get_detail_index_data(self, component_class: str) -> dict:
+    def _get_detail_index_data(self, component_class: str) -> Dict[str, Any]:
         """Private method to get detail index data from either the file or memory
 
         Args:
@@ -77,7 +78,7 @@ class ComponentRepository(object):
 
         return self.detail_index_data[component_class]
 
-    def get_component_list(self, component_class: str) -> list:
+    def get_component_list(self, component_class: str) -> List[str]:
         """Method to get a list of all components of a specific class (e.g base_image, development_environment, etc)
         The component class should map to a directory in the component repository
 
@@ -88,7 +89,8 @@ class ComponentRepository(object):
 
         return index_data
 
-    def get_component_versions(self, component_class: str, repository: str, namespace: str, component: str) -> list:
+    def get_component_versions(self, component_class: str, repository: str, namespace: str,
+                               component: str) -> List[str]:
         """Method to get a detailed list of all available versions for a single component
 
         Args:
@@ -115,7 +117,7 @@ class ComponentRepository(object):
         return list(index_data[repository][namespace][component].items())
 
     def get_component(self, component_class: str, repository: str, namespace: str,
-                      component: str, version: str) -> dict:
+                      component: str, version: str) -> Dict[str, Any]:
         """Method to get a detailed list of all available versions for a single component
 
         Args:

@@ -12,3 +12,4 @@ rq-scheduler==0.7.0
 
 # Testing support
 mockredispy==2.9.3
+mypy==0.521

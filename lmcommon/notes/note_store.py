@@ -23,6 +23,7 @@ import re
 from enum import Enum
 import base64
 import uuid
+from typing import (Any, Dict, List, Union)
 
 import plyvel
 
@@ -71,12 +72,12 @@ class NoteDetailObject(object):
             blob_type(str): The type of object (useful for converting from byte array to actual thing)
             value(bytes): A byte array of the object to store. Can be any binary type from file to serialized dict
         """
-        self.key = key
-        self.type = blob_type
-        self.value = value
+        self.key: str = key
+        self.type: str = blob_type
+        self.value: bytes = value
 
     @staticmethod
-    def from_json(json_str: str):
+    def from_json(json_str: str) -> 'NoteDetailObject':
         """Static method to create a NoteDetailObject instance from a json string
 
         Args:
@@ -92,7 +93,7 @@ class NoteDetailObject(object):
         return NoteDetailObject(data["key"], data["type"], value)
 
     @staticmethod
-    def from_image(image_file: str):
+    def from_image(image_file: str) -> None:
         """Static method to create a NoteDetailObject instance from an image file
 
         Args:
@@ -104,7 +105,7 @@ class NoteDetailObject(object):
         # an example of how this can be augmented with time to help devs manage objects
         raise NotImplemented
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> Dict[str, Union[str, bytes]]:
         """Method to dump an object to a dictionary"""
         return {"key": self.key,
                 "type": self.type,
@@ -136,18 +137,18 @@ class NoteStore(object):
             labbook(LabBook): A lmcommon.labbook.LabBook instance
         """
         # Configuration parameters
-        self.max_num_tags = 100
-        self.max_tag_length = 256
+        self.max_num_tags: int = 100
+        self.max_tag_length: int = 256
 
-        self.labbook = labbook
+        self.labbook: LabBook = labbook
 
         # Note record commit messages follow a special structure
         self.note_regex = re.compile(r"gtmNOTE_: ([\w\s\S]+)\ngtmjson_metadata_: (.*)")
 
         # instantiate notes levelDB at _root_dir/.gigantum/notes/
-        self._entries_path = os.path.join(labbook.root_dir, ".gigantum", "notes", "log")
+        self._entries_path: str = os.path.join(labbook.root_dir, ".gigantum", "notes", "log")
 
-    def _validate_tags(self, tags: list) -> list:
+    def _validate_tags(self, tags: List[str]) -> List[str]:
         """Method to clean and validate tags
 
         Args:
@@ -176,7 +177,7 @@ class NoteStore(object):
         # Remove \`; as a very basic level of sanitization
         return [tag.strip().translate({ord(c): None for c in '\`;'}) for tag in tags]
 
-    def create_note(self, note_data: dict) -> str:
+    def create_note(self, note_data: Dict[str, Any]) -> str:
         """Create a new note record in the LabBook
 
             note_data Fields:
@@ -223,7 +224,7 @@ class NoteStore(object):
         # Commit the changes as you've updated the notes DB
         return self.labbook.git.commit(message)
 
-    def summary_to_note(self, note: dict) -> dict:
+    def summary_to_note(self, note: Dict[str, Any]) -> Dict[str, Any]:
         """Method to convert a single note summary into a full note
 
         Args:
@@ -237,7 +238,7 @@ class NoteStore(object):
 
         return note
 
-    def get_note(self, commit: str) -> dict:
+    def get_note(self, commit: str) -> Dict[str, Any]:
         """Method to get a single note record in dictionary form
 
         Args:
@@ -251,7 +252,7 @@ class NoteStore(object):
 
         return self.summary_to_note(note)
 
-    def get_note_summary(self, commit) -> dict:
+    def get_note_summary(self, commit) -> Dict[str, Any]:
         """Method to get a single note summary in dictionary form
 
         Args:
@@ -284,7 +285,7 @@ class NoteStore(object):
         else:
             raise ValueError("Note commit {} not found".format(commit))
 
-    def get_all_note_summaries(self) -> list:
+    def get_all_note_summaries(self) -> List[Dict[str, Any]]:
         """Naive implementation that gets a list of note summary dictionaries for all note entries
 
             Note Summary Dictionary Fields:
@@ -343,7 +344,7 @@ class NoteStore(object):
         finally:
             note_detail_db.close()
 
-    def get_detail_record(self, linked_commit_hash: str) -> dict:
+    def get_detail_record(self, linked_commit_hash: str) -> Dict[str, Any]:
         """
             Fetch a notes detailed entry from a levelDB by commit hash
 

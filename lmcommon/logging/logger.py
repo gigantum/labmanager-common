@@ -24,12 +24,14 @@ import logging.config
 import os
 import tempfile
 
+from typing import (Any, Dict, Tuple)
+
 
 class LMLogger(object):
     """Class for getting a configured logging instance"""
     CONFIG_INSTALLED_LOCATION = '/etc/gigantum/logging.json'
 
-    def __init__(self, config_file=None):
+    def __init__(self, config_file=None) -> None:
         is_default = False
         if config_file:
             self.config_file = config_file
@@ -55,18 +57,20 @@ class LMLogger(object):
 
     @classmethod
     def get_logger(cls, config_file=None):
+        # Note: Python does not allow forward declarations, so unless we find a
+        # workaround, this method will have to remain untyped.
         logger = cls(config_file)
         return logger.logger
 
     @staticmethod
-    def _make_log_dir(log_file_dir):
+    def _make_log_dir(log_file_dir: str) -> str:
       """Create directory tree to log file if it does not exist. """
       if not os.path.exists(log_file_dir):
         os.makedirs(log_file_dir, exist_ok=True)
       return log_file_dir
 
     @staticmethod
-    def find_default_config():
+    def find_default_config() -> Tuple[str, bool]:
         """Method to find the default configuration file
 
         Returns:

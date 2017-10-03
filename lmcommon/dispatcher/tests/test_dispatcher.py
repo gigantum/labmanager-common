@@ -127,8 +127,8 @@ class TestDispatcher(object):
 
         res = d.query_task(job_ref)
         assert res
-        assert res.get('status') == 'finished'
-        assert res.get('result') == 0
+        assert res.status == 'finished'
+        assert res.result == 0
 
         w.terminate()
 
@@ -139,7 +139,7 @@ class TestDispatcher(object):
 
         res = d.query_task(job_ref)
         assert res
-        assert res.get('status') == 'failed'
+        assert res.status == 'failed'
 
         w.terminate()
 
@@ -149,8 +149,8 @@ class TestDispatcher(object):
 
         time.sleep(1)
 
-        assert job_ref in d.failed_jobs
-        assert job_ref not in d.completed_jobs
+        assert job_ref in [j.job_key for j in d.failed_jobs]
+        assert job_ref not in [j.job_key for j in d.finished_jobs]
         w.terminate()
 
     def test_query_complete_tasks(self, temporary_worker):
@@ -159,8 +159,8 @@ class TestDispatcher(object):
 
         time.sleep(1)
 
-        assert job_ref in d.completed_jobs
-        assert job_ref not in d.failed_jobs
+        assert job_ref in [j.job_key for j in d.finished_jobs]
+        assert job_ref not in [j.job_key for j in d.failed_jobs]
 
     @pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Cannot build images on CircleCI")
     def test_build_docker_image(self, temporary_worker, mock_config_file):
@@ -197,7 +197,7 @@ class TestDispatcher(object):
 
         elapsed_time = 0
         while True:
-            status = d.query_task(job_ref)['status']
+            status = d.query_task(job_ref).status
             print(status)
             if status in ['success', 'failed', 'finished']:
                 break
@@ -211,7 +211,7 @@ class TestDispatcher(object):
 
         res = d.query_task(job_ref)
         assert res
-        assert res.get('status') == 'finished'
+        assert res.status == 'finished'
 
     @pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Cannot build images on CircleCI")
     def test_start_and_stop_docker_container(self, temporary_worker, mock_config_file):
@@ -261,12 +261,12 @@ class TestDispatcher(object):
         job_ref = d.dispatch_task(bg_jobs.build_docker_image, kwargs=docker_kwargs, metadata=m)
 
         j = d.query_task(job_ref)
-        assert 'meta' in j.keys()
-        assert j.get('meta').get('labbook') == 'test-test-catbook-test-dockerbuild'
+        assert hasattr(j, 'meta')
+        assert j.meta.get('labbook') == 'test-test-catbook-test-dockerbuild'
 
         elapsed_time = 0
         while True:
-            status = d.query_task(job_ref)['status']
+            status = d.query_task(job_ref).status
             print(status)
             if status in ['success', 'failed', 'finished']:
                 break
@@ -280,8 +280,8 @@ class TestDispatcher(object):
 
         res = d.query_task(job_ref)
         assert res
-        print(res.get('status'))
-        assert res.get('status') == 'finished'
+        print(res.status)
+        assert res.status == 'finished'
 
         ## Finish building image
 
@@ -297,7 +297,7 @@ class TestDispatcher(object):
 
         elapsed_time = 0
         while True:
-            status = d.query_task(start_ref)['status']
+            status = d.query_task(start_ref).status
             print(status)
             if status in ['success', 'failed', 'finished']:
                 break
@@ -309,14 +309,14 @@ class TestDispatcher(object):
 
         res = d.query_task(start_ref)
         assert res
-        assert res.get('status') == 'finished'
+        assert res.status == 'finished'
 
         ## Stop the docker container, and wait until that is done.
         stop_ref = d.dispatch_task(bg_jobs.stop_docker_container, args=(unit_test_tag,))
 
         elapsed_time = 0
         while True:
-            status = d.query_task(stop_ref)['status']
+            status = d.query_task(stop_ref).status
             print(status)
             if status in ['success', 'failed', 'finished']:
                 break
@@ -328,7 +328,7 @@ class TestDispatcher(object):
 
         res = d.query_task(stop_ref)
         assert res
-        assert res.get('status') == 'finished'
+        assert res.status == 'finished'
 
         w.terminate()
 

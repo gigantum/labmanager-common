@@ -23,6 +23,8 @@ import re
 import glob
 import yaml
 
+from typing import (Any, Dict, List, Optional)
+
 from lmcommon.gitlib import get_git_interface, GitAuthor
 from lmcommon.configuration import Configuration
 from lmcommon.logging import LMLogger
@@ -34,94 +36,93 @@ logger = LMLogger.get_logger()
 class LabBook(object):
     """Class representing a single LabBook"""
 
-    def __init__(self, config_file=None):
+    def __init__(self, config_file=None) -> None:
         self.labmanager_config = Configuration(config_file)
 
         # Create gitlib instance
         self.git = get_git_interface(self.labmanager_config.config["git"])
 
         # LabBook Properties
-        self._root_dir = None  # The root dir is the location of the labbook this instance represents
-        self._data = None
+        self._root_dir: Optional[str] = None  # The root dir is the location of the labbook this instance represents
+        self._data: Optional[Dict[str, Any]] = None
 
         # LabBook Environment
         self._env = None
 
     # PROPERTIES
     @property
-    def root_dir(self):
+    def root_dir(self) -> str:
+        if not self._root_dir:
+            raise ValueError("No lab book root dir specified. Could not get root dir")
         return self._root_dir
 
     @property
-    def data(self):
+    def data(self) -> Optional[Dict[str, Any]]:
         return self._data
 
     @property
-    def id(self):
-        return self._data["labbook"]["id"]
+    def id(self) -> str:
+        if self._data:
+            return self._data["labbook"]["id"]
+        else:
+            raise ValueError("No ID assigned to Lab Book.")
 
     @property
-    def name(self):
-        return self._data["labbook"]["name"]
+    def name(self) -> str:
+        if self._data:
+            return self._data["labbook"]["name"]
+        else:
+            raise ValueError("No name assigned to Lab Book.")
 
     @name.setter
-    def name(self, value):
-        self._data["labbook"]["name"] = value
+    def name(self, value) -> None:
+        if not self._data:
+            self._data = {'labbook': {'name': value}}
+        else:
+            self._data["labbook"]["name"] = value
         self._validate_labbook_data()
 
         # Update data file
         self._save_labbook_data()
 
         # Rename directory
-        base_dir, _ = self._root_dir.rsplit(os.path.sep, 1)
-        os.rename(self._root_dir, os.path.join(base_dir, value))
+        if self._root_dir:
+            base_dir, _ = self._root_dir.rsplit(os.path.sep, 1)
+            os.rename(self._root_dir, os.path.join(base_dir, value))
+        else:
+            raise ValueError("Lab Book root dir not specified. Failed to configure git.")
         
         # Update the root directory to the knew directory name
         self._set_root_dir(os.path.join(base_dir, value))
 
     @property
-    def description(self):
-        return self._data["labbook"]["description"]
+    def description(self) -> str:
+        if self._data:
+            return self._data["labbook"]["description"]
+        else:
+            raise ValueError("No description assigned to Lab Book.")
 
     @description.setter
-    def description(self, value):
-        self._data["labbook"]["description"] = self._santize_input(value)
+    def description(self, value) -> None:
+        value = self._santize_input(value)
+        if not self._data:
+            self._data = {'labbook': {'description': value}}
+        else:
+            self._data["labbook"]["description"] = value
+
         self._save_labbook_data()
 
     # TODO: Replace with a user class instance once proper user interface implemented
     @property
-    def owner(self):
-        return self._data["owner"]
+    def owner(self) -> Dict[str, str]:
+        if self._data:
+            return self._data["owner"]
+        else:
+            raise ValueError("No owner assigned to Lab Book.")
 
-    # TODO: Replace with a user class instance once proper user interface implemented
-    @property
-    def user(self):
-        """Property containing information about the current logged in user
-            Dictionary of values:
-                "name" - First Last name
-                "email" - user's email address
-                "username" - user's username
-
-        """
-        return self._data["user"]
-
-    @user.setter
-    def user(self, value):
-        """
-
-        Args:
-            value:
-
-        Returns:
-
-        """
-        self._data["user"] = value
-
-        # Update gitlib to have the right user information
-        self.git.update_author(GitAuthor(value["name"], value["email"]))
     # PROPERTIES
 
-    def _set_root_dir(self, new_root_dir):
+    def _set_root_dir(self, new_root_dir: str) -> None:
         """Update the root directory and also reconfigure the git instance
 
         Returns:
@@ -133,16 +134,19 @@ class LabBook(object):
         # Update the git working directory
         self.git.set_working_directory(self.root_dir)
 
-    def _save_labbook_data(self):
+    def _save_labbook_data(self) -> None:
         """Method to save changes to the LabBook
 
         Returns:
             None
         """
+        if not self.root_dir:
+            raise ValueError("No root directory assigned to lab book. Failed to get root directory.")
+
         with open(os.path.join(self.root_dir, ".gigantum", "labbook.yaml"), 'wt') as lbfile:
             lbfile.write(yaml.dump(self._data, default_flow_style=False))
 
-    def _validate_labbook_data(self):
+    def _validate_labbook_data(self) -> None:
         """Method to validate the LabBook data file contents
 
         Returns:
@@ -156,7 +160,7 @@ class LabBook(object):
             raise ValueError("Invalid `name`. Max length is 100 characters")
 
     # TODO: Get feedback on better way to sanitize
-    def _santize_input(self, value):
+    def _santize_input(self, value: str) -> str:
         """Simple method to sanitize a user provided value with characters that can be bad
 
         Args:
@@ -165,9 +169,9 @@ class LabBook(object):
         Returns:
             str: Output string
         """
-        return''.join(c for c in value if c not in '\<>?/;"`\'')
+        return ''.join(c for c in value if c not in '\<>?/;"`\'')
 
-    def new(self, owner, name, username=None, description=None):
+    def new(self, owner: Dict[str, str], name: str, username: str = None, description: str = None):
         """Method to create a new minimal LabBook instance on disk
 
         /[LabBook name]
@@ -203,11 +207,12 @@ class LabBook(object):
         logger.info("Creating new labbook on disk for {}/{}/{} ...".format(username, owner, name))
 
         # Build data file contents
-        self._data = {"labbook": {"id": uuid.uuid4().hex,
-                                  "name": name,
-                                  "description": self._santize_input(description)},
-                      "owner": owner
-                      }
+        self._data = {
+            "labbook": {"id": uuid.uuid4().hex,
+                        "name": name,
+                        "description": self._santize_input(description or '')},
+            "owner": owner
+        }
 
         # Validate data
         self._validate_labbook_data()
@@ -232,12 +237,12 @@ class LabBook(object):
         # Verify name not already in use
         if os.path.isdir(os.path.join(owner_dir, name)):
             # Exists already. Raise an exception
-            raise ValueError("LabBook `{}` already exists locally. Choose a new LabBook name".format(name))
+            raise ValueError(f"LabBook `{name}` already exists locally. Choose a new LabBook name")
 
         # Create LabBook subdirectory
         new_root_dir = os.path.join(owner_dir, name)
 
-        logger.info("Making labbook directory in {}".format(new_root_dir))
+        logger.info(f"Making labbook directory in {new_root_dir}")
 
         os.makedirs(new_root_dir)
         self._set_root_dir(new_root_dir)
@@ -273,11 +278,11 @@ class LabBook(object):
         self.git.add(os.path.join(self.root_dir, ".gigantum", "labbook.yaml"))
         self.git.add(os.path.join(self.root_dir, ".gigantum", "env", "Dockerfile"))
         self.git.add(os.path.join(self.root_dir, ".gitignore"))
-        self.git.commit("Creating new empty LabBook: {}".format(name))
+        self.git.commit(f"Creating new empty LabBook: {name}")
 
         return self.root_dir
 
-    def from_directory(self, root_dir):
+    def from_directory(self, root_dir: str):
         """Method to populate a LabBook instance from a directory
 
         Args:
@@ -287,7 +292,7 @@ class LabBook(object):
             LabBook
         """
 
-        logger.info("Populating LabBook from directory {}".format(root_dir))
+        logger.debug(f"Populating LabBook from directory {root_dir}")
 
         # Update root dir
         self._set_root_dir(root_dir)
@@ -296,7 +301,7 @@ class LabBook(object):
         with open(os.path.join(self.root_dir, ".gigantum", "labbook.yaml"), "rt") as data_file:
             self._data = yaml.load(data_file)
 
-    def from_name(self, username, owner, labbook_name):
+    def from_name(self, username: str, owner:str, labbook_name:str):
         """Method to populate a LabBook instance based on the user and name of the labbook
 
         Args:
@@ -309,7 +314,7 @@ class LabBook(object):
         """
 
         if not username:
-            raise ValueError("Username cannot be None or empty")
+            raise ValueError("username cannot be None or empty")
 
         if not owner:
             raise ValueError("owner cannot be None or empty")
@@ -334,7 +339,7 @@ class LabBook(object):
         with open(os.path.join(self.root_dir, ".gigantum", "labbook.yaml"), "rt") as data_file:
             self._data = yaml.load(data_file)
 
-    def list_local_labbooks(self, username=None):
+    def list_local_labbooks(self, username: str = None) -> Optional[Dict[Optional[str], List[Dict[str, str]]]]:
         """Method to list available LabBooks
 
         Args:
@@ -364,18 +369,21 @@ class LabBook(object):
         files_collected = sorted(files_collected)
 
         # Generate dictionary to return
-        result = {}
+        result: Optional[Dict[Optional[str], List[Dict[str, str]]]] = None
         for dir_path in files_collected:
             if os.path.isdir(dir_path):
                 _, username, owner, _, labbook = dir_path.rsplit(os.path.sep, 4)
-                if username not in result:
-                    result[username] = []
-
-                result[username].append({"owner": owner, "name": labbook})
+                if result:
+                    if username not in result:
+                        result[username] = [{"owner": owner, "name": labbook}]
+                    else:
+                        result[username].append({"owner": owner, "name": labbook})
+                else:
+                    result = {username: [{"owner": owner, "name": labbook}]}
 
         return result
 
-    def log(self, username=None, max_count=10):
+    def log(self, username: str = None, max_count: int = 10):
         """Method to list commit history of a Labbook
 
         Args:
@@ -387,7 +395,7 @@ class LabBook(object):
         # TODO: Add additional optional args to the git.log call to support further filtering
         return self.git.log(max_count=max_count, author=username)
 
-    def log_entry(self, commit):
+    def log_entry(self, commit: str):
         """Method to get a single log entry by commit
 
         Args:
