@@ -271,7 +271,7 @@ class ImageBuilder(object):
         return os.linesep.join(docker_lines)
 
     def build_image(self, docker_client, image_tag: str, assemble: bool = True, nocache: bool = False,
-                    background: bool = False) -> Dict[str, str]:
+                    background: bool = False) -> Dict[str, Optional[str]]:
         """Build docker image according to the Dockerfile just assembled.
 
         Args:
@@ -306,7 +306,7 @@ class ImageBuilder(object):
         if assemble:
             self.assemble_dockerfile(write=True)
 
-        return_keys: Dict[str, Union[str, Any]] = {
+        return_keys: Dict[str, Optional[str]] = {
             'background_job_key': None,
             'docker_image_id': None
         }
@@ -319,7 +319,7 @@ class ImageBuilder(object):
                 'method': 'build_image'}
             job_key = job_dispatcher.dispatch_task(jobs.build_docker_image, args=(env_dir, image_tag, True, nocache),
                                                    metadata=job_metadata)
-            return_keys['background_job_key'] = job_key
+            return_keys['background_job_key'] = job_key.key_str
         else:
             docker_image = docker_client.images.build(path=env_dir, tag=image_tag, pull=True, nocache=nocache)
             return_keys['docker_image_id'] = docker_image.id
@@ -408,7 +408,7 @@ class ImageBuilder(object):
                 raise
 
             logger.info(f"Background job key for run_container: {key}")
-            return_keys['background_job_key'] = str(key)
+            return_keys['background_job_key'] = key.key_str
         else:
             logger.info("Launching container in-process for container {}".format(docker_image_id))
             if float(docker_client.version()['ApiVersion']) < 1.25:
