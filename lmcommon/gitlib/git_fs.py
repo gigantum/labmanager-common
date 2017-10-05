@@ -19,9 +19,13 @@
 # SOFTWARE.
 from .git import GitRepoInterface
 from git import Repo, Head, RemoteReference
-from git import InvalidGitRepositoryError
+from git import InvalidGitRepositoryError, BadName
 import os
 import re
+
+from lmcommon.logging import LMLogger
+
+logger = LMLogger.get_logger()
 
 
 class GitFilesystem(GitRepoInterface):
@@ -134,6 +138,7 @@ class GitFilesystem(GitRepoInterface):
         if self.repo:
             raise ValueError("Cannot init an existing git repository. Choose a different working directory")
 
+        logger.info("Initializing Git repository in {}".format(self.working_directory))
         self.repo = Repo.init(self.working_directory, bare=bare)
 
     def clone(self, source):
@@ -148,8 +153,8 @@ class GitFilesystem(GitRepoInterface):
         if self.repo:
             raise ValueError("Cannot init an existing git repository. Choose a different working directory")
 
+        logger.info("Cloning Git repository from {} into {}".format(source, self.working_directory))
         self.repo = Repo.clone_from(source, self.working_directory)
-    # CREATE METHODS
 
     # LOCAL CHANGE METHODS
     def status(self):
@@ -214,6 +219,7 @@ class GitFilesystem(GitRepoInterface):
         Returns:
             None
         """
+        logger.info("Adding file {} to Git repository in {}".format(filename, self.working_directory))
         self.repo.index.add([filename])
 
     def add_all(self, relative_directory=None):
@@ -241,6 +247,7 @@ class GitFilesystem(GitRepoInterface):
         Returns:
             None
         """
+        logger.info("Removing file {} from Git repo at {}".format(filename, self.working_directory))
         self.repo.index.remove([filename])
 
         if not keep_file:
@@ -382,14 +389,18 @@ class GitFilesystem(GitRepoInterface):
         Returns:
             git.Commit -- hash of new commit
         """
+
+        if not message:
+            raise ValueError("message cannot be None or empty")
+
         if author:
             self.update_author(author, committer=committer)
 
+        logger.info("Committing changes to Git repo at {}".format(self.working_directory))
         return self.repo.index.commit(message, author=self.author, committer=self.committer)
-    # LOCAL CHANGE METHODS
 
     # HISTORY METHODS
-    def log(self, max_count=10, filename=None, skip=None, since=None, author=None):
+    def log(self, max_count=None, filename=None, skip=None, since=None, author=None):
         """Method to get the commit history, optionally for a single file, with pagination support
 
         Returns an ordered list of dictionaries, one entry per commit. Dictionary format:
@@ -412,7 +423,10 @@ class GitFilesystem(GitRepoInterface):
         Returns:
             list(dict)
         """
-        kwargs = {"max_count": max_count}
+        kwargs = {}
+
+        if max_count:
+            kwargs["max_count"] = max_count
 
         if filename:
             kwargs["paths"] = [filename]
@@ -458,8 +472,18 @@ class GitFilesystem(GitRepoInterface):
     
         Returns:
             dict
+
+        Raises:
+            ValueError
         """
-        entry = self.repo.commit(commit)
+        if not commit:
+            raise ValueError("commit cannot be None or empty")
+
+        try:
+            entry = self.repo.commit(commit)
+        except BadName:
+            logger.error("Commit hash {} not found: {}".format(commit, BadName))
+            raise ValueError("Commit {} not found".format(commit))
 
         return {
                  "commit": entry.hexsha,
@@ -767,6 +791,9 @@ class GitFilesystem(GitRepoInterface):
         # Get the merge base (where the two branches diverge)
         merge_base = self.repo.merge_base(current_branch, future_branch)
 
+        logger.info("Merging changes from future branch {} into current branch {} in Git repo at {}".format(
+            future_branch, current_branch, self.working_directory
+        ))
         # Write merge to the index
         self.repo.index.merge_tree(future_branch, base=merge_base)
 

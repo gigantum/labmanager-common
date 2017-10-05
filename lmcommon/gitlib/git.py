@@ -126,7 +126,7 @@ class GitRepoInterface(metaclass=abc.ABCMeta):
                 raise ValueError("Must provide a GitAuthor instance to specify the committer")
             self.committer = committer
         else:
-            self.committer = self.author
+            self.committer = GitAuthor("Gigantum AutoCommit", "noreply@gigantum.io")
 
     @property
     def commit_hash(self):

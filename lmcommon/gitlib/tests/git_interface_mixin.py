@@ -251,7 +251,8 @@ class GitInterfaceMixin(object):
         git = mock_initialized[0]
 
         # Test defaults
-        assert git.author == git.committer
+        assert type(git.author) == GitAuthor
+        assert type(git.committer) == GitAuthor
         assert git.author.name == "Gigantum AutoCommit"
         assert git.author.email == "noreply@gigantum.io"
         assert git.committer.name == "Gigantum AutoCommit"
@@ -261,8 +262,8 @@ class GitInterfaceMixin(object):
         git.update_author(GitAuthor("New Name", "test@test.com"))
         assert git.author.name == "New Name"
         assert git.author.email == "test@test.com"
-        assert git.committer.name == "New Name"
-        assert git.committer.email == "test@test.com"
+        assert git.committer.name == "Gigantum AutoCommit"
+        assert git.committer.email == "noreply@gigantum.io"
 
         # Test updating both
         git.update_author(GitAuthor("Author", "a@test.com"), GitAuthor("Committer", "c@test.com"))
