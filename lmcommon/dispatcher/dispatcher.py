@@ -167,7 +167,7 @@ class Dispatcher(object):
             raise ValueError("job_key cannot be None or empty")
 
         if not type(job_key) == JobKey:
-            raise ValueError("job_ikey must be type JobKey")
+            raise ValueError("job_key must be type JobKey")
 
         # Encode job_id as byes from regular string, strip off the "rq:job" prefix.
         enc_job_id = job_key.key_str.split(':')[-1].encode()
