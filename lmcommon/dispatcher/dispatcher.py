@@ -253,7 +253,7 @@ class Dispatcher(object):
             # Currently, one month.
             timeout = '730h'
         else:
-            timeout = '45m'
+            timeout = '2h'
 
         logger.info(
             f"Dispatching {'persistent' if persist else 'ephemeral'} task `{method_reference.__name__}` to queue")
