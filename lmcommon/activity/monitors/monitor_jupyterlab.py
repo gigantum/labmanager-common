@@ -175,7 +175,7 @@ class JupyterLabNotebookMonitor(ActivityMonitor):
 
                 try:
                     # Process activity data to generate a note record
-                    note_object = self.process(self.code or {}, self.result, {"path": metadata["path"]})
+                    note_object = self.process(self.code, self.result, {"path": metadata["path"]})
 
                     # Commit changes to the related Notebook file
                     # commit = self.commit_file(metadata["path"])

@@ -22,6 +22,7 @@ jobs:
           command: |
             sudo pip install -r requirements.txt
             sudo pip install coveralls pytest-cov
+            mkdir /home/circleci/gigantum
 
       - run:
           name: Run mypy type checker

@@ -22,6 +22,7 @@ import os
 import re
 import glob
 import yaml
+from zipfile import ZipFile
 
 from typing import (Any, Dict, List, Optional)
 
@@ -49,7 +50,12 @@ class LabBook(object):
         # LabBook Environment
         self._env = None
 
-    # PROPERTIES
+    def __str__(self):
+        if self._root_dir:
+            return f'<LabBook at `{self._root_dir}`>'
+        else:
+            return f'<LabBook UNINITIALIZED>'
+
     @property
     def root_dir(self) -> str:
         if not self._root_dir:
@@ -112,15 +118,12 @@ class LabBook(object):
 
         self._save_labbook_data()
 
-    # TODO: Replace with a user class instance once proper user interface implemented
     @property
     def owner(self) -> Dict[str, str]:
         if self._data:
             return self._data["owner"]
         else:
             raise ValueError("No owner assigned to Lab Book.")
-
-    # PROPERTIES
 
     def _set_root_dir(self, new_root_dir: str) -> None:
         """Update the root directory and also reconfigure the git instance
@@ -203,6 +206,12 @@ class LabBook(object):
         if not username:
             logger.warning("Using owner username `{}` when making new labbook".format(owner['username']))
             username = owner["username"]
+
+        if not name:
+            raise ValueError("Name must be provided for new labbook")
+
+        if name == 'export':
+            raise ValueError("LabBook cannot be named `export`.")
 
         logger.info("Creating new labbook on disk for {}/{}/{} ...".format(username, owner, name))
 

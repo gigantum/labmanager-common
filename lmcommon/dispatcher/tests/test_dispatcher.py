@@ -238,7 +238,7 @@ class TestDispatcher(object):
         ib = ImageBuilder(lb.root_dir)
         unit_test_tag = "background-unit-test-delete-this"
 
-        ## Start building image.
+        # Start building image.
 
         docker_kwargs = {
             'path': os.path.join(labbook_dir, '.gigantum', 'env'),
@@ -276,7 +276,7 @@ class TestDispatcher(object):
             elapsed_time = elapsed_time + 1
             time.sleep(1)
 
-        #w.terminate()
+        # w.terminate()
 
         res = d.query_task(job_ref)
         assert res
