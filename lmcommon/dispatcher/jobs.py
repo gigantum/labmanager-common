@@ -48,6 +48,7 @@ def export_labbook_as_zip(labbook_path: str) -> str:
 
     try:
         if not os.path.exists(os.path.join(labbook_path, '.gigantum')):
+            # A gigantum labbook will contain a .gigantum hidden directory inside it.
             raise ValueError(f'(Job {p}) Directory at {labbook_path} does not appear to be a Gigantum LabBook')
 
         labbook: LabBook = LabBook()
@@ -59,7 +60,7 @@ def export_labbook_as_zip(labbook_path: str) -> str:
             logger.warning(f"(Job {p}) Creating Lab Manager export directory at `{lb_export_directory}`")
             os.makedirs(lb_export_directory)
 
-        lb_zip_name = f'{labbook.name}_{datetime.datetime.now().strftime("%Y-%m-%d")}.gigantum'
+        lb_zip_name = f'{labbook.name}_{datetime.datetime.now().strftime("%Y-%m-%d")}.lbk'
         zip_path = os.path.join(lb_export_directory, lb_zip_name)
         with zipfile.ZipFile(zip_path, 'w') as lb_archive:
             basename = os.path.basename(labbook_path)
@@ -88,8 +89,8 @@ def import_labboook_from_zip(archive_path: str, username: str, owner: str,
         if not os.path.isfile(archive_path):
             raise ValueError(f'Archive at {archive_path} is not a file or does not exist')
 
-        if '.gigantum' not in archive_path:
-            raise ValueError(f'Archive at {archive_path} does not have .gigantum extension')
+        if '.lbk' not in archive_path:
+            raise ValueError(f'Archive at {archive_path} does not have .lbk extension')
 
         logger.info(f"(Job {p}) Using {config_file or 'default'} LabManager configuration.")
         lm_config = Configuration(config_file)
