@@ -74,6 +74,8 @@ def temporary_worker():
     dispatcher = Dispatcher('labmanager_unittests')
     yield worker_proc, dispatcher
 
+    worker_proc.terminate()
+
 
 @pytest.fixture()
 def mock_config_file():
@@ -161,6 +163,24 @@ class TestDispatcher(object):
 
         assert job_ref in [j.job_key for j in d.finished_jobs]
         assert job_ref not in [j.job_key for j in d.failed_jobs]
+
+    def test_simple_dependent_job(self, temporary_worker):
+        w, d = temporary_worker
+        job_ref_1 = d.dispatch_task(bg_jobs.test_sleep, args=(2,))
+        job_ref_2 = d.dispatch_task(bg_jobs.test_exit_success, dependent_job=job_ref_1)
+        time.sleep(0.5)
+        assert d.query_task(job_ref_2).status == 'deferred'
+        time.sleep(3)
+        assert d.query_task(job_ref_1).status == 'finished'
+        assert d.query_task(job_ref_2).status == 'finished'
+
+    def test_fail_dependent_job(self, temporary_worker):
+        w, d = temporary_worker
+        job_ref_1 = d.dispatch_task(bg_jobs.test_exit_fail)
+        job_ref_2 = d.dispatch_task(bg_jobs.test_exit_success, dependent_job=job_ref_1)
+        time.sleep(3)
+        assert d.query_task(job_ref_1).status == 'failed'
+        assert d.query_task(job_ref_2).status == 'deferred'
 
     @pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Cannot build images on CircleCI")
     def test_build_docker_image(self, temporary_worker, mock_config_file):

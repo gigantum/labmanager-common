@@ -102,7 +102,8 @@ class Dispatcher(object):
         """Return a list of dicts containing information about all jobs in the backend. """
         redis_keys = self._redis_conn.keys("rq:job:*")
 
-        return [self.query_task(JobKey(q.decode())) for q in redis_keys]
+        # Ignore type checking on the following line cause we filter out None-results.
+        return [self.query_task(JobKey(q.decode())) for q in redis_keys if q] # type: ignore
 
     @property
     def failed_jobs(self) -> List[JobStatus]:
@@ -125,7 +126,7 @@ class Dispatcher(object):
 
         return labbook_jobs
 
-    def query_task(self, job_key: JobKey) -> JobStatus:
+    def query_task(self, job_key: JobKey) -> Optional[JobStatus]:
         """Return a JobStatus containing all info pertaining to background job.
 
         Args:
@@ -140,14 +141,20 @@ class Dispatcher(object):
         # it needs to be parsed and loaded as proper data types. The decoded data is stored in the
         # `decoded_dict`.
         job_dict = self._redis_conn.hgetall(job_key.key_str)
-        decoded_dict = {}
+        if not job_dict:
+            logger.warning(f"Query to task {job_key} not found in Redis")
+            return None
 
         # Fetch the RQ job. There needs to be a little processing done on it first.
         rq_job = rq.job.Job.fetch(job_key.key_str.split(':')[-1].replace("'", ''), connection=redis.Redis())
 
         # Build the properly decoded dict, which will be returned.
+        decoded_dict = {}
         for k in job_dict.keys():
-            decoded_dict[k.decode('utf-8')] = getattr(rq_job, k.decode())
+            try:
+                decoded_dict[k.decode('utf-8')] = getattr(rq_job, k.decode())
+            except AttributeError as e:
+                logger.debug(e)
 
         decoded_dict.update({'_key': job_key.key_str})
         return JobStatus(decoded_dict)
@@ -218,8 +225,11 @@ class Dispatcher(object):
         return JobKey(rq_job_ref.key.decode())
 
     def dispatch_task(self, method_reference: Callable, args: Tuple[Any, ...] = None, kwargs: Dict[str, Any] = None,
-                      metadata: Dict[str, Any] = None, persist: bool = False) -> JobKey:
+                      metadata: Dict[str, Any] = None, persist: bool = False, dependent_job: JobKey = None) -> JobKey:
         """Dispatch new task to run in background, which runs as soon as it can.
+
+        Note: If the dependent_job task is populated, then this task will NOT run until the dependent_job
+        finished **successfully**. If the dependent_job fails, this task will NOT run.
 
         Args:
             method_reference(Callable): The method in dispatcher.jobs to run
@@ -227,6 +237,7 @@ class Dispatcher(object):
             kwargs(dict): Keyword Argument to method_reference
             metadata(dict): Optional dict of metadata
             persist(bool): Never timeout if True, otherwise abort after 5 minutes.
+            dependent_job(JobKey): The JobKey of the job this task depends on.
 
         Returns:
             str: unique key of dispatched task
@@ -259,7 +270,9 @@ class Dispatcher(object):
             f"Dispatching {'persistent' if persist else 'ephemeral'} task `{method_reference.__name__}` to queue")
 
         try:
-            rq_job_ref = self._job_queue.enqueue(method_reference, args=args, kwargs=kwargs, timeout=timeout)
+            dep_job_str = dependent_job.key_str.split(':')[-1] if dependent_job else None
+            rq_job_ref = self._job_queue.enqueue(method_reference, args=args, kwargs=kwargs, timeout=timeout,
+                                                 depends_on=dep_job_str)
         except Exception as e:
             logger.error("Cannot enqueue job `{}`: {}".format(method_reference.__name__, e))
             raise
@@ -278,5 +291,4 @@ class Dispatcher(object):
             logger.exception(e)
             raise
 
-        # job.key is in bytes.. should be decode()-ed to form a python string.
         return jk
