@@ -17,17 +17,16 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-import uuid
+import glob
 import os
 import re
-import glob
-import yaml
-from zipfile import ZipFile
-
+import string
 from typing import (Any, Dict, List, Optional)
+import uuid
+import yaml
 
-from lmcommon.gitlib import get_git_interface, GitAuthor
 from lmcommon.configuration import Configuration
+from lmcommon.gitlib import get_git_interface, GitAuthor
 from lmcommon.logging import LMLogger
 
 GIT_IGNORE_DEFAULT = """.DS_Store"""
@@ -37,7 +36,7 @@ logger = LMLogger.get_logger()
 class LabBook(object):
     """Class representing a single LabBook"""
 
-    def __init__(self, config_file=None) -> None:
+    def __init__(self, config_file: str = None) -> None:
         self.labmanager_config = Configuration(config_file)
 
         # Create gitlib instance
@@ -81,7 +80,10 @@ class LabBook(object):
             raise ValueError("No name assigned to Lab Book.")
 
     @name.setter
-    def name(self, value) -> None:
+    def name(self, value: str) -> None:
+        if not value:
+            raise ValueError("value cannot be None or empty")
+
         if not self._data:
             self._data = {'labbook': {'name': value}}
         else:
@@ -155,9 +157,8 @@ class LabBook(object):
         Returns:
             None
         """
-        # Validate name characters
-        if not re.match("^(?!-)(?!.*--)[A-Za-z0-9-]+(?<!-)$", self.name):
-            raise ValueError("Invalid `name`. Only A-Z a-z 0-9 and hyphens allowed. No leading or trailing hyphens.")
+        if not re.match("^(?!-)(?!.*--)[a-z0-9-]+(?<!-)$", self.name):
+            raise ValueError("Invalid `name`. Only a-z 0-9 and hyphens allowed. No leading or trailing hyphens.")
 
         if len(self.name) > 100:
             raise ValueError("Invalid `name`. Max length is 100 characters")
@@ -213,8 +214,6 @@ class LabBook(object):
         if name == 'export':
             raise ValueError("LabBook cannot be named `export`.")
 
-        logger.info("Creating new labbook on disk for {}/{}/{} ...".format(username, owner, name))
-
         # Build data file contents
         self._data = {
             "labbook": {"id": uuid.uuid4().hex,
@@ -225,6 +224,8 @@ class LabBook(object):
 
         # Validate data
         self._validate_labbook_data()
+
+        logger.info("Creating new labbook on disk for {}/{}/{} ...".format(username, owner, name))
 
         # Verify or Create user subdirectory
         # Make sure you expand a user dir string

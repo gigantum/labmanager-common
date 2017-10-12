@@ -129,28 +129,7 @@ class TestLabBook(object):
 
         with pytest.raises(ValueError):
             lb.new(owner={"username": "test"}, name="labbook1", description="my first labbook")
-            
-    def test_invalid_name(self, mock_config_file):
-        """Test trying to create a labbook with an invalid name"""
-        lb = LabBook(mock_config_file[0])
 
-        lb.new(owner={"username": "test"}, name="DNf84329Ddf-d-d-d-d-dasdsw-SJfdj3820jg", description="my first labbook")
-
-        with pytest.raises(ValueError):
-            lb.new(owner={"username": "test"}, name="my labbook1", description="my first labbook")
-
-        with pytest.raises(ValueError):
-            lb.new(owner={"username": "test"}, name="my--labbook1", description="my first labbook")
-        
-        with pytest.raises(ValueError):
-            lb.new(owner={"username": "test"}, name="DNf84329DSJfdj3820jg-", description="my first labbook")
-        
-        with pytest.raises(ValueError):
-            lb.new(owner={"username": "test"}, name="-DNf84329DSJfdj3820jg", description="my first labbook")
-
-        long_name = "".join(["a" for x in range(0, 101)])
-        with pytest.raises(ValueError):
-            lb.new(owner={"username": "test"}, name=long_name, description="my first labbook")
 
     def test_list_labbooks(self, mock_config_file):
         """Test listing labbooks for all users"""
@@ -301,24 +280,25 @@ class TestLabBook(object):
         assert lb_loaded.name == "new-labbook-1"
         assert lb_loaded.description == "an updated description"
 
-    def test_change_invalid_properties(self, mock_config_file):
-        """Test loading a labbook from a directory"""
+    def test_validate_new_labbook_name(self, mock_config_file):
         lb = LabBook(mock_config_file[0])
+        lb.new(owner={"username": "test"}, name="name-validate-test", description="validate tests.")
 
-        lb.new(owner={"username": "test"}, name="DNf84329Ddf-d-d-d-d-dasdsw-SJfdj3820jg", description="my first labbook")
+        bad_labbook_names = [
+            None, "", "-", "--", "--a", '_', "-a", "a-", "$#Q", "Catbook4me", "--MeowMe", "-meow-4-me-",
+            "r--jacob-vogelstein", "Bad!", "----a----", "4---a--5---a", "cats-" * 200, "Catbook_",
+            "4underscores_not_allowed", "my--labbook1",
+            "-DNf84329DSJfdj3820jg"
+        ]
 
-        with pytest.raises(ValueError):
-            lb.name = "my labbook1"
+        allowed_labbook_names = [
+            "r-jacob-vogelstein", "chewy-dog", "chewy-dog-99", "9-sdfysc-2-42-aadsda-a43", 'a' * 99, '2-22-222-3333',
+            '9' * 50
+        ]
 
-        with pytest.raises(ValueError):
-            lb.name = "my--labbook1"
+        for bad in bad_labbook_names:
+            with pytest.raises(ValueError):
+                lb.name = bad
 
-        with pytest.raises(ValueError):
-            lb.name = "DNf84329DSJfdj3820jg-"
-
-        with pytest.raises(ValueError):
-            lb.name = "-DNf84329DSJfdj3820jg"
-
-        long_name = "".join(["a" for x in range(0, 101)])
-        with pytest.raises(ValueError):
-            lb.name = long_name
+        for good in allowed_labbook_names:
+            lb.name = good
