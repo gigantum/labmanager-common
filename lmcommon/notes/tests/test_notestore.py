@@ -97,21 +97,21 @@ class TestNoteStore:
         free_text3 = ''.join(random.choice('0123456789abcdefghijklmnopqrstuv;') for i in range(1000))
         objects3 = [helper_create_notedetailobject()]
 
-        mock_create_notestore[0].put_detail_record(linked_hash1, free_text1, objects1)
-        mock_create_notestore[0].put_detail_record(linked_hash2, free_text2, objects2)
-        mock_create_notestore[0].put_detail_record(linked_hash3, free_text3, objects3)
+        note_detail_key1 = mock_create_notestore[0].put_detail_record(linked_hash1, free_text1, objects1)
+        note_detail_key2 = mock_create_notestore[0].put_detail_record(linked_hash2, free_text2, objects2)
+        note_detail_key3 = mock_create_notestore[0].put_detail_record(linked_hash3, free_text3, objects3)
 
-        detail_record = mock_create_notestore[0].get_detail_record(linked_hash1)
+        detail_record = mock_create_notestore[0].get_detail_record(note_detail_key1)
         assert free_text1 == detail_record["free_text"]
         for true_obj, test_obj in zip(objects1, detail_record["objects"]):
             assert true_obj.__dict__ == test_obj.__dict__
 
-        detail_record = mock_create_notestore[0].get_detail_record(linked_hash2)
+        detail_record = mock_create_notestore[0].get_detail_record(note_detail_key2)
         assert free_text2 == detail_record["free_text"]
         for true_obj, test_obj in zip(objects2, detail_record["objects"]):
             assert true_obj.__dict__ == test_obj.__dict__
 
-        detail_record = mock_create_notestore[0].get_detail_record(linked_hash3)
+        detail_record = mock_create_notestore[0].get_detail_record(note_detail_key3)
         assert free_text3 == detail_record["free_text"]
         for true_obj, test_obj in zip(objects3, detail_record["objects"]):
             assert true_obj.__dict__ == test_obj.__dict__
@@ -167,6 +167,7 @@ class TestNoteStore:
         # Get Note and check
         stored_note = mock_create_notestore[0].get_note_summary(note_commit.hexsha)
 
+        assert note_data["note_detail_key"] == stored_note["note_detail_key"]
         assert note_data["linked_commit"] == stored_note["linked_commit"]
         assert note_data["message"] == stored_note["message"]
         assert note_data["level"] == stored_note["level"]

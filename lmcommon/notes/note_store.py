@@ -25,9 +25,8 @@ import base64
 import uuid
 from typing import (Any, Dict, List, Union)
 
-import plyvel
-
 from lmcommon.labbook import LabBook
+from lmcommon.notes.note_detail import NoteDetailDB
 
 
 class NoteLogLevel(Enum):
@@ -181,6 +180,7 @@ class NoteStore(object):
         """Create a new note record in the LabBook
 
             note_data Fields:
+                note_detail_key(str): can be undefined. will be set by creation.
                 linked_commit(str): Commit hash to the git commit the note is describing
                 message(str): Short summary message, limited to 256 characters
                 level(NoteLogLevel): The level in the note hierarchy
@@ -204,22 +204,25 @@ class NoteStore(object):
         else:
             linked_commit_hash = str(note_data['linked_commit'])
 
+        # Create record using the linked_commit hash as the reference
+        note_detail_key = self.put_detail_record(linked_commit_hash,
+                               note_data['free_text'],
+                               note_data['objects'])
+
+        note_data['note_detail_key'] = note_detail_key
+
+        # Add everything in the LabBook notes/log directory in case it is new or a new log file has been created
+        self.labbook.git.add_all(os.path.expanduser(os.path.join(".gigantum", "notes", "log")))
+
         # Prep log message
         note_metadata = {'level': note_data['level'],
-                         'linked_commit': linked_commit_hash,
+                         'note_detail_key': note_detail_key,
+                         'linked_commit': note_data['linked_commit'], 
                          'tags': self._validate_tags(note_data['tags'])}
 
         # format note metadata into message
         message = "gtmNOTE_: {}\ngtmjson_metadata_: {}".format(note_data['message'], json.dumps(note_metadata,
                                                                                                 cls=NoteRecordEncoder))
-
-        # Create record using the linked_commit hash as the reference
-        self.put_detail_record(linked_commit_hash,
-                               note_data['free_text'],
-                               note_data['objects'])
-
-        # Add everything in the LabBook notes/log directory in case it is new or a new log file has been created
-        self.labbook.git.add_all(os.path.expanduser(os.path.join(".gigantum", "notes", "log")))
 
         # Commit the changes as you've updated the notes DB
         return self.labbook.git.commit(message)
@@ -234,7 +237,7 @@ class NoteStore(object):
             dict: A dictionary of note data
         """
         # Merge detail record into dict
-        note.update(self.get_detail_record(note["linked_commit"]))
+        note.update(self.get_detail_record(note["note_detail_key"]))
 
         return note
 
@@ -278,6 +281,7 @@ class NoteStore(object):
                     "linked_commit": note_metadata["linked_commit"],
                     "message": message,
                     "level": NoteLogLevel(note_metadata["level"]),
+                    "note_detail_key": note_metadata['note_detail_key'],
                     "timestamp": entry["committed_on"],
                     "tags": tags,
                     "author": entry["author"]
@@ -289,6 +293,7 @@ class NoteStore(object):
         """Naive implementation that gets a list of note summary dictionaries for all note entries
 
             Note Summary Dictionary Fields:
+                note_detail_key: key to look up the note detail
                 note_commit(str): Commit hash of this note entry
                 linked_commit(str): Commit hash to the git commit the note is describing
                 message(str): Short summary message, limited to 256 characters
@@ -310,13 +315,14 @@ class NoteStore(object):
                                        "linked_commit": note_metadata["linked_commit"],
                                        "message": message,
                                        "level": NoteLogLevel(note_metadata["level"]),
+                                       "note_detail_key": note_metadata['note_detail_key'],
                                        "timestamp": entry["committed_on"],
                                        "tags": sorted(note_metadata["tags"]),
                                        "author": entry["author"]
                                        })
         return note_summaries
 
-    def put_detail_record(self, linked_commit_hash: str, free_text: str, objects: list) -> None:
+    def put_detail_record(self, linked_commit_hash: str, free_text: str, objects: list) -> str: 
         """
             Put a notes detailed entry into a levelDB.
 
@@ -332,38 +338,34 @@ class NoteStore(object):
                 Exception
         """
         # Open outside try (can't close if this fails)
-        note_detail_db = plyvel.DB(self._entries_path, create_if_missing=True)
+        note_detail_db = NoteDetailDB(self._entries_path)
+        #note_detail_db = plyvel.DB(self._entries_path, create_if_missing=True)
 
-        try:
-            # level db wants binary
-            binary_key = linked_commit_hash.encode('utf8')
-            binary_value = json.dumps({"free_text": free_text,
-                                      "objects": objects}, cls=NoteRecordEncoder).encode('utf8')
-            # Write record
-            note_detail_db.put(binary_key, binary_value)
-        finally:
-            note_detail_db.close()
+        # level db wants binary
+        binary_value = json.dumps({"linked_commit": linked_commit_hash,
+	                			   "free_text": free_text,
+                                   "objects": objects}, cls=NoteRecordEncoder).encode('utf8')
+        # Write record
+        note_key = note_detail_db.put(binary_value)
 
-    def get_detail_record(self, linked_commit_hash: str) -> Dict[str, Any]:
+        return note_key
+
+    def get_detail_record(self, note_key: str) -> Dict[str, Any]:
         """
             Fetch a notes detailed entry from a levelDB by commit hash
 
             Args:
-                linked_commit_hash(string): commit hash of the commit the note entry references
+                note_key : the key returned from the notes DB when storing.
 
             Returns:
                  dict
         """
-        # Create key
-        binary_key = linked_commit_hash.encode('utf8')
-
         # Create DB connection
-        note_detail_db = plyvel.DB(self._entries_path, create_if_missing=True)
-        try:
-            # Get value from key-value store
-            binary_value = note_detail_db.get(binary_key)
-        finally:
-            note_detail_db.close()
+        note_detail_db = NoteDetailDB(self._entries_path)
+        #note_detail_db = plyvel.DB(self._entries_path, create_if_missing=True)
+
+        # Get value from key-value store
+        binary_value = note_detail_db.get(note_key)
 
         # Load into dictionary
         value = json.loads(binary_value.decode('utf8'))
