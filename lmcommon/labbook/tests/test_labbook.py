@@ -50,6 +50,15 @@ git:
     shutil.rmtree(temp_dir)
 
 
+@pytest.fixture()
+def sample_src_file():
+    with tempfile.NamedTemporaryFile(mode="w") as sample_f:
+        # Fill sample file with some deterministic crap
+        sample_f.write("n4%nm4%M435A EF87kn*C" * 40)
+        sample_f.seek(0)
+        yield sample_f.name
+
+
 class TestLabBook(object):
     def test_create_labbook(self, mock_config_file):
         """Test creating an empty labbook"""
@@ -129,7 +138,6 @@ class TestLabBook(object):
 
         with pytest.raises(ValueError):
             lb.new(owner={"username": "test"}, name="labbook1", description="my first labbook")
-
 
     def test_list_labbooks(self, mock_config_file):
         """Test listing labbooks for all users"""
@@ -302,3 +310,21 @@ class TestLabBook(object):
 
         for good in allowed_labbook_names:
             lb.name = good
+
+    def test_insert_file_success_1(self, mock_config_file, sample_src_file):
+        lb = LabBook(mock_config_file[0])
+        lb.new(owner={"username": "test"}, name="test-insert-files-1", description="validate tests.")
+        new_file_path = lb.insert_file(sample_src_file, "code")
+        assert os.path.exists(new_file_path)
+
+    def test_insert_file_success_2(self, mock_config_file, sample_src_file):
+        lb = LabBook(mock_config_file[0])
+        lb.new(owner={"username": "test"}, name="test-insert-files-4", description="validate tests.")
+        new_file_path = lb.insert_file(sample_src_file, "output/")
+        assert os.path.exists(new_file_path)
+
+    def test_insert_file_fail_1(self, mock_config_file, sample_src_file):
+        lb = LabBook(mock_config_file[0])
+        lb.new(owner={"username": "test"}, name="test-insert-fail", description="validate tests.")
+        with pytest.raises(ValueError):
+            new_file_path = lb.insert_file(sample_src_file, "/totally/invalid/dir")
