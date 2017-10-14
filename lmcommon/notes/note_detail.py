@@ -109,7 +109,7 @@ class NoteDetailDB():
 
         return detail_header
 
-    def get(self, node_key: str) -> str:
+    def get(self, node_key: str) -> bytes:
         """Return a detailed note.
 
         Args:
@@ -125,7 +125,7 @@ class NoteDetailDB():
             offset= int.from_bytes(node_key[12:16],'little') 
             length = int.from_bytes(node_key[16:20],'little') 
      
-        with open(os.path.abspath(os.path.join(self.dirpath, self.basename+str(fnum))),"r") as fh:
+        with open(os.path.abspath(os.path.join(self.dirpath, self.basename+str(fnum))),"br") as fh:
             offset = fh.seek(offset)
             retval = fh.read(length+20)   # TODO RB plus the header length
 
