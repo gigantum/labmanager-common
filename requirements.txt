@@ -1,7 +1,6 @@
 pytest
 pyyaml
 GitPython
-plyvel
 docker==2.5.1
 redis==2.10.6
 rq==0.8.1
