@@ -20,6 +20,7 @@
 import os
 import json
 
+
 class NoteDetailDB():
     """File based representation of key values"""
 
@@ -37,7 +38,7 @@ class NoteDetailDB():
 
         # get the latest log on open
         self.logmdfname = os.path.abspath(os.path.join(path,'.logfilename'))
-        if (os.path.exists(self.logmdfname)):
+        if os.path.exists(self.logmdfname):
             # get most recently used file
             with open(self.logmdfname,"r") as fp: 
                 logmeta = json.load(fp) 
@@ -54,7 +55,6 @@ class NoteDetailDB():
                 self.latestfnum=1
                 logmeta = {'basename': self.basename, 'filenumber': 1}
                 json.dump(logmeta, fp)
-            
 
     def _open_for_append_and_rotate(self):
         """ Return and open file handle.  Rotate the log as we need.
@@ -77,11 +77,11 @@ class NoteDetailDB():
         else:
             return fp
         
-    def put(self, value: str) -> str:
+    def put(self, value: str) -> bytes:
         """Put a note into the files and return a key to access it
 
         Args:
-            path(str): Key used to access and identify the object
+            value(str): note detail objects
 
         Returns:
             note_key(str): key used to access and identify the object
@@ -125,7 +125,7 @@ class NoteDetailDB():
             offset= int.from_bytes(node_key[12:16],'little') 
             length = int.from_bytes(node_key[16:20],'little') 
      
-        with open(os.path.abspath(os.path.join(self.dirpath, self.basename+str(fnum))),"br") as fh:
+        with open(os.path.abspath(os.path.join(self.dirpath, self.basename+str(fnum))),"r") as fh:
             offset = fh.seek(offset)
             retval = fh.read(length+20)   # TODO RB plus the header length
 

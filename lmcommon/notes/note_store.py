@@ -339,11 +339,10 @@ class NoteStore(object):
         """
         # Open outside try (can't close if this fails)
         note_detail_db = NoteDetailDB(self._entries_path)
-        #note_detail_db = plyvel.DB(self._entries_path, create_if_missing=True)
 
         # level db wants binary
         binary_value = json.dumps({"linked_commit": linked_commit_hash,
-	                			   "free_text": free_text,
+                                   "free_text": free_text,
                                    "objects": objects}, cls=NoteRecordEncoder).encode('utf8')
         # Write record
         note_key = note_detail_db.put(binary_value)
@@ -362,7 +361,6 @@ class NoteStore(object):
         """
         # Create DB connection
         note_detail_db = NoteDetailDB(self._entries_path)
-        #note_detail_db = plyvel.DB(self._entries_path, create_if_missing=True)
 
         # Get value from key-value store
         note_record = note_detail_db.get(note_key)
