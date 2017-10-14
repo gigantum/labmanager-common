@@ -180,7 +180,7 @@ class NoteStore(object):
         """Create a new note record in the LabBook
 
             note_data Fields:
-                note_detail_key(str): can be undefined. will be set by creation.
+                note_detail_key(bytes): can be undefined. will be set by creation.
                 linked_commit(str): Commit hash to the git commit the note is describing
                 message(str): Short summary message, limited to 256 characters
                 level(NoteLogLevel): The level in the note hierarchy
@@ -213,10 +213,10 @@ class NoteStore(object):
 
         # Add everything in the LabBook notes/log directory in case it is new or a new log file has been created
         self.labbook.git.add_all(os.path.expanduser(os.path.join(".gigantum", "notes", "log")))
-
+        
         # Prep log message
         note_metadata = {'level': note_data['level'],
-                         'note_detail_key': note_detail_key,
+                         'note_detail_key': base64.b64encode(note_detail_key).decode('utf-8'),
                          'linked_commit': note_data['linked_commit'], 
                          'tags': self._validate_tags(note_data['tags'])}
 
@@ -281,7 +281,7 @@ class NoteStore(object):
                     "linked_commit": note_metadata["linked_commit"],
                     "message": message,
                     "level": NoteLogLevel(note_metadata["level"]),
-                    "note_detail_key": note_metadata['note_detail_key'],
+                    "note_detail_key": base64.b64decode(note_metadata['note_detail_key'].encode('utf-8')),
                     "timestamp": entry["committed_on"],
                     "tags": tags,
                     "author": entry["author"]
@@ -315,7 +315,7 @@ class NoteStore(object):
                                        "linked_commit": note_metadata["linked_commit"],
                                        "message": message,
                                        "level": NoteLogLevel(note_metadata["level"]),
-                                       "note_detail_key": note_metadata['note_detail_key'],
+                                       "note_detail_key": base64.b64decode(note_metadata['note_detail_key'].encode('utf-8')),
                                        "timestamp": entry["committed_on"],
                                        "tags": sorted(note_metadata["tags"]),
                                        "author": entry["author"]
@@ -365,7 +365,9 @@ class NoteStore(object):
         #note_detail_db = plyvel.DB(self._entries_path, create_if_missing=True)
 
         # Get value from key-value store
-        binary_value = note_detail_db.get(note_key)
+        note_record = note_detail_db.get(note_key)
+        # TODO RB how big is the header programmatically
+        binary_value = note_record[20:]
 
         # Load into dictionary
         value = json.loads(binary_value.decode('utf8'))

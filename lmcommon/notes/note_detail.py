@@ -30,10 +30,53 @@ class NoteDetailDB():
             path(str): note detail directory
         """
         self.dirpath = path
-        self.curfile = "logfile"
 
-        # TODO need to think about evaluating the currentfile everytime?  or keeping file metadata on it?
+        # TODO derived from UUID/machine/something unique
+        #       derive in a smart way for merge.
+        self.basename = "labbook_notes_log_"
 
+        # get the latest log on open
+        self.logmdfname = os.path.abspath(os.path.join(path,'.logfilename'))
+        if (os.path.exists(self.logmdfname)):
+            # get most recently used file
+            with open(self.logmdfname,"r") as fp: 
+                logmeta = json.load(fp) 
+                # opening an existing log
+                if logmeta['basename']==self.basename:
+                    self.latestfnum = logmeta['filenumber']
+                # logging on a new node/system
+                else:
+                    self.latestfnum = 1
+        
+        else:
+            # no logmeta file, first time open
+            with open(self.logmdfname,"w+") as fp:
+                self.latestfnum=1
+                logmeta = {'basename': self.basename, 'filenumber': 1}
+                json.dump(logmeta, fp)
+            
+
+    def _open_for_append_and_rotate(self):
+        """ Return and open file handle.  Rotate the log as we need.
+            Can't check the type -> file doesn't work
+
+        Returns: file
+        """
+        fp = open(os.path.abspath(os.path.join(self.dirpath, self.basename+str(self.latestfnum))), "ba" )
+
+        # rotate file when too big TODO get from settings
+        # this will write one record after the limit, i.e. it's a soft limit
+        if fp.tell() > 10000:
+            self.latestfnum = self.latestfnum+1
+            with open(self.logmdfname,"w+") as fp2:
+                logmeta = {'basename': self.basename, 'filenumber': self.latestfnum}
+                json.dump(logmeta, fp2)
+            fp.close()
+            # call recursively in case need to advance more than one
+            return self._open_for_append_and_rotate()
+        else:
+            return fp
+        
     def put(self, value: str) -> str:
         """Put a note into the files and return a key to access it
 
@@ -43,24 +86,28 @@ class NoteDetailDB():
         Returns:
             note_key(str): key used to access and identify the object
         """
-        length = len(value)
-
+        
         # TODO get a lock for all write I/O
-        fh = open(os.path.abspath(os.path.join(self.dirpath,self.curfile)),"ba")
+        fh = self._open_for_append_and_rotate()
         try:
             # get this file offset
             offset = fh.tell()
+            length=len(value)
 
-            # TODO do something to advance the logfile as needed
+            # header in the log and key are the same byte string
+            detail_header = b'_glm_lsn' + (self.latestfnum).to_bytes(4, byteorder='little') \
+                                        + (offset).to_bytes(4, byteorder='little') \
+                                        + (length).to_bytes(4, byteorder='little')
 
             # append the record to the active log
+            fh.write(detail_header)
             fh.write(value)
 
         finally:
             # TODO release the lock
             fh.close()
 
-        return json.dumps([self.curfile, offset, length])
+        return detail_header
 
     def get(self, node_key: str) -> str:
         """Return a detailed note.
@@ -71,13 +118,16 @@ class NoteDetailDB():
         Returns:
             detail_record(str): detail records stored by put
         """
-        [ fname, offset, length ] = json.loads(node_key)
-        try:
-            fh = open(os.path.abspath(os.path.join(self.dirpath,self.curfile)),"br")
+        if node_key[0:8] != b'_glm_lsn':
+            raise ValueError("Invalid log record header")
+        else:
+            fnum = int.from_bytes(node_key[8:12],'little') 
+            offset= int.from_bytes(node_key[12:16],'little') 
+            length = int.from_bytes(node_key[16:20],'little') 
+     
+        with open(os.path.abspath(os.path.join(self.dirpath, self.basename+str(fnum))),"br") as fh:
             offset = fh.seek(offset)
-            retval = fh.read(length)
-        finally:
-            fh.close()
+            retval = fh.read(length+20)   # TODO RB plus the header length
 
         return retval
     

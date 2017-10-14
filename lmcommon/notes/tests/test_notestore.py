@@ -287,6 +287,7 @@ class TestNoteStore:
             note_truth.append([note_data, note_commit])
 
         # Test Getting all the summaries
+        # RB summaries does not return correct note_detail_key
         summaries = mock_create_notestore[0].get_all_note_summaries()
         note_truth.reverse()
 
