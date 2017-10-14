@@ -19,6 +19,8 @@
 # SOFTWARE.
 import os
 import json
+from redis import StrictRedis
+import redis_lock
 
 
 class NoteDetailDB():
@@ -86,26 +88,27 @@ class NoteDetailDB():
         Returns:
             note_key(str): key used to access and identify the object
         """
+        conn = StrictRedis()
         
         # TODO get a lock for all write I/O
-        fh = self._open_for_append_and_rotate()
-        try:
-            # get this file offset
-            offset = fh.tell()
-            length=len(value)
+        with redis_lock.Lock(conn, self.dirpath):
+            fh = self._open_for_append_and_rotate()
+            try:
+                # get this file offset
+                offset = fh.tell()
+                length=len(value)
 
-            # header in the log and key are the same byte string
-            detail_header = b'_glm_lsn' + (self.latestfnum).to_bytes(4, byteorder='little') \
-                                        + (offset).to_bytes(4, byteorder='little') \
-                                        + (length).to_bytes(4, byteorder='little')
+                # header in the log and key are the same byte string
+                detail_header = b'_glm_lsn' + (self.latestfnum).to_bytes(4, byteorder='little') \
+                                            + (offset).to_bytes(4, byteorder='little') \
+                                            + (length).to_bytes(4, byteorder='little')
 
-            # append the record to the active log
-            fh.write(detail_header)
-            fh.write(value)
+                # append the record to the active log
+                fh.write(detail_header)
+                fh.write(value)
 
-        finally:
-            # TODO release the lock
-            fh.close()
+            finally:
+                fh.close()
 
         return detail_header
 

@@ -3,6 +3,7 @@ pyyaml
 GitPython
 docker==2.5.1
 redis==2.10.6
+python-redis-lock==3.2.0
 rq==0.8.1
 jupyter==1.0.0
 hiredis==0.2.0
