@@ -322,7 +322,7 @@ class NoteStore(object):
                                        })
         return note_summaries
 
-    def put_detail_record(self, linked_commit_hash: str, free_text: str, objects: list) -> str: 
+    def put_detail_record(self, linked_commit_hash: str, free_text: str, objects: list) -> bytes: 
         """
             Put a notes detailed entry into a levelDB.
 

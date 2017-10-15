@@ -26,7 +26,7 @@ import redis_lock
 class NoteDetailDB():
     """File based representation of key values"""
 
-    def __init__(self, path: str):
+    def __init__(self, path: str) -> None:
         """Constructor
 
         Args:
@@ -79,7 +79,7 @@ class NoteDetailDB():
         else:
             return fp
         
-    def put(self, value: str) -> bytes:
+    def put(self, value: bytes) -> bytes:
         """Put a note into the files and return a key to access it
 
         Args:
@@ -112,7 +112,7 @@ class NoteDetailDB():
 
         return detail_header
 
-    def get(self, node_key: str) -> bytes:
+    def get(self, node_key: bytes) -> bytes:
         """Return a detailed note.
 
         Args:
