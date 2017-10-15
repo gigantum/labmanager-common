@@ -349,7 +349,7 @@ class NoteStore(object):
 
         return note_key
 
-    def get_detail_record(self, note_key: str) -> Dict[str, Any]:
+    def get_detail_record(self, note_key: bytes) -> Dict[str, Any]:
         """
             Fetch a notes detailed entry from a levelDB by commit hash
 
