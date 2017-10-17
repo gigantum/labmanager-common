@@ -129,7 +129,7 @@ class NoteStore(object):
     The linked commit is the commit hash of the original commit that contained the changes made to the repository.
     """
 
-    def __init__(self, labbook: LabBook) -> None:
+    def __init__(self, labbook) -> None:
         """ Load the database for the specified labbook
 
         Args:
@@ -139,7 +139,7 @@ class NoteStore(object):
         self.max_num_tags: int = 100
         self.max_tag_length: int = 256
 
-        self.labbook: LabBook = labbook
+        self.labbook = labbook
 
         # Note record commit messages follow a special structure
         self.note_regex = re.compile(r"gtmNOTE_: ([\w\s\S]+)\ngtmjson_metadata_: (.*)")
