@@ -21,7 +21,7 @@ import glob
 import os
 import re
 import shutil
-from typing import (Any, Dict, List, Optional)
+from typing import (Any, Dict, List, Optional, Set, Tuple)
 import uuid
 import yaml
 
@@ -128,6 +128,12 @@ class LabBook(object):
         else:
             raise ValueError("No owner assigned to Lab Book.")
 
+    @staticmethod
+    def _make_path_relative(path_str: str) -> str:
+        while len(path_str or '') >= 1 and path_str[0] == os.path.sep:
+            path_str = path_str[1:]
+        return path_str
+
     def _set_root_dir(self, new_root_dir: str) -> None:
         """Update the root directory and also reconfigure the git instance
 
@@ -193,7 +199,9 @@ class LabBook(object):
         if not os.path.isfile(src_file):
             raise ValueError(f"Source file does not exist at `{src_file}`")
 
-        dst_path = os.path.join(self.root_dir, dst_dir)
+        # Remove any leading "/" -- without doing so os.path.join will break.
+        dst_dir = LabBook._make_path_relative(dst_dir)
+        dst_path = os.path.join(self.root_dir, dst_dir.replace('..', ''))
         if not os.path.isdir(dst_path):
             raise ValueError(f"Target `{dst_path}` not a directory")
 
@@ -218,6 +226,155 @@ class LabBook(object):
         except Exception as e:
             logger.exception(e)
             raise
+
+    def delete_file(self, relative_path: str) -> bool:
+        """Delete file from inside lb directory"""
+        if not relative_path:
+            raise ValueError(f"Target file `{relative_path}` to delete cannot be None or empty")
+
+        relative_path = LabBook._make_path_relative(relative_path)
+        target_file_path = os.path.join(self.root_dir, relative_path)
+        if not os.path.isfile(target_file_path):
+            raise ValueError(f"Attempted to delete non-existent file at `{target_file_path}`")
+        else:
+            try:
+                logger.info(f"Removing file at `{target_file_path}`")
+                os.remove(target_file_path)
+                commit_msg = f"Removed file {relative_path}."
+                self.git.remove(target_file_path)
+                commit = self.git.commit(commit_msg)
+                _, ext = os.path.splitext(target_file_path) or 'file'
+                ns = NoteStore(self)
+                ns.create_note({
+                    'linked_commit': commit.hexsha,
+                    'message': commit_msg,
+                    'level': NoteLogLevel.USER_MAJOR,
+                    'tags': [ext],
+                    'free_text': '',
+                    'objects': ''
+                })
+                return True
+            except IOError as e:
+                logger.exception(e)
+                raise
+
+    def move_file(self, src_rel_path: str, dst_rel_path: str) -> str:
+        """Move a file or directory within a labbook, but not outside of it. Wraps
+        underlying "mv" call.
+
+        Args:
+            src_rel_path(str): Source file or directory
+            dst_rel_path(str): Target file name and/or directory
+        """
+
+        # Start with Validations
+        if not src_rel_path:
+            raise ValueError("src_rel_path cannot be None or empty")
+
+        if not dst_rel_path:
+            raise ValueError("dst_rel_path cannot be None or empty")
+
+        src_rel_path = LabBook._make_path_relative(src_rel_path)
+        dst_rel_path = LabBook._make_path_relative(dst_rel_path)
+
+        src_abs_path = os.path.join(self.root_dir, src_rel_path.replace('..', ''))
+        dst_abs_path = os.path.join(self.root_dir, dst_rel_path.replace('..', ''))
+
+        if not os.path.exists(src_abs_path):
+            raise ValueError(f"No src file exists at `{src_abs_path}`")
+
+        try:
+            src_type = 'directory' if os.path.isdir(src_abs_path) else 'file'
+            logger.info(f"Moving {src_type} `{src_abs_path}` to `{dst_abs_path}`")
+
+            self.git.remove(src_abs_path, keep_file=True)
+
+            shutil.move(src_abs_path, dst_abs_path)
+            commit_msg = f"Moved {src_type} `{src_rel_path}` to `{dst_rel_path}`"
+
+            if os.path.isdir(dst_abs_path):
+                self.git.add_all(dst_abs_path)
+            else:
+                self.git.add(dst_abs_path)
+
+            commit = self.git.commit(commit_msg)
+            ns = NoteStore(self)
+            ns.create_note({
+                'linked_commit': commit.hexsha,
+                'message': commit_msg,
+                'level': NoteLogLevel.USER_MAJOR,
+                'tags': ['file-move'],
+                'free_text': '',
+                'objects': ''
+            })
+
+            return dst_abs_path
+        except Exception as e:
+            logger.critical("Failed moving file in labbook. Repository may be in corrupted state.")
+            logger.exception(e)
+            raise
+
+    def makedir(self, relative_path: str, make_parents: bool = True) -> str:
+        """Make a new directory inside the labbook directory.
+
+        Args:
+            relative_path(str): Path within the labbook to make directory
+            make_parents(bool): If true, create intermediary directories
+
+        Returns:
+            str: Absolute path of new directory
+        """
+        if not relative_path:
+            raise ValueError("relative_path argument cannot be None or empty")
+
+        relative_path = LabBook._make_path_relative(relative_path)
+        new_directory_path = os.path.join(self.root_dir, relative_path)
+        if os.path.exists(new_directory_path):
+            raise ValueError(f'Directory `{new_directory_path}` already exists')
+        else:
+            logger.info(f"Making new directory in `{new_directory_path}`")
+            try:
+                os.makedirs(new_directory_path, exist_ok=make_parents)
+                with open(os.path.join(new_directory_path, '.gitkeep'), 'w') as gitkeep:
+                    gitkeep.write("Do not delete this file.")
+            except Exception as e:
+                logger.exception(e)
+                raise
+            return new_directory_path
+
+    def listdir(self, show_hidden: bool = False) -> List[Dict[str, Any]]:
+        """Return a list of all files and directories in the labbook. Never includes the .git or
+         .gigantum directory.
+
+        Args:
+            show_hidden(bool): If True, include hidden directories (EXCLUDING .git and .gigantum)
+
+        Returns:
+            List[Dict[str, str]]: List of dictionaries containing file and directory metadata
+        """
+
+        leafs: Set[Tuple[bool, str]] = set()
+        for root, dirs, files in os.walk(self.root_dir):
+            for f in files:
+                leafs.add((False, os.path.join(root.replace(self.root_dir, ''), f)))
+            for d in dirs:
+                leafs.add((True, os.path.join(root.replace(self.root_dir, ''), d)))
+
+        leafs_filtered = [l for l in leafs if '.git' not in l[1] and '.gigantum' not in l[1]]
+        stats: List[Dict[str, Any]] = list()
+        for is_dir, f_p in [l for l in leafs_filtered if '.git' not in l]:
+            if not show_hidden and any([len(p) and p[0] == '.' for p in f_p.split('/')]):
+                continue
+            f_p = f_p[1:] if f_p[0] == '/' else f_p
+            file_info = os.stat(os.path.join(self.root_dir, f_p))
+            stats.append({
+                'key': f_p,
+                'is_dir': is_dir,
+                'size': file_info.st_size,
+                'modified_at': file_info.st_mtime
+            })
+
+        return sorted(stats, key=lambda a: a['key'])
 
     def new(self, owner: Dict[str, str], name: str, username: str = None, description: str = None):
         """Method to create a new minimal LabBook instance on disk
@@ -459,3 +616,4 @@ class LabBook(object):
             dict
         """
         return self.git.log_entry(commit)
+

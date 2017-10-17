@@ -22,6 +22,7 @@ from git import Repo, Head, RemoteReference
 from git import InvalidGitRepositoryError, BadName
 import os
 import re
+import shutil
 
 from lmcommon.logging import LMLogger
 
@@ -247,11 +248,20 @@ class GitFilesystem(GitRepoInterface):
         Returns:
             None
         """
-        logger.info("Removing file {} from Git repo at {}".format(filename, self.working_directory))
-        self.repo.index.remove([filename])
+        path_type = 'file' if os.path.isfile(filename) else 'directory'
+        logger.info(f"Removing {path_type} {filename} from Git repo at {self.working_directory}")
+
+        if os.path.isfile(filename):
+            self.repo.index.remove([filename])
+        else:
+            # How to pass the -r to handle the directory.
+            self.repo.index.remove([filename], **{'r': True})
 
         if not keep_file:
-            os.remove(filename)
+            if os.path.isfile(filename):
+                os.remove(filename)
+            else:
+                shutil.rmtree(filename)
 
         # TODO: DMK look into if force option is needed
 
