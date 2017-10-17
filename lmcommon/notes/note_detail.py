@@ -90,7 +90,7 @@ class NoteDetailDB():
         """
         conn = StrictRedis()
         
-        # TODO get a lock for all write I/O
+        # get a lock for all write I/O
         with redis_lock.Lock(conn, self.dirpath):
             fh = self._open_for_append_and_rotate()
             try:
@@ -99,9 +99,9 @@ class NoteDetailDB():
                 length=len(value)
 
                 # header in the log and key are the same byte string
-                detail_header = b'_glm_lsn' + (self.latestfnum).to_bytes(4, byteorder='little') \
-                                            + (offset).to_bytes(4, byteorder='little') \
-                                            + (length).to_bytes(4, byteorder='little')
+                detail_header = b'_glm_lsn' + self.latestfnum.to_bytes(4, byteorder='little') \
+                                            + offset.to_bytes(4, byteorder='little') \
+                                            + length.to_bytes(4, byteorder='little')
 
                 # append the record to the active log
                 fh.write(detail_header)
@@ -129,8 +129,8 @@ class NoteDetailDB():
             length = int.from_bytes(node_key[16:20],'little') 
      
         with open(os.path.abspath(os.path.join(self.dirpath, self.basename+str(fnum))),"br") as fh:
-            offset = fh.seek(offset)
-            retval = fh.read(length+20)   # TODO RB plus the header length
+            fh.seek(offset)
+            retval = fh.read(length+20)   # plus the header length
 
         return retval
     

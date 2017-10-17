@@ -101,4 +101,4 @@ class TestNoteDetailObject:
 
         assert ndo.__dict__ == ndo2.__dict__
 
-# TODO RB put a fowarding 
+

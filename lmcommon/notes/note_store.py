@@ -238,7 +238,6 @@ class NoteStore(object):
         """
         # Merge detail record into dict
         note.update(self.get_detail_record(note["note_detail_key"]))
-
         return note
 
     def get_note(self, commit: str) -> Dict[str, Any]:
@@ -252,7 +251,6 @@ class NoteStore(object):
         """
         # Get note summary
         note = self.get_note_summary(commit)
-
         return self.summary_to_note(note)
 
     def get_note_summary(self, commit) -> Dict[str, Any]:
@@ -346,7 +344,6 @@ class NoteStore(object):
                                    "objects": objects}, cls=NoteRecordEncoder).encode('utf8')
         # Write record
         note_key = note_detail_db.put(binary_value)
-
         return note_key
 
     def get_detail_record(self, note_key: bytes) -> Dict[str, Any]:
@@ -377,5 +374,4 @@ class NoteStore(object):
                 objects.append(NoteDetailObject(obj_data["key"],
                                                 obj_data["type"],
                                                 base64.b64decode(obj_data["value"])))
-
         return {"free_text": value["free_text"], "objects": objects}
