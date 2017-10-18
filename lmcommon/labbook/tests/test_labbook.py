@@ -374,12 +374,20 @@ class TestLabBook(object):
     def test_makedir_simple(self, mock_config_file):
         lb = LabBook(mock_config_file[0])
         lb.new(owner={"username": "test"}, name="test-insert-files-1", description="validate tests.")
-        dirs = ["cat_dir", "/dog_dir", "/mouse_dir/", "mouse_dir/new_dir", "/non/existant/dir/should/now/be/made"]
+        long_dir = "/non/existant/dir/should/now/be/made"
+        dirs = ["cat_dir", "/dog_dir", "/mouse_dir/", "mouse_dir/new_dir", long_dir]
         for d in dirs:
             res = lb.makedir(d)
             assert os.path.isdir(res)
             assert os.path.isdir(os.path.join(lb.root_dir, d[1:] if d[0] == '/' else d))
             assert os.path.isfile(os.path.join(res, '.gitkeep'))
+        score = 0
+        for root, dirs, files in os.walk(os.path.join(lb.root_dir, 'non')):
+            for f in files:
+                if f == '.gitkeep':
+                    score += 1
+        # Ensure that count of .gitkeep files equals the number of subdirs
+        assert score == len(LabBook._make_path_relative(long_dir).split(os.sep))
 
     def test_listdir(self, mock_config_file, sample_src_file):
         lb = LabBook(mock_config_file[0])

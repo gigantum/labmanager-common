@@ -234,6 +234,8 @@ class LabBook(object):
 
         relative_path = LabBook._make_path_relative(relative_path)
         target_file_path = os.path.join(self.root_dir, relative_path)
+        if not os.path.exists(target_file_path):
+            raise ValueError(f"Attempted to delete non-existent path at `{target_file_path}`")
         if not os.path.isfile(target_file_path):
             raise ValueError(f"Attempted to delete non-existent file at `{target_file_path}`")
         else:
@@ -335,8 +337,13 @@ class LabBook(object):
             logger.info(f"Making new directory in `{new_directory_path}`")
             try:
                 os.makedirs(new_directory_path, exist_ok=make_parents)
-                with open(os.path.join(new_directory_path, '.gitkeep'), 'w') as gitkeep:
-                    gitkeep.write("Do not delete this file.")
+                new_dir = ''
+                for d in relative_path.split(os.sep):
+                    new_dir = os.path.join(new_dir, d)
+                    full_new_dir = os.path.join(self.root_dir, new_dir)
+                    with open(os.path.join(full_new_dir, '.gitkeep'), 'w') as gitkeep:
+                        gitkeep.write("This file is necessary to keep this directory tracked by Git"
+                                      " and archivable by compression tools. Do not delete or modify!")
             except Exception as e:
                 logger.exception(e)
                 raise
@@ -376,7 +383,7 @@ class LabBook(object):
 
         return sorted(stats, key=lambda a: a['key'])
 
-    def new(self, owner: Dict[str, str], name: str, username: str = None, description: str = None):
+    def new(self, owner: Dict[str, str], name: str, username: str = None, description: str = None) -> str:
         """Method to create a new minimal LabBook instance on disk
 
         /[LabBook name]
@@ -462,14 +469,16 @@ class LabBook(object):
         self.git.initialize()
 
         # Create Directory Structure
-        os.makedirs(os.path.join(self.root_dir, "code"))
-        os.makedirs(os.path.join(self.root_dir, "input"))
-        os.makedirs(os.path.join(self.root_dir, "output"))
-        os.makedirs(os.path.join(self.root_dir, ".gigantum"))
-        os.makedirs(os.path.join(self.root_dir, ".gigantum", "env"))
-        os.makedirs(os.path.join(self.root_dir, ".gigantum", "notes"))
-        os.makedirs(os.path.join(self.root_dir, ".gigantum", "notes", "log"))
-        os.makedirs(os.path.join(self.root_dir, ".gigantum", "notes", "index"))
+        dirs = [
+            'code', 'input', 'output', '.gigantum',
+            os.path.join('.gigantum', 'env'),
+            os.path.join('.gigantum', 'notes'),
+            os.path.join('.gigantum', 'notes', 'log'),
+            os.path.join('.gigantum', 'notes', 'index'),
+        ]
+
+        for d in dirs:
+            self.makedir(d, make_parents=True)
 
         # Create labbook.yaml file
         self._save_labbook_data()
@@ -486,6 +495,8 @@ class LabBook(object):
 
         # Commit
         # TODO: Once users are properly added, create a GitAuthor instance before commit
+        for s in ['code', 'input', 'output', '.gigantum']:
+            self.git.add_all(os.path.join(self.root_dir, s))
         self.git.add(os.path.join(self.root_dir, ".gigantum", "labbook.yaml"))
         self.git.add(os.path.join(self.root_dir, ".gigantum", "env", "Dockerfile"))
         self.git.add(os.path.join(self.root_dir, ".gitignore"))
