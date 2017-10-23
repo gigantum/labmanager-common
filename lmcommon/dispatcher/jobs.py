@@ -138,9 +138,18 @@ def build_docker_image(path, tag, pull, nocache) -> str:
 
     try:
         docker_client = get_docker_client()
-        docker_image = docker_client.images.build(path=path, tag=tag, pull=pull, nocache=nocache)
-        logger.info("Completed build_docker_image in pid {}: {}".format(os.getpid(), str(docker_image)))
-        return docker_image.id
+        [logger.info(ln) for ln in docker_client.api.build(path=path,
+                                                           tag=tag,
+                                                           nocache=nocache,
+                                                           pull=pull,
+                                                           stream=True, decode=True)]
+
+        # Assume build worked and get the image
+        completed_image = docker_client.images.get(tag)
+
+        logger.info("Completed build_docker_image in pid {}: {}".format(os.getpid(), str(completed_image)))
+        logger.info("test: {}".format(completed_image.id))
+        return completed_image.id
     except Exception as e:
         logger.error("Error on build_docker_image in pid {}: {}".format(os.getpid(), e))
         raise
