@@ -227,10 +227,10 @@ class LocalIdentityManager(IdentityManager):
                 data = json.load(user_file)
 
                 user_obj = User()
-                user_obj.username = data['username']
-                user_obj.email = data['email']
-                user_obj.given_name = data['given_name']
-                user_obj.family_name = data['family_name']
+                user_obj.username = data.get('username')
+                user_obj.email = data.get('email')
+                user_obj.given_name = data.get('given_name')
+                user_obj.family_name = data.get('family_name')
 
                 return user_obj
         else:

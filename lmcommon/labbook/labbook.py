@@ -24,6 +24,7 @@ import shutil
 from typing import (Any, Dict, List, Optional, Set, Tuple)
 import uuid
 import yaml
+import json
 
 from lmcommon.configuration import Configuration
 from lmcommon.gitlib import get_git_interface, GitAuthor
@@ -315,6 +316,157 @@ class LabBook(object):
             logger.critical("Failed moving file in labbook. Repository may be in corrupted state.")
             logger.exception(e)
             raise
+
+    def create_favorite(self, target_sub_dir: str, relative_path: str,
+                        description: Optional[str] = None, position: Optional[int] = None,
+                        is_dir: bool = False) -> Dict[str, Any]:
+        """Mark an existing file as a Favorite
+
+        Args:
+            target_sub_dir(str): lab book subdir where file exists (code, input, output)
+            relative_path(str): Relative path within the root_dir to the file to favorite
+            description(str): A short string containing information about the favorite
+            position(int): The position to insert the favorite. If omitted, will append.
+            is_dir(bool): If true, relative_path will expected to be a directory
+
+        Returns:
+            dict
+        """
+        if target_sub_dir not in ['code', 'input', 'output']:
+            raise ValueError("Favorites only supported in `code`, `input`, and `output` Lab Book directories")
+
+        # Generate desired absolute path
+        target_path_rel = os.path.join(target_sub_dir, relative_path)
+
+        # Remove any leading "/" -- without doing so os.path.join will break.
+        target_path_rel = LabBook._make_path_relative(target_path_rel)
+        target_path = os.path.join(self.root_dir, target_path_rel.replace('..', ''))
+
+        if not os.path.exists(target_path):
+            raise ValueError(f"Target file/dir `{target_path}` does not exist")
+
+        if is_dir != os.path.isdir(target_path):
+            raise ValueError(f"Target `{target_path}` a directory")
+
+        try:
+            logger.info(f"Marking {target_path} as favorite")
+
+            # Open existing Favorites json if exists
+            favorites_dir = os.path.join(self.root_dir, '.gigantum', 'favorites')
+            if not os.path.exists(favorites_dir):
+                # No favorites have been created
+                os.makedirs(favorites_dir)
+
+            favorite_data: List[Dict[str, Any]] = []
+            if os.path.exists(os.path.join(favorites_dir, f'{target_sub_dir}.json')):
+                # Read existing data
+                with open(os.path.join(favorites_dir, f'{target_sub_dir}.json'), 'rt') as f_data:
+                    favorite_data = json.load(f_data)
+
+            favorite_record = {"key": os.path.join(target_sub_dir, relative_path),
+                               "description": description,
+                               "is_dir": is_dir}
+
+            if any(f['key'] == favorite_record['key'] for f in favorite_data):
+                raise ValueError(f"Favorite `{favorite_record['key']}` already exists.")
+
+            if position:
+                # insert at specific location
+                if position >= len(favorite_data):
+                    raise ValueError("Invalid index to insert favorite")
+
+                if position < 0:
+                    raise ValueError("Invalid index to insert favorite")
+
+                favorite_data.insert(position, favorite_record)
+                result_index = position
+            else:
+                # append
+                favorite_data.append(favorite_record)
+                result_index = len(favorite_data) - 1
+
+            # Add index values
+            favorite_data = [dict(fav_data, index=idx_val) for fav_data, idx_val in zip(favorite_data,
+                                                                                        range(len(favorite_data)))]
+
+            # Write favorites to lab book
+            with open(os.path.join(favorites_dir, f'{target_sub_dir}.json'), 'wt') as f_data:
+                json.dump(favorite_data, f_data)
+
+            return favorite_data[result_index]
+        except Exception as e:
+            logger.exception(e)
+            raise
+
+    def remove_favorite(self, target_sub_dir: str, position: int) -> None:
+        """Mark an existing file as a Favorite
+
+        Args:
+            target_sub_dir(str): lab book subdir where file exists (code, input, output)
+            position(int): The position to insert the favorite. If omitted, will append.
+
+        Returns:
+            None
+        """
+        if target_sub_dir not in ['code', 'input', 'output']:
+            raise ValueError("Favorites only supported in `code`, `input`, and `output` Lab Book directories")
+
+        try:
+            # Open existing Favorites json if exists
+            favorites_dir = os.path.join(self.root_dir, '.gigantum', 'favorites')
+            if not os.path.exists(favorites_dir):
+                # No favorites have been created
+                raise ValueError(f"No favorites have been created yet. Cannot remove item {position}!")
+
+            favorite_data: List[Dict[str, Any]] = []
+            if os.path.exists(os.path.join(favorites_dir, f'{target_sub_dir}.json')):
+                # Read existing data
+                with open(os.path.join(favorites_dir, f'{target_sub_dir}.json'), 'rt') as f_data:
+                    favorite_data = json.load(f_data)
+
+            if position >= len(favorite_data):
+                raise ValueError("Invalid index to remove favorite")
+            if position < 0:
+                raise ValueError("Invalid index to remove favorite")
+
+            # Remove favorite at index value
+            del favorite_data[position]
+
+            # Add index values
+            favorite_data = [dict(fav_data, index=idx_val) for fav_data, idx_val in zip(favorite_data,
+                                                                                        range(len(favorite_data)))]
+
+            # Write favorites to back lab book
+            with open(os.path.join(favorites_dir, f'{target_sub_dir}.json'), 'wt') as f_data:
+                json.dump(favorite_data, f_data)
+
+            logger.info(f"Removed {target_sub_dir} favorite #{position}")
+
+            return None
+        except Exception as e:
+            logger.exception(e)
+            raise
+
+    def get_favorites(self, target_sub_dir: str) -> List[Optional[Dict[str, Any]]]:
+        """Get Favorite data
+
+        Args:
+            target_sub_dir(str): lab book subdir where file exists (code, input, output)
+
+        Returns:
+            None
+        """
+        if target_sub_dir not in ['code', 'input', 'output']:
+            raise ValueError("Favorites only supported in `code`, `input`, and `output` Lab Book directories")
+
+        favorite_data: List[Optional[Dict[str, Any]]] = []
+        favorites_dir = os.path.join(self.root_dir, '.gigantum', 'favorites')
+        if os.path.exists(os.path.join(favorites_dir, f'{target_sub_dir}.json')):
+            # Read existing data
+            with open(os.path.join(favorites_dir, f'{target_sub_dir}.json'), 'rt') as f_data:
+                favorite_data = json.load(f_data)
+
+        return favorite_data
 
     def makedir(self, relative_path: str, make_parents: bool = True) -> str:
         """Make a new directory inside the labbook directory.
