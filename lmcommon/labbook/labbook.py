@@ -183,7 +183,35 @@ class LabBook(object):
         """
         return ''.join(c for c in value if c not in '\<>?/;"`\'')
 
-    def insert_file(self, src_file: str, dst_dir: str) -> str:
+    def _get_file_info(self, rel_file_path: str) -> Dict[str, Any]:
+        """Method to get a file's detail information
+
+        Args:
+            rel_file_path(str): The relative file path to generate info from
+
+        Returns:
+            dict
+        """
+        # remove leading separators if one exists.
+        rel_file_path = rel_file_path[1:] if rel_file_path[0] == os.path.sep else rel_file_path
+
+        full_path = os.path.join(self.root_dir, rel_file_path)
+        file_info = os.stat(full_path)
+        is_dir = os.path.isdir(full_path)
+
+        # If it's a directory, add a trailing slash to UI renders properly
+        if is_dir:
+            if rel_file_path[-1] != os.path.sep:
+                rel_file_path = f"{rel_file_path}{os.path.sep}"
+
+        return {
+                  'key': rel_file_path,
+                  'is_dir': is_dir,
+                  'size': file_info.st_size,
+                  'modified_at': file_info.st_mtime
+               }
+
+    def insert_file(self, src_file: str, dst_dir: str) -> Dict[str, Any]:
         """Copy the file at `src_file` into the `dst_dir`. Filename stays the same.
 
         Args:
@@ -191,7 +219,7 @@ class LabBook(object):
             dst_dir(str): Relative path within labbook where `src_file` should be copied to
 
         Returns:
-            str: Full path of copied file
+            dict: The inserted file's info
         """
 
         if not os.path.abspath(src_file):
@@ -223,7 +251,7 @@ class LabBook(object):
                 'free_text': '',
                 'objects': ''
             })
-            return copied_path
+            return self._get_file_info(rel_path)
         except Exception as e:
             logger.exception(e)
             raise
@@ -261,7 +289,7 @@ class LabBook(object):
                 logger.exception(e)
                 raise
 
-    def move_file(self, src_rel_path: str, dst_rel_path: str) -> str:
+    def move_file(self, src_rel_path: str, dst_rel_path: str) -> Dict[str, Any]:
         """Move a file or directory within a labbook, but not outside of it. Wraps
         underlying "mv" call.
 
@@ -311,11 +339,71 @@ class LabBook(object):
                 'objects': ''
             })
 
-            return dst_abs_path
+            return self._get_file_info(dst_rel_path)
         except Exception as e:
             logger.critical("Failed moving file in labbook. Repository may be in corrupted state.")
             logger.exception(e)
             raise
+
+    def makedir(self, relative_path: str, make_parents: bool = True) -> Dict[str, Any]:
+        """Make a new directory inside the labbook directory.
+
+        Args:
+            relative_path(str): Path within the labbook to make directory
+            make_parents(bool): If true, create intermediary directories
+
+        Returns:
+            dict: Absolute path of new directory
+        """
+        if not relative_path:
+            raise ValueError("relative_path argument cannot be None or empty")
+
+        relative_path = LabBook._make_path_relative(relative_path)
+        new_directory_path = os.path.join(self.root_dir, relative_path)
+        if os.path.exists(new_directory_path):
+            raise ValueError(f'Directory `{new_directory_path}` already exists')
+        else:
+            logger.info(f"Making new directory in `{new_directory_path}`")
+            try:
+                os.makedirs(new_directory_path, exist_ok=make_parents)
+                new_dir = ''
+                for d in relative_path.split(os.sep):
+                    new_dir = os.path.join(new_dir, d)
+                    full_new_dir = os.path.join(self.root_dir, new_dir)
+                    with open(os.path.join(full_new_dir, '.gitkeep'), 'w') as gitkeep:
+                        gitkeep.write("This file is necessary to keep this directory tracked by Git"
+                                      " and archivable by compression tools. Do not delete or modify!")
+            except Exception as e:
+                logger.exception(e)
+                raise
+            return self._get_file_info(relative_path)
+
+    def listdir(self, show_hidden: bool = False) -> List[Dict[str, Any]]:
+        """Return a list of all files and directories in the labbook. Never includes the .git or
+         .gigantum directory.
+
+        Args:
+            show_hidden(bool): If True, include hidden directories (EXCLUDING .git and .gigantum)
+
+        Returns:
+            List[Dict[str, str]]: List of dictionaries containing file and directory metadata
+        """
+
+        leafs: Set[Tuple[bool, str]] = set()
+        for root, dirs, files in os.walk(self.root_dir):
+            for f in files:
+                leafs.add((False, os.path.join(root.replace(self.root_dir, ''), f)))
+            for d in dirs:
+                leafs.add((True, os.path.join(root.replace(self.root_dir, ''), d)))
+
+        leafs_filtered = [l for l in leafs if '.git' not in l[1] and '.gigantum' not in l[1]]
+        stats: List[Dict[str, Any]] = list()
+        for is_dir, f_p in [l for l in leafs_filtered if '.git' not in l]:
+            if not show_hidden and any([len(p) and p[0] == '.' for p in f_p.split('/')]):
+                continue
+            stats.append(self._get_file_info(f_p))
+
+        return sorted(stats, key=lambda a: a['key'])
 
     def create_favorite(self, target_sub_dir: str, relative_path: str,
                         description: Optional[str] = None, position: Optional[int] = None,
@@ -467,73 +555,6 @@ class LabBook(object):
                 favorite_data = json.load(f_data)
 
         return favorite_data
-
-    def makedir(self, relative_path: str, make_parents: bool = True) -> str:
-        """Make a new directory inside the labbook directory.
-
-        Args:
-            relative_path(str): Path within the labbook to make directory
-            make_parents(bool): If true, create intermediary directories
-
-        Returns:
-            str: Absolute path of new directory
-        """
-        if not relative_path:
-            raise ValueError("relative_path argument cannot be None or empty")
-
-        relative_path = LabBook._make_path_relative(relative_path)
-        new_directory_path = os.path.join(self.root_dir, relative_path)
-        if os.path.exists(new_directory_path):
-            raise ValueError(f'Directory `{new_directory_path}` already exists')
-        else:
-            logger.info(f"Making new directory in `{new_directory_path}`")
-            try:
-                os.makedirs(new_directory_path, exist_ok=make_parents)
-                new_dir = ''
-                for d in relative_path.split(os.sep):
-                    new_dir = os.path.join(new_dir, d)
-                    full_new_dir = os.path.join(self.root_dir, new_dir)
-                    with open(os.path.join(full_new_dir, '.gitkeep'), 'w') as gitkeep:
-                        gitkeep.write("This file is necessary to keep this directory tracked by Git"
-                                      " and archivable by compression tools. Do not delete or modify!")
-            except Exception as e:
-                logger.exception(e)
-                raise
-            return new_directory_path
-
-    def listdir(self, show_hidden: bool = False) -> List[Dict[str, Any]]:
-        """Return a list of all files and directories in the labbook. Never includes the .git or
-         .gigantum directory.
-
-        Args:
-            show_hidden(bool): If True, include hidden directories (EXCLUDING .git and .gigantum)
-
-        Returns:
-            List[Dict[str, str]]: List of dictionaries containing file and directory metadata
-        """
-
-        leafs: Set[Tuple[bool, str]] = set()
-        for root, dirs, files in os.walk(self.root_dir):
-            for f in files:
-                leafs.add((False, os.path.join(root.replace(self.root_dir, ''), f)))
-            for d in dirs:
-                leafs.add((True, os.path.join(root.replace(self.root_dir, ''), d)))
-
-        leafs_filtered = [l for l in leafs if '.git' not in l[1] and '.gigantum' not in l[1]]
-        stats: List[Dict[str, Any]] = list()
-        for is_dir, f_p in [l for l in leafs_filtered if '.git' not in l]:
-            if not show_hidden and any([len(p) and p[0] == '.' for p in f_p.split('/')]):
-                continue
-            f_p = f_p[1:] if f_p[0] == '/' else f_p
-            file_info = os.stat(os.path.join(self.root_dir, f_p))
-            stats.append({
-                'key': f_p,
-                'is_dir': is_dir,
-                'size': file_info.st_size,
-                'modified_at': file_info.st_mtime
-            })
-
-        return sorted(stats, key=lambda a: a['key'])
 
     def new(self, owner: Dict[str, str], name: str, username: str = None, description: str = None) -> str:
         """Method to create a new minimal LabBook instance on disk
