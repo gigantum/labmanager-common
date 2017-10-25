@@ -25,7 +25,6 @@ import base64
 import uuid
 from typing import (Any, Dict, List, Union)
 
-from lmcommon.labbook import LabBook
 from lmcommon.notes.note_detail import NoteDetailDB
 
 
