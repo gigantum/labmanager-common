@@ -380,11 +380,12 @@ class LabBook(object):
                 raise
             return self._get_file_info(relative_path)
 
-    def listdir(self, show_hidden: bool = False) -> List[Dict[str, Any]]:
+    def listdir(self, base_path: Optional[str] = None, show_hidden: bool = False) -> List[Dict[str, Any]]:
         """Return a list of all files and directories in the labbook. Never includes the .git or
          .gigantum directory.
 
         Args:
+            base_path(str): Relative base path, if not listing from labbook's root.
             show_hidden(bool): If True, include hidden directories (EXCLUDING .git and .gigantum)
 
         Returns:
@@ -392,7 +393,12 @@ class LabBook(object):
         """
 
         leafs: Set[Tuple[bool, str]] = set()
-        for root, dirs, files in os.walk(self.root_dir):
+        # base_dir is the root directory to search, to account for relative paths inside labbook.
+        base_dir = os.path.join(self.root_dir, base_path or '')
+        if not os.path.isdir(base_dir):
+            raise ValueError(f"Labbook listdir base_dir {base_dir} not an existing directory")
+
+        for root, dirs, files in os.walk(base_dir):
             for f in files:
                 leafs.add((False, os.path.join(root.replace(self.root_dir, ''), f)))
             for d in dirs:
@@ -405,6 +411,7 @@ class LabBook(object):
                 continue
             stats.append(self._get_file_info(f_p))
 
+        # For more deterministic responses, sort resulting paths alphabetically.
         return sorted(stats, key=lambda a: a['key'])
 
     def create_favorite(self, target_sub_dir: str, relative_path: str,

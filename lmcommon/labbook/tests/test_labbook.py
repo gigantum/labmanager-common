@@ -453,6 +453,23 @@ class TestLabBook(object):
         dir_walks = lb.listdir(show_hidden=False)
         assert not any([os.path.basename(sample_src_file) in d['key'] for d in dir_walks])
 
+    def test_listdir_relative_path(self, mock_config_file, sample_src_file):
+        lb = LabBook(mock_config_file[0])
+        lb.new(owner={"username": "test"}, name="test-insert-files-1", description="validate tests.")
+        dirs = ["cat_dir", "/dog_dir", "/mouse_dir/", "mouse_dir/new_dir", "/simple/.hidden_dir"]
+        for d in dirs:
+            res = lb.makedir(d)
+        lb.insert_file(sample_src_file, 'simple/.hidden_dir')
+
+        dir_walks = lb.listdir(base_path='simple', show_hidden=True)
+        assert any([os.path.join(".hidden_dir", os.path.basename(sample_src_file)) in d['key'] for d in dir_walks])
+        # Any directories in labbook root should not be found outside of "simple"
+        assert not any(["input" in d['key'] for d in dir_walks])
+
+        # Raise value error for non-existing directory.
+        with pytest.raises(ValueError):
+            dir_walks = lb.listdir(base_path='mouse_dir/not_existing', show_hidden=True)
+
     def test_make_path_relative(self):
         vectors = [
             # In format of input: expected output
