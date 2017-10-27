@@ -225,8 +225,10 @@ class LabBook(object):
         if not os.path.abspath(src_file):
             raise ValueError(f"Source file `{src_file}` is not an absolute path")
 
-        if not os.path.isfile(src_file):
-            raise ValueError(f"Source file does not exist at `{src_file}`")
+        # TODO: revisit file path check
+        # DMK - removing as UI doesn't seem to be able to set the filename properly at the moment
+        # if not os.path.isfile(src_file):
+        #     raise ValueError(f"Source file does not exist at `{src_file}`")
 
         # Remove any leading "/" -- without doing so os.path.join will break.
         dst_dir = LabBook._make_path_relative(dst_dir)
