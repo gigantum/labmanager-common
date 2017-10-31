@@ -304,3 +304,14 @@ class TestNoteStore:
 
             for obj_truth, obj_test in zip(truth[0]["objects"], test["objects"]):
                 assert obj_truth.__dict__ == obj_test.__dict__
+
+
+    def test_rotate_log(self, mock_create_notestore):
+
+        # insert objects until the log rotates twice
+        oldfnum = self.mock_create_notestore.latestfnum
+    
+        # Create test values
+        linked_hash1 = ''.join(random.choice('0123456789abcdef') for i in range(30))
+        free_text1 = ''.join(random.choice('0123456789abcdefghijklmnopqrstuv;') for i in range(1000))
+        objects1 = [helper_create_notedetailobject() for _ in range(1, 5)]

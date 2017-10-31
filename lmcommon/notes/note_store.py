@@ -335,7 +335,7 @@ class NoteStore(object):
                 Exception
         """
         # Open outside try (can't close if this fails)
-        note_detail_db = NoteDetailDB(self._entries_path)
+        note_detail_db = NoteDetailDB(self._entries_path, self.labbook.labmanager_config)
 
         # level db wants binary
         binary_value = json.dumps({"linked_commit": linked_commit_hash,
