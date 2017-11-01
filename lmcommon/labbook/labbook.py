@@ -256,36 +256,62 @@ class LabBook(object):
             logger.exception(e)
             raise
 
-    def delete_file(self, relative_path: str) -> bool:
-        """Delete file from inside lb directory"""
-        if not relative_path:
-            raise ValueError(f"Target file `{relative_path}` to delete cannot be None or empty")
+    def delete_file(self, relative_path: str, directory: bool = False) -> bool:
+        """Delete file (or directory) from inside lb directory.
+
+        Part of the intention is to mirror the unix "rm" command. Thus, there
+        needs to be some extra arguments in order to delete a directory, especially
+        one with contents inside of it. In this case, `directory` must be true in order
+        to delete a directory at the given path.
+
+        Args:
+            relative_path(str): Relative path from labbook root to target
+            directory(bool): True if relative_path is a directory
+
+        Returns:
+            None
+        """
 
         relative_path = LabBook._make_path_relative(relative_path)
-        target_file_path = os.path.join(self.root_dir, relative_path)
-        if not os.path.exists(target_file_path):
-            raise ValueError(f"Attempted to delete non-existent path at `{target_file_path}`")
-        if not os.path.isfile(target_file_path):
-            raise ValueError(f"Attempted to delete non-existent file at `{target_file_path}`")
+        target_path = os.path.join(self.root_dir, relative_path)
+        if not os.path.exists(target_path):
+            raise ValueError(f"Attempted to delete non-existent path at `{target_path}`")
         else:
             try:
-                logger.info(f"Removing file at `{target_file_path}`")
-                os.remove(target_file_path)
-                commit_msg = f"Removed file {relative_path}."
-                self.git.remove(target_file_path)
+                target_type = 'file' if os.path.isfile(target_path) else 'directory'
+                logger.info(f"Removing {target_type} at `{target_path}`")
+                if os.path.isdir(target_path):
+                    if directory:
+                        shutil.rmtree(target_path)
+                    else:
+                        errmsg = f"Cannot recursively remove directory unless `directory` arg is True"
+                        logger.error(errmsg)
+                        raise ValueError(errmsg)
+                elif os.path.isfile(target_path):
+                    os.remove(target_path)
+                else:
+                    errmsg = f"File at {target_path} neither file nor directory"
+                    logger.error(errmsg)
+                    raise ValueError(errmsg)
+
+                commit_msg = f"Removed {target_type} {relative_path}."
+                self.git.remove(target_path)
                 commit = self.git.commit(commit_msg)
-                _, ext = os.path.splitext(target_file_path) or 'file'
+                if os.path.isfile(target_path):
+                    _, ext = os.path.splitext(target_path)
+                else:
+                    ext = 'directory'
                 ns = NoteStore(self)
                 ns.create_note({
                     'linked_commit': commit.hexsha,
                     'message': commit_msg,
                     'level': NoteLogLevel.USER_MAJOR,
-                    'tags': [ext],
+                    'tags': ['remove', ext],
                     'free_text': '',
                     'objects': ''
                 })
                 return True
-            except IOError as e:
+            except (IOError, FileNotFoundError) as e:
                 logger.exception(e)
                 raise
 
