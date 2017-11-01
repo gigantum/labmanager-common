@@ -23,18 +23,7 @@ import tempfile
 from unittest.mock import PropertyMock, patch
 
 from lmcommon.configuration import (Configuration, _get_docker_server_api_version, get_docker_client)
-
-@pytest.fixture(scope="module")
-def mock_config_file():
-    with tempfile.NamedTemporaryFile(mode="wt") as fp:
-        # Write a temporary config file
-        fp.write("""core:
-  team_mode: true 
-git:
-  working_directory: '~/gigantum'""")
-        fp.seek(0)
-
-        yield fp.name  # provide the fixture value
+from lmcommon.fixtures import mock_config_file, mock_config_file_team
 
 
 @pytest.fixture(scope="module")
@@ -76,9 +65,9 @@ git:
 
 
 class TestConfiguration(object):
-    def test_init(self, mock_config_file):
+    def test_init(self, mock_config_file_team):
         """Test loading a config file explicitly"""
-        configuration = Configuration(mock_config_file)
+        configuration = Configuration(mock_config_file_team[0])
 
         assert 'core' in configuration.config
         assert 'team_mode' in configuration.config["core"]
@@ -107,7 +96,7 @@ class TestConfiguration(object):
     def test_init_load_from_install(self, mock_config_file):
         """Test loading the default file from the installed location"""
         with patch('lmcommon.configuration.Configuration.INSTALLED_LOCATION', new_callable=PropertyMock,
-                   return_value=mock_config_file):
+                   return_value=mock_config_file[0]):
             configuration = Configuration()
 
             assert 'core' in configuration.config

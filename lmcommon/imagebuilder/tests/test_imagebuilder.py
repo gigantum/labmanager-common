@@ -34,59 +34,9 @@ import git
 
 from lmcommon.imagebuilder import ImageBuilder
 from lmcommon.environment import ComponentManager, RepositoryManager
+from lmcommon.fixtures import labbook_dir_tree, mock_config_file
 from lmcommon.labbook import LabBook
 from lmcommon.configuration import get_docker_client
-
-@pytest.fixture()
-def mock_config_file():
-    """A pytest fixture that creates a temporary directory and a config file to match. Deletes directory after test"""
-    # Create a temporary working directory
-    temp_dir = os.path.join(tempfile.tempdir, uuid.uuid4().hex)
-    os.makedirs(temp_dir)
-
-    with tempfile.NamedTemporaryFile(mode="wt") as fp:
-        # Write a temporary config file
-        fp.write("""core:
-  team_mode: false 
-
-environment:
-  repo_url:
-    - "https://github.com/gig-dev/environment-components.git"
-
-git:
-  backend: 'filesystem'
-  working_directory: '{}'""".format(temp_dir))
-        fp.seek(0)
-
-        yield fp.name, temp_dir  # provide the fixture value
-
-    # Remove the temp_dir
-    shutil.rmtree(temp_dir)
-
-@pytest.fixture()
-def labbook_dir_tree():
-    with tempfile.TemporaryDirectory() as tempdir:
-
-        subdirs = [['.gigantum'],
-                   ['.gigantum', 'env'],
-                   ['.gigantum', 'env', 'base_image'],
-                   ['.gigantum', 'env', 'dev_env'],
-                   ['.gigantum', 'env', 'custom'],
-                   ['.gigantum', 'env', 'package_manager']]
-
-        for subdir in subdirs:
-            os.makedirs(os.path.join(tempdir, "my-temp-labbook", *subdir), exist_ok=True)
-
-        with tempfile.TemporaryDirectory() as checkoutdir:
-            repo = git.Repo.clone_from("https://github.com/gig-dev/environment-components-dev.git", checkoutdir)
-            shutil.copy(os.path.join(checkoutdir, "base_image/gigantum/ubuntu1604-python3/ubuntu1604-python3-v0_4.yaml"),
-                        os.path.join(tempdir, "my-temp-labbook", ".gigantum", "env", "base_image"))
-            shutil.copy(os.path.join(checkoutdir, "dev_env/gigantum/jupyter-ubuntu/jupyter-ubuntu-v0_0.yaml"),
-                        os.path.join(tempdir, "my-temp-labbook", ".gigantum", "env", "dev_env"))
-            shutil.copy(os.path.join(checkoutdir, "custom/gigantum/ubuntu-python3-pillow/ubuntu-python3-pillow-v0_3.yaml"),
-                        os.path.join(tempdir, "my-temp-labbook", ".gigantum", "env", "custom"))
-
-        yield os.path.join(tempdir, 'my-temp-labbook')
 
 
 class TestImageBuilder(object):
