@@ -355,6 +355,22 @@ class TestLabBook(object):
         with pytest.raises(ValueError):
             lb.delete_file(new_file_path)
 
+    def test_remove_dir(self, mock_config_file, sample_src_file):
+        lb = LabBook(mock_config_file[0])
+        lb.new(owner={"username": "test"}, name="test-remove-dir-1", description="validate tests.")
+        new_file_path = lb.insert_file(sample_src_file, "code")
+        base_name = os.path.basename(sample_src_file)
+
+        assert os.path.exists(os.path.join(lb.root_dir, 'code', base_name))
+
+        with pytest.raises(ValueError):
+            lb.delete_file('code', directory=False)
+
+        # Delete the directory
+        lb.delete_file('code', directory=True)
+        assert not os.path.exists(os.path.join(lb.root_dir, 'code', base_name))
+        assert not os.path.exists(os.path.join(lb.root_dir, 'code'))
+
     def test_move_file_as_rename_in_same_dir(self, mock_config_file, sample_src_file):
         # Create lb
         lb = LabBook(mock_config_file[0])
