@@ -300,6 +300,21 @@ class TestLabBook(object):
         assert new_file_data['key'] == f'code/{base_name}'
         assert new_file_data['is_dir'] is False
 
+    def test_insert_file_upload_id(self, mock_config_file):
+        lb = LabBook(mock_config_file[0])
+        lb.new(owner={"username": "test"}, name="test-insert-files-100", description="validate tests.")
+
+        test_file = os.path.join(tempfile.gettempdir(), "asdfasdf-testfile.txt")
+        with open(test_file, 'wt') as sample_f:
+            # Fill sample file with some deterministic crap
+            sample_f.write("n4%nm4%M435A EF87kn*C" * 40)
+
+        new_file_data = lb.insert_file(test_file, "code", base_filename='testfile.txt')
+
+        assert os.path.exists(os.path.join(lb.root_dir, 'code', 'testfile.txt'))
+        assert new_file_data['key'] == 'code/testfile.txt'
+        assert new_file_data['is_dir'] is False
+
     def test_insert_file_success_2(self, mock_config_file, sample_src_file):
         lb = LabBook(mock_config_file[0])
         lb.new(owner={"username": "test"}, name="test-insert-files-4", description="validate tests.")

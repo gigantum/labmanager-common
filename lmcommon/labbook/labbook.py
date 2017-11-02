@@ -211,12 +211,13 @@ class LabBook(object):
                   'modified_at': file_info.st_mtime
                }
 
-    def insert_file(self, src_file: str, dst_dir: str) -> Dict[str, Any]:
-        """Copy the file at `src_file` into the `dst_dir`. Filename stays the same.
+    def insert_file(self, src_file: str, dst_dir: str, base_filename: Optional[str] = None) -> Dict[str, Any]:
+        """Copy the file at `src_file` into the `dst_dir`. Filename removes upload ID if present.
 
         Args:
             src_file(str): Full path of file to insert into
             dst_dir(str): Relative path within labbook where `src_file` should be copied to
+            base_filename(str): The desired basename for the file, without an upload ID prepended
 
         Returns:
             dict: The inserted file's info
@@ -230,17 +231,30 @@ class LabBook(object):
 
         # Remove any leading "/" -- without doing so os.path.join will break.
         dst_dir = LabBook._make_path_relative(dst_dir)
-        dst_path = os.path.join(self.root_dir, dst_dir.replace('..', ''))
-        if not os.path.isdir(dst_path):
-            raise ValueError(f"Target `{dst_path}` not a directory")
+
+        # Check if this file contains an upload_id (which means it came from a chunked upload)
+        if base_filename:
+            dst_filename = base_filename
+        else:
+            dst_filename = os.path.basename(src_file)
+
+        # Create the absolute file path for the destination
+        dst_path = os.path.join(self.root_dir, dst_dir.replace('..', ''), dst_filename)
+        if not os.path.isdir(os.path.join(self.root_dir, dst_dir.replace('..', ''))):
+            raise ValueError(f"Target dir `{os.path.join(self.root_dir, dst_dir.replace('..', ''))}` does not exist")
 
         try:
-            logger.info(f"Copying new file for {str(self)} from `{src_file}` to `{dst_path}")
-            copied_path = shutil.copy(src_file, dst_path)
-            rel_path = copied_path.replace(self.root_dir, '')
-            commit_msg = f"Added new file {rel_path}."
-            self.git.add(copied_path)
+            # Copy file to destination
+            logger.info(f"Inserting new file for {str(self)} from `{src_file}` to `{dst_path}")
+            shutil.copyfile(src_file, dst_path)
+
+            # Create commit
+            rel_path = dst_path.replace(self.root_dir, '')
+            commit_msg = f"Added new file {rel_path}"
+            self.git.add(dst_path)
             commit = self.git.commit(commit_msg)
+
+            # Create Activity record
             _, ext = os.path.splitext(rel_path) or 'file'
             ns = NoteStore(self)
             ns.create_note({
