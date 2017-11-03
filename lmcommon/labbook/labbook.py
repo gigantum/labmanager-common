@@ -31,12 +31,17 @@ from lmcommon.gitlib import get_git_interface, GitAuthor
 from lmcommon.logging import LMLogger
 from lmcommon.notes import NoteLogLevel, NoteStore
 
+from .schemas import validate_schema
+
 GIT_IGNORE_DEFAULT = """.DS_Store"""
 logger = LMLogger.get_logger()
 
 
 class LabBook(object):
     """Class representing a single LabBook"""
+
+    # If this is not definied, implicity the version is "0.0".
+    LABBOOK_DATA_SCHEMA_VERSION = "0.1"
 
     def __init__(self, config_file: str = None) -> None:
         self.labmanager_config = Configuration(config_file)
@@ -170,6 +175,11 @@ class LabBook(object):
 
         if len(self.name) > 100:
             raise ValueError("Invalid `name`. Max length is 100 characters")
+
+        if not validate_schema(self.LABBOOK_DATA_SCHEMA_VERSION, self.data):
+            errmsg = f"Schema in Labbook {str(self)} does not match indicated version {self.LABBOOK_DATA_SCHEMA_VERSION}"
+            logger.error(errmsg)
+            raise ValueError(errmsg)
 
     # TODO: Get feedback on better way to sanitize
     def _santize_input(self, value: str) -> str:
@@ -647,7 +657,8 @@ class LabBook(object):
             "labbook": {"id": uuid.uuid4().hex,
                         "name": name,
                         "description": self._santize_input(description or '')},
-            "owner": owner
+            "owner": owner,
+            "schema": self.LABBOOK_DATA_SCHEMA_VERSION
         }
 
         # Validate data
