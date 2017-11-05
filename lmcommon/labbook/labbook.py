@@ -107,7 +107,7 @@ class LabBook(object):
         else:
             raise ValueError("Lab Book root dir not specified. Failed to configure git.")
         
-        # Update the root directory to the knew directory name
+        # Update the root directory to the new directory name
         self._set_root_dir(os.path.join(base_dir, value))
 
     @property
@@ -163,6 +163,18 @@ class LabBook(object):
 
         with open(os.path.join(self.root_dir, ".gigantum", "labbook.yaml"), 'wt') as lbfile:
             lbfile.write(yaml.dump(self._data, default_flow_style=False))
+
+    def _load_labbook_data(self) -> None:
+        """Method to load the labbook YAML file to a dictionary
+
+        Returns:
+            None
+        """
+        if not self.root_dir:
+            raise ValueError("No root directory assigned to lab book. Failed to get root directory.")
+
+        with open(os.path.join(self.root_dir, ".gigantum", "labbook.yaml"), 'rt') as lbfile:
+            self._data = yaml.load(lbfile)
 
     def _validate_labbook_data(self) -> None:
         """Method to validate the LabBook data file contents
@@ -735,14 +747,53 @@ class LabBook(object):
 
         return self.root_dir
 
-    def from_directory(self, root_dir: str):
+    def rename(self, new_name: str) -> None:
+        """Method to rename a labbook
+
+        Args:
+            new_name(str): New desired labbook name
+
+        Returns:
+            None
+        """
+        # TODO Grab LabBook Lock
+
+        # Make sure name does not already exist
+        labbooks_dir = self.root_dir.rsplit(os.path.sep, 1)[0]
+        if os.path.exists(os.path.join(labbooks_dir, new_name)):
+            raise ValueError(f"New LabBook name '{new_name}' already exists")
+
+        try:
+            # Rename labbook directory to new directory and update YAML file
+            old_name = self.name
+            self.name = new_name
+
+            # Commit Change
+            self.git.add(os.path.join(self.root_dir, ".gigantum", "labbook.yaml"))
+            commit = self.git.commit(f"Renamed LabBook '{old_name}' to '{new_name}'")
+
+            # Add Activity record
+            ns = NoteStore(self)
+            ns.create_note({
+                'linked_commit': commit.hexsha,
+                'message': f"Renamed LabBook '{old_name}' to '{new_name}'",
+                'level': NoteLogLevel.USER_MAJOR,
+                'tags': ['rename'],
+                'free_text': '',
+                'objects': ''
+            })
+        finally:
+            # TODO: Release LabBook lock
+            pass
+
+    def from_directory(self, root_dir: str) -> None:
         """Method to populate a LabBook instance from a directory
 
         Args:
             root_dir(str): The absolute path to the directory containing the LabBook
 
         Returns:
-            LabBook
+            None
         """
 
         logger.debug(f"Populating LabBook from directory {root_dir}")
@@ -751,8 +802,7 @@ class LabBook(object):
         self._set_root_dir(root_dir)
 
         # Load LabBook data file
-        with open(os.path.join(self.root_dir, ".gigantum", "labbook.yaml"), "rt") as data_file:
-            self._data = yaml.load(data_file)
+        self._load_labbook_data()
 
     def from_name(self, username: str, owner:str, labbook_name:str):
         """Method to populate a LabBook instance based on the user and name of the labbook
@@ -789,8 +839,7 @@ class LabBook(object):
         self._set_root_dir(labbook_path)
 
         # Load LabBook data file
-        with open(os.path.join(self.root_dir, ".gigantum", "labbook.yaml"), "rt") as data_file:
-            self._data = yaml.load(data_file)
+        self._load_labbook_data()
 
     def list_local_labbooks(self, username: str = None) -> Optional[Dict[Optional[str], List[Dict[str, str]]]]:
         """Method to list available LabBooks
