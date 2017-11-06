@@ -11,6 +11,7 @@ requests==2.18.3
 rq-scheduler==0.7.0
 python-jose==1.4.0
 schema==0.6.6
+python-redis-lock==3.2.0
 
 # Testing support
 mockredispy==2.9.3

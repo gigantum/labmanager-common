@@ -25,6 +25,8 @@ from typing import (Any, Dict, List, Optional, Set, Tuple)
 import uuid
 import yaml
 import json
+from redis import StrictRedis
+import redis_lock
 
 from lmcommon.configuration import Configuration
 from lmcommon.gitlib import get_git_interface, GitAuthor
@@ -40,7 +42,7 @@ logger = LMLogger.get_logger()
 class LabBook(object):
     """Class representing a single LabBook"""
 
-    # If this is not definied, implicity the version is "0.0".
+    # If this is not defined, implicitly the version is "0.1"
     LABBOOK_DATA_SCHEMA_VERSION = "0.1"
 
     def __init__(self, config_file: str = None) -> None:
@@ -55,6 +57,9 @@ class LabBook(object):
 
         # LabBook Environment
         self._env = None
+
+        # Redis instance for the LabBook lock
+        self._redis_client: Optional[StrictRedis] = None
 
     def __str__(self):
         if self._root_dir:
@@ -140,6 +145,17 @@ class LabBook(object):
             path_str = path_str[1:]
         return path_str
 
+    @property
+    def redis_client(self) -> StrictRedis:
+        if self._redis_client:
+            return self._redis_client
+        else:
+            self._redis_client = StrictRedis(db=2)
+
+    @redis_client.setter
+    def redis_client(self, value: StrictRedis) -> None:
+        self._redis_client = value
+
     def _set_root_dir(self, new_root_dir: str) -> None:
         """Update the root directory and also reconfigure the git instance
 
@@ -161,8 +177,9 @@ class LabBook(object):
         if not self.root_dir:
             raise ValueError("No root directory assigned to lab book. Failed to get root directory.")
 
-        with open(os.path.join(self.root_dir, ".gigantum", "labbook.yaml"), 'wt') as lbfile:
-            lbfile.write(yaml.dump(self._data, default_flow_style=False))
+        with redis_lock.Lock(self.redis_client, "replace-with-key-method"):
+            with open(os.path.join(self.root_dir, ".gigantum", "labbook.yaml"), 'wt') as lbfile:
+                lbfile.write(yaml.dump(self._data, default_flow_style=False))
 
     def _load_labbook_data(self) -> None:
         """Method to load the labbook YAML file to a dictionary
@@ -251,46 +268,48 @@ class LabBook(object):
         if not os.path.isfile(src_file):
             raise ValueError(f"Source file does not exist at `{src_file}`")
 
-        # Remove any leading "/" -- without doing so os.path.join will break.
-        dst_dir = LabBook._make_path_relative(dst_dir)
+        with redis_lock.Lock(self.redis_client, "replace-with-key-method"):
 
-        # Check if this file contains an upload_id (which means it came from a chunked upload)
-        if base_filename:
-            dst_filename = base_filename
-        else:
-            dst_filename = os.path.basename(src_file)
+            # Remove any leading "/" -- without doing so os.path.join will break.
+            dst_dir = LabBook._make_path_relative(dst_dir)
 
-        # Create the absolute file path for the destination
-        dst_path = os.path.join(self.root_dir, dst_dir.replace('..', ''), dst_filename)
-        if not os.path.isdir(os.path.join(self.root_dir, dst_dir.replace('..', ''))):
-            raise ValueError(f"Target dir `{os.path.join(self.root_dir, dst_dir.replace('..', ''))}` does not exist")
+            # Check if this file contains an upload_id (which means it came from a chunked upload)
+            if base_filename:
+                dst_filename = base_filename
+            else:
+                dst_filename = os.path.basename(src_file)
 
-        try:
-            # Copy file to destination
-            logger.info(f"Inserting new file for {str(self)} from `{src_file}` to `{dst_path}")
-            shutil.copyfile(src_file, dst_path)
+            # Create the absolute file path for the destination
+            dst_path = os.path.join(self.root_dir, dst_dir.replace('..', ''), dst_filename)
+            if not os.path.isdir(os.path.join(self.root_dir, dst_dir.replace('..', ''))):
+                raise ValueError(f"Target dir `{os.path.join(self.root_dir, dst_dir.replace('..', ''))}` does not exist")
 
-            # Create commit
-            rel_path = dst_path.replace(self.root_dir, '')
-            commit_msg = f"Added new file {rel_path}"
-            self.git.add(dst_path)
-            commit = self.git.commit(commit_msg)
+            try:
+                # Copy file to destination
+                logger.info(f"Inserting new file for {str(self)} from `{src_file}` to `{dst_path}")
+                shutil.copyfile(src_file, dst_path)
 
-            # Create Activity record
-            _, ext = os.path.splitext(rel_path) or 'file'
-            ns = NoteStore(self)
-            ns.create_note({
-                'linked_commit': commit.hexsha,
-                'message': commit_msg,
-                'level': NoteLogLevel.USER_MAJOR,
-                'tags': [ext],
-                'free_text': '',
-                'objects': ''
-            })
-            return self._get_file_info(rel_path)
-        except Exception as e:
-            logger.exception(e)
-            raise
+                # Create commit
+                rel_path = dst_path.replace(self.root_dir, '')
+                commit_msg = f"Added new file {rel_path}"
+                self.git.add(dst_path)
+                commit = self.git.commit(commit_msg)
+
+                # Create Activity record
+                _, ext = os.path.splitext(rel_path) or 'file'
+                ns = NoteStore(self)
+                ns.create_note({
+                    'linked_commit': commit.hexsha,
+                    'message': commit_msg,
+                    'level': NoteLogLevel.USER_MAJOR,
+                    'tags': [ext],
+                    'free_text': '',
+                    'objects': ''
+                })
+                return self._get_file_info(rel_path)
+            except Exception as e:
+                logger.exception(e)
+                raise
 
     def delete_file(self, relative_path: str, directory: bool = False) -> bool:
         """Delete file (or directory) from inside lb directory.
@@ -307,49 +326,49 @@ class LabBook(object):
         Returns:
             None
         """
-
-        relative_path = LabBook._make_path_relative(relative_path)
-        target_path = os.path.join(self.root_dir, relative_path)
-        if not os.path.exists(target_path):
-            raise ValueError(f"Attempted to delete non-existent path at `{target_path}`")
-        else:
-            try:
-                target_type = 'file' if os.path.isfile(target_path) else 'directory'
-                logger.info(f"Removing {target_type} at `{target_path}`")
-                if os.path.isdir(target_path):
-                    if directory:
-                        shutil.rmtree(target_path)
+        with redis_lock.Lock(self.redis_client, "replace-with-key-method"):
+            relative_path = LabBook._make_path_relative(relative_path)
+            target_path = os.path.join(self.root_dir, relative_path)
+            if not os.path.exists(target_path):
+                raise ValueError(f"Attempted to delete non-existent path at `{target_path}`")
+            else:
+                try:
+                    target_type = 'file' if os.path.isfile(target_path) else 'directory'
+                    logger.info(f"Removing {target_type} at `{target_path}`")
+                    if os.path.isdir(target_path):
+                        if directory:
+                            shutil.rmtree(target_path)
+                        else:
+                            errmsg = f"Cannot recursively remove directory unless `directory` arg is True"
+                            logger.error(errmsg)
+                            raise ValueError(errmsg)
+                    elif os.path.isfile(target_path):
+                        os.remove(target_path)
                     else:
-                        errmsg = f"Cannot recursively remove directory unless `directory` arg is True"
+                        errmsg = f"File at {target_path} neither file nor directory"
                         logger.error(errmsg)
                         raise ValueError(errmsg)
-                elif os.path.isfile(target_path):
-                    os.remove(target_path)
-                else:
-                    errmsg = f"File at {target_path} neither file nor directory"
-                    logger.error(errmsg)
-                    raise ValueError(errmsg)
 
-                commit_msg = f"Removed {target_type} {relative_path}."
-                self.git.remove(target_path)
-                commit = self.git.commit(commit_msg)
-                if os.path.isfile(target_path):
-                    _, ext = os.path.splitext(target_path)
-                else:
-                    ext = 'directory'
-                ns = NoteStore(self)
-                ns.create_note({
-                    'linked_commit': commit.hexsha,
-                    'message': commit_msg,
-                    'level': NoteLogLevel.USER_MAJOR,
-                    'tags': ['remove', ext],
-                    'free_text': '',
-                    'objects': ''
-                })
-                return True
-            except (IOError, FileNotFoundError) as e:
-                logger.exception(e)
-                raise
+                    commit_msg = f"Removed {target_type} {relative_path}."
+                    self.git.remove(target_path)
+                    commit = self.git.commit(commit_msg)
+                    if os.path.isfile(target_path):
+                        _, ext = os.path.splitext(target_path)
+                    else:
+                        ext = 'directory'
+                    ns = NoteStore(self)
+                    ns.create_note({
+                        'linked_commit': commit.hexsha,
+                        'message': commit_msg,
+                        'level': NoteLogLevel.USER_MAJOR,
+                        'tags': ['remove', ext],
+                        'free_text': '',
+                        'objects': ''
+                    })
+                    return True
+                except (IOError, FileNotFoundError) as e:
+                    logger.exception(e)
+                    raise
 
     def move_file(self, src_rel_path: str, dst_rel_path: str) -> Dict[str, Any]:
         """Move a file or directory within a labbook, but not outside of it. Wraps
@@ -359,53 +378,54 @@ class LabBook(object):
             src_rel_path(str): Source file or directory
             dst_rel_path(str): Target file name and/or directory
         """
+        with redis_lock.Lock(self.redis_client, "replace-with-key-method"):
 
-        # Start with Validations
-        if not src_rel_path:
-            raise ValueError("src_rel_path cannot be None or empty")
+            # Start with Validations
+            if not src_rel_path:
+                raise ValueError("src_rel_path cannot be None or empty")
 
-        if not dst_rel_path:
-            raise ValueError("dst_rel_path cannot be None or empty")
+            if not dst_rel_path:
+                raise ValueError("dst_rel_path cannot be None or empty")
 
-        src_rel_path = LabBook._make_path_relative(src_rel_path)
-        dst_rel_path = LabBook._make_path_relative(dst_rel_path)
+            src_rel_path = LabBook._make_path_relative(src_rel_path)
+            dst_rel_path = LabBook._make_path_relative(dst_rel_path)
 
-        src_abs_path = os.path.join(self.root_dir, src_rel_path.replace('..', ''))
-        dst_abs_path = os.path.join(self.root_dir, dst_rel_path.replace('..', ''))
+            src_abs_path = os.path.join(self.root_dir, src_rel_path.replace('..', ''))
+            dst_abs_path = os.path.join(self.root_dir, dst_rel_path.replace('..', ''))
 
-        if not os.path.exists(src_abs_path):
-            raise ValueError(f"No src file exists at `{src_abs_path}`")
+            if not os.path.exists(src_abs_path):
+                raise ValueError(f"No src file exists at `{src_abs_path}`")
 
-        try:
-            src_type = 'directory' if os.path.isdir(src_abs_path) else 'file'
-            logger.info(f"Moving {src_type} `{src_abs_path}` to `{dst_abs_path}`")
+            try:
+                src_type = 'directory' if os.path.isdir(src_abs_path) else 'file'
+                logger.info(f"Moving {src_type} `{src_abs_path}` to `{dst_abs_path}`")
 
-            self.git.remove(src_abs_path, keep_file=True)
+                self.git.remove(src_abs_path, keep_file=True)
 
-            shutil.move(src_abs_path, dst_abs_path)
-            commit_msg = f"Moved {src_type} `{src_rel_path}` to `{dst_rel_path}`"
+                shutil.move(src_abs_path, dst_abs_path)
+                commit_msg = f"Moved {src_type} `{src_rel_path}` to `{dst_rel_path}`"
 
-            if os.path.isdir(dst_abs_path):
-                self.git.add_all(dst_abs_path)
-            else:
-                self.git.add(dst_abs_path)
+                if os.path.isdir(dst_abs_path):
+                    self.git.add_all(dst_abs_path)
+                else:
+                    self.git.add(dst_abs_path)
 
-            commit = self.git.commit(commit_msg)
-            ns = NoteStore(self)
-            ns.create_note({
-                'linked_commit': commit.hexsha,
-                'message': commit_msg,
-                'level': NoteLogLevel.USER_MAJOR,
-                'tags': ['file-move'],
-                'free_text': '',
-                'objects': ''
-            })
+                commit = self.git.commit(commit_msg)
+                ns = NoteStore(self)
+                ns.create_note({
+                    'linked_commit': commit.hexsha,
+                    'message': commit_msg,
+                    'level': NoteLogLevel.USER_MAJOR,
+                    'tags': ['file-move'],
+                    'free_text': '',
+                    'objects': ''
+                })
 
-            return self._get_file_info(dst_rel_path)
-        except Exception as e:
-            logger.critical("Failed moving file in labbook. Repository may be in corrupted state.")
-            logger.exception(e)
-            raise
+                return self._get_file_info(dst_rel_path)
+            except Exception as e:
+                logger.critical("Failed moving file in labbook. Repository may be in corrupted state.")
+                logger.exception(e)
+                raise
 
     def makedir(self, relative_path: str, make_parents: bool = True) -> Dict[str, Any]:
         """Make a new directory inside the labbook directory.
@@ -420,25 +440,26 @@ class LabBook(object):
         if not relative_path:
             raise ValueError("relative_path argument cannot be None or empty")
 
-        relative_path = LabBook._make_path_relative(relative_path)
-        new_directory_path = os.path.join(self.root_dir, relative_path)
-        if os.path.exists(new_directory_path):
-            raise ValueError(f'Directory `{new_directory_path}` already exists')
-        else:
-            logger.info(f"Making new directory in `{new_directory_path}`")
-            try:
-                os.makedirs(new_directory_path, exist_ok=make_parents)
-                new_dir = ''
-                for d in relative_path.split(os.sep):
-                    new_dir = os.path.join(new_dir, d)
-                    full_new_dir = os.path.join(self.root_dir, new_dir)
-                    with open(os.path.join(full_new_dir, '.gitkeep'), 'w') as gitkeep:
-                        gitkeep.write("This file is necessary to keep this directory tracked by Git"
-                                      " and archivable by compression tools. Do not delete or modify!")
-            except Exception as e:
-                logger.exception(e)
-                raise
-            return self._get_file_info(relative_path)
+        with redis_lock.Lock(self.redis_client, "replace-with-key-method"):
+            relative_path = LabBook._make_path_relative(relative_path)
+            new_directory_path = os.path.join(self.root_dir, relative_path)
+            if os.path.exists(new_directory_path):
+                raise ValueError(f'Directory `{new_directory_path}` already exists')
+            else:
+                logger.info(f"Making new directory in `{new_directory_path}`")
+                try:
+                    os.makedirs(new_directory_path, exist_ok=make_parents)
+                    new_dir = ''
+                    for d in relative_path.split(os.sep):
+                        new_dir = os.path.join(new_dir, d)
+                        full_new_dir = os.path.join(self.root_dir, new_dir)
+                        with open(os.path.join(full_new_dir, '.gitkeep'), 'w') as gitkeep:
+                            gitkeep.write("This file is necessary to keep this directory tracked by Git"
+                                          " and archivable by compression tools. Do not delete or modify!")
+                except Exception as e:
+                    logger.exception(e)
+                    raise
+                return self._get_file_info(relative_path)
 
     def listdir(self, base_path: Optional[str] = None, show_hidden: bool = False) -> List[Dict[str, Any]]:
         """Return a list of all files and directories in the labbook. Never includes the .git or
@@ -492,68 +513,69 @@ class LabBook(object):
         if target_sub_dir not in ['code', 'input', 'output']:
             raise ValueError("Favorites only supported in `code`, `input`, and `output` Lab Book directories")
 
-        # Generate desired absolute path
-        target_path_rel = os.path.join(target_sub_dir, relative_path)
+        with redis_lock.Lock(self.redis_client, "replace-with-key-method"):
+            # Generate desired absolute path
+            target_path_rel = os.path.join(target_sub_dir, relative_path)
 
-        # Remove any leading "/" -- without doing so os.path.join will break.
-        target_path_rel = LabBook._make_path_relative(target_path_rel)
-        target_path = os.path.join(self.root_dir, target_path_rel.replace('..', ''))
+            # Remove any leading "/" -- without doing so os.path.join will break.
+            target_path_rel = LabBook._make_path_relative(target_path_rel)
+            target_path = os.path.join(self.root_dir, target_path_rel.replace('..', ''))
 
-        if not os.path.exists(target_path):
-            raise ValueError(f"Target file/dir `{target_path}` does not exist")
+            if not os.path.exists(target_path):
+                raise ValueError(f"Target file/dir `{target_path}` does not exist")
 
-        if is_dir != os.path.isdir(target_path):
-            raise ValueError(f"Target `{target_path}` a directory")
+            if is_dir != os.path.isdir(target_path):
+                raise ValueError(f"Target `{target_path}` a directory")
 
-        try:
-            logger.info(f"Marking {target_path} as favorite")
+            try:
+                logger.info(f"Marking {target_path} as favorite")
 
-            # Open existing Favorites json if exists
-            favorites_dir = os.path.join(self.root_dir, '.gigantum', 'favorites')
-            if not os.path.exists(favorites_dir):
-                # No favorites have been created
-                os.makedirs(favorites_dir)
+                # Open existing Favorites json if exists
+                favorites_dir = os.path.join(self.root_dir, '.gigantum', 'favorites')
+                if not os.path.exists(favorites_dir):
+                    # No favorites have been created
+                    os.makedirs(favorites_dir)
 
-            favorite_data: List[Dict[str, Any]] = []
-            if os.path.exists(os.path.join(favorites_dir, f'{target_sub_dir}.json')):
-                # Read existing data
-                with open(os.path.join(favorites_dir, f'{target_sub_dir}.json'), 'rt') as f_data:
-                    favorite_data = json.load(f_data)
+                favorite_data: List[Dict[str, Any]] = []
+                if os.path.exists(os.path.join(favorites_dir, f'{target_sub_dir}.json')):
+                    # Read existing data
+                    with open(os.path.join(favorites_dir, f'{target_sub_dir}.json'), 'rt') as f_data:
+                        favorite_data = json.load(f_data)
 
-            favorite_record = {"key": os.path.join(target_sub_dir, relative_path),
-                               "description": description,
-                               "is_dir": is_dir}
+                favorite_record = {"key": os.path.join(target_sub_dir, relative_path),
+                                   "description": description,
+                                   "is_dir": is_dir}
 
-            if any(f['key'] == favorite_record['key'] for f in favorite_data):
-                raise ValueError(f"Favorite `{favorite_record['key']}` already exists.")
+                if any(f['key'] == favorite_record['key'] for f in favorite_data):
+                    raise ValueError(f"Favorite `{favorite_record['key']}` already exists.")
 
-            if position:
-                # insert at specific location
-                if position >= len(favorite_data):
-                    raise ValueError("Invalid index to insert favorite")
+                if position:
+                    # insert at specific location
+                    if position >= len(favorite_data):
+                        raise ValueError("Invalid index to insert favorite")
 
-                if position < 0:
-                    raise ValueError("Invalid index to insert favorite")
+                    if position < 0:
+                        raise ValueError("Invalid index to insert favorite")
 
-                favorite_data.insert(position, favorite_record)
-                result_index = position
-            else:
-                # append
-                favorite_data.append(favorite_record)
-                result_index = len(favorite_data) - 1
+                    favorite_data.insert(position, favorite_record)
+                    result_index = position
+                else:
+                    # append
+                    favorite_data.append(favorite_record)
+                    result_index = len(favorite_data) - 1
 
-            # Add index values
-            favorite_data = [dict(fav_data, index=idx_val) for fav_data, idx_val in zip(favorite_data,
-                                                                                        range(len(favorite_data)))]
+                # Add index values
+                favorite_data = [dict(fav_data, index=idx_val) for fav_data, idx_val in zip(favorite_data,
+                                                                                            range(len(favorite_data)))]
 
-            # Write favorites to lab book
-            with open(os.path.join(favorites_dir, f'{target_sub_dir}.json'), 'wt') as f_data:
-                json.dump(favorite_data, f_data)
+                # Write favorites to lab book
+                with open(os.path.join(favorites_dir, f'{target_sub_dir}.json'), 'wt') as f_data:
+                    json.dump(favorite_data, f_data)
 
-            return favorite_data[result_index]
-        except Exception as e:
-            logger.exception(e)
-            raise
+                return favorite_data[result_index]
+            except Exception as e:
+                logger.exception(e)
+                raise
 
     def remove_favorite(self, target_sub_dir: str, position: int) -> None:
         """Mark an existing file as a Favorite
@@ -568,41 +590,42 @@ class LabBook(object):
         if target_sub_dir not in ['code', 'input', 'output']:
             raise ValueError("Favorites only supported in `code`, `input`, and `output` Lab Book directories")
 
-        try:
-            # Open existing Favorites json if exists
-            favorites_dir = os.path.join(self.root_dir, '.gigantum', 'favorites')
-            if not os.path.exists(favorites_dir):
-                # No favorites have been created
-                raise ValueError(f"No favorites have been created yet. Cannot remove item {position}!")
+        with redis_lock.Lock(self.redis_client, "replace-with-key-method"):
+            try:
+                # Open existing Favorites json if exists
+                favorites_dir = os.path.join(self.root_dir, '.gigantum', 'favorites')
+                if not os.path.exists(favorites_dir):
+                    # No favorites have been created
+                    raise ValueError(f"No favorites have been created yet. Cannot remove item {position}!")
 
-            favorite_data: List[Dict[str, Any]] = []
-            if os.path.exists(os.path.join(favorites_dir, f'{target_sub_dir}.json')):
-                # Read existing data
-                with open(os.path.join(favorites_dir, f'{target_sub_dir}.json'), 'rt') as f_data:
-                    favorite_data = json.load(f_data)
+                favorite_data: List[Dict[str, Any]] = []
+                if os.path.exists(os.path.join(favorites_dir, f'{target_sub_dir}.json')):
+                    # Read existing data
+                    with open(os.path.join(favorites_dir, f'{target_sub_dir}.json'), 'rt') as f_data:
+                        favorite_data = json.load(f_data)
 
-            if position >= len(favorite_data):
-                raise ValueError("Invalid index to remove favorite")
-            if position < 0:
-                raise ValueError("Invalid index to remove favorite")
+                if position >= len(favorite_data):
+                    raise ValueError("Invalid index to remove favorite")
+                if position < 0:
+                    raise ValueError("Invalid index to remove favorite")
 
-            # Remove favorite at index value
-            del favorite_data[position]
+                # Remove favorite at index value
+                del favorite_data[position]
 
-            # Add index values
-            favorite_data = [dict(fav_data, index=idx_val) for fav_data, idx_val in zip(favorite_data,
-                                                                                        range(len(favorite_data)))]
+                # Add index values
+                favorite_data = [dict(fav_data, index=idx_val) for fav_data, idx_val in zip(favorite_data,
+                                                                                            range(len(favorite_data)))]
 
-            # Write favorites to back lab book
-            with open(os.path.join(favorites_dir, f'{target_sub_dir}.json'), 'wt') as f_data:
-                json.dump(favorite_data, f_data)
+                # Write favorites to back lab book
+                with open(os.path.join(favorites_dir, f'{target_sub_dir}.json'), 'wt') as f_data:
+                    json.dump(favorite_data, f_data)
 
-            logger.info(f"Removed {target_sub_dir} favorite #{position}")
+                logger.info(f"Removed {target_sub_dir} favorite #{position}")
 
-            return None
-        except Exception as e:
-            logger.exception(e)
-            raise
+                return None
+            except Exception as e:
+                logger.exception(e)
+                raise
 
     def get_favorites(self, target_sub_dir: str) -> List[Optional[Dict[str, Any]]]:
         """Get Favorite data
@@ -664,88 +687,89 @@ class LabBook(object):
         if name == 'export':
             raise ValueError("LabBook cannot be named `export`.")
 
-        # Build data file contents
-        self._data = {
-            "labbook": {"id": uuid.uuid4().hex,
-                        "name": name,
-                        "description": self._santize_input(description or '')},
-            "owner": owner,
-            "schema": self.LABBOOK_DATA_SCHEMA_VERSION
-        }
+        with redis_lock.Lock(self.redis_client, "replace-with-key-method"):
+            # Build data file contents
+            self._data = {
+                "labbook": {"id": uuid.uuid4().hex,
+                            "name": name,
+                            "description": self._santize_input(description or '')},
+                "owner": owner,
+                "schema": self.LABBOOK_DATA_SCHEMA_VERSION
+            }
 
-        # Validate data
-        self._validate_labbook_data()
+            # Validate data
+            self._validate_labbook_data()
 
-        logger.info("Creating new labbook on disk for {}/{}/{} ...".format(username, owner, name))
+            logger.info("Creating new labbook on disk for {}/{}/{} ...".format(username, owner, name))
 
-        # Verify or Create user subdirectory
-        # Make sure you expand a user dir string
-        starting_dir = os.path.expanduser(self.labmanager_config.config["git"]["working_directory"])
-        user_dir = os.path.join(starting_dir, username)
-        if not os.path.isdir(user_dir):
-            os.makedirs(user_dir)
+            # Verify or Create user subdirectory
+            # Make sure you expand a user dir string
+            starting_dir = os.path.expanduser(self.labmanager_config.config["git"]["working_directory"])
+            user_dir = os.path.join(starting_dir, username)
+            if not os.path.isdir(user_dir):
+                os.makedirs(user_dir)
 
-        # Create owner dir - store LabBooks in working dir > logged in user > owner
-        owner_dir = os.path.join(user_dir, owner["username"])
-        if not os.path.isdir(owner_dir):
-            os.makedirs(owner_dir)
+            # Create owner dir - store LabBooks in working dir > logged in user > owner
+            owner_dir = os.path.join(user_dir, owner["username"])
+            if not os.path.isdir(owner_dir):
+                os.makedirs(owner_dir)
 
-            # Create `labbooks` subdir in the owner dir
-            owner_dir = os.path.join(owner_dir, "labbooks")
-        else:
-            owner_dir = os.path.join(owner_dir, "labbooks")
+                # Create `labbooks` subdir in the owner dir
+                owner_dir = os.path.join(owner_dir, "labbooks")
+            else:
+                owner_dir = os.path.join(owner_dir, "labbooks")
 
-        # Verify name not already in use
-        if os.path.isdir(os.path.join(owner_dir, name)):
-            # Exists already. Raise an exception
-            raise ValueError(f"LabBook `{name}` already exists locally. Choose a new LabBook name")
+            # Verify name not already in use
+            if os.path.isdir(os.path.join(owner_dir, name)):
+                # Exists already. Raise an exception
+                raise ValueError(f"LabBook `{name}` already exists locally. Choose a new LabBook name")
 
-        # Create LabBook subdirectory
-        new_root_dir = os.path.join(owner_dir, name)
+            # Create LabBook subdirectory
+            new_root_dir = os.path.join(owner_dir, name)
 
-        logger.info(f"Making labbook directory in {new_root_dir}")
+            logger.info(f"Making labbook directory in {new_root_dir}")
 
-        os.makedirs(new_root_dir)
-        self._set_root_dir(new_root_dir)
+            os.makedirs(new_root_dir)
+            self._set_root_dir(new_root_dir)
 
-        # Init repository
-        self.git.initialize()
+            # Init repository
+            self.git.initialize()
 
-        # Create Directory Structure
-        dirs = [
-            'code', 'input', 'output', '.gigantum',
-            os.path.join('.gigantum', 'env'),
-            os.path.join('.gigantum', 'notes'),
-            os.path.join('.gigantum', 'notes', 'log'),
-            os.path.join('.gigantum', 'notes', 'index'),
-        ]
+            # Create Directory Structure
+            dirs = [
+                'code', 'input', 'output', '.gigantum',
+                os.path.join('.gigantum', 'env'),
+                os.path.join('.gigantum', 'notes'),
+                os.path.join('.gigantum', 'notes', 'log'),
+                os.path.join('.gigantum', 'notes', 'index'),
+            ]
 
-        for d in dirs:
-            self.makedir(d, make_parents=True)
+            for d in dirs:
+                self.makedir(d, make_parents=True)
 
-        # Create labbook.yaml file
-        self._save_labbook_data()
+            # Create labbook.yaml file
+            self._save_labbook_data()
 
-        # Create blank Dockerfile
-        # TODO: Add better base dockerfile once environment service defines this
-        with open(os.path.join(self.root_dir, ".gigantum", "env", "Dockerfile"), 'wt') as dockerfile:
-            dockerfile.write("FROM ubuntu:16.04")
+            # Create blank Dockerfile
+            # TODO: Add better base dockerfile once environment service defines this
+            with open(os.path.join(self.root_dir, ".gigantum", "env", "Dockerfile"), 'wt') as dockerfile:
+                dockerfile.write("FROM ubuntu:16.04")
 
-        # Create .gitignore default file
-        # TODO: Use a base .gitignore file vs. global variable
-        with open(os.path.join(self.root_dir, ".gitignore"), 'wt') as gi_file:
-            gi_file.write(GIT_IGNORE_DEFAULT)
+            # Create .gitignore default file
+            # TODO: Use a base .gitignore file vs. global variable
+            with open(os.path.join(self.root_dir, ".gitignore"), 'wt') as gi_file:
+                gi_file.write(GIT_IGNORE_DEFAULT)
 
-        # Commit
-        # TODO: Once users are properly added, create a GitAuthor instance before commit
-        for s in ['code', 'input', 'output', '.gigantum']:
-            self.git.add_all(os.path.join(self.root_dir, s))
-        self.git.add(os.path.join(self.root_dir, ".gigantum", "labbook.yaml"))
-        self.git.add(os.path.join(self.root_dir, ".gigantum", "env", "Dockerfile"))
-        self.git.add(os.path.join(self.root_dir, ".gitignore"))
-        self.git.commit(f"Creating new empty LabBook: {name}")
+            # Commit
+            # TODO: Once users are properly added, create a GitAuthor instance before commit
+            for s in ['code', 'input', 'output', '.gigantum']:
+                self.git.add_all(os.path.join(self.root_dir, s))
+            self.git.add(os.path.join(self.root_dir, ".gigantum", "labbook.yaml"))
+            self.git.add(os.path.join(self.root_dir, ".gigantum", "env", "Dockerfile"))
+            self.git.add(os.path.join(self.root_dir, ".gitignore"))
+            self.git.commit(f"Creating new empty LabBook: {name}")
 
-        return self.root_dir
+            return self.root_dir
 
     def rename(self, new_name: str) -> None:
         """Method to rename a labbook
@@ -756,35 +780,34 @@ class LabBook(object):
         Returns:
             None
         """
-        # TODO Grab LabBook Lock
+        with redis_lock.Lock(self.redis_client, "replace-with-key-method"):
+            # Make sure name does not already exist
+            labbooks_dir = self.root_dir.rsplit(os.path.sep, 1)[0]
+            if os.path.exists(os.path.join(labbooks_dir, new_name)):
+                raise ValueError(f"New LabBook name '{new_name}' already exists")
 
-        # Make sure name does not already exist
-        labbooks_dir = self.root_dir.rsplit(os.path.sep, 1)[0]
-        if os.path.exists(os.path.join(labbooks_dir, new_name)):
-            raise ValueError(f"New LabBook name '{new_name}' already exists")
+            try:
+                # Rename labbook directory to new directory and update YAML file
+                old_name = self.name
+                self.name = new_name
 
-        try:
-            # Rename labbook directory to new directory and update YAML file
-            old_name = self.name
-            self.name = new_name
+                # Commit Change
+                self.git.add(os.path.join(self.root_dir, ".gigantum", "labbook.yaml"))
+                commit = self.git.commit(f"Renamed LabBook '{old_name}' to '{new_name}'")
 
-            # Commit Change
-            self.git.add(os.path.join(self.root_dir, ".gigantum", "labbook.yaml"))
-            commit = self.git.commit(f"Renamed LabBook '{old_name}' to '{new_name}'")
-
-            # Add Activity record
-            ns = NoteStore(self)
-            ns.create_note({
-                'linked_commit': commit.hexsha,
-                'message': f"Renamed LabBook '{old_name}' to '{new_name}'",
-                'level': NoteLogLevel.USER_MAJOR,
-                'tags': ['rename'],
-                'free_text': '',
-                'objects': ''
-            })
-        finally:
-            # TODO: Release LabBook lock
-            pass
+                # Add Activity record
+                ns = NoteStore(self)
+                ns.create_note({
+                    'linked_commit': commit.hexsha,
+                    'message': f"Renamed LabBook '{old_name}' to '{new_name}'",
+                    'level': NoteLogLevel.USER_MAJOR,
+                    'tags': ['rename'],
+                    'free_text': '',
+                    'objects': ''
+                })
+            except Exception as e:
+                logger.exception(e)
+                raise
 
     def from_directory(self, root_dir: str) -> None:
         """Method to populate a LabBook instance from a directory
@@ -885,7 +908,7 @@ class LabBook(object):
 
         return result
 
-    def log(self, username: str = None, max_count: int = 10):
+    def log(self, username: str = None, max_count: int=10):
         """Method to list commit history of a Labbook
 
         Args:
