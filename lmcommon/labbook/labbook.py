@@ -31,7 +31,7 @@ from lmcommon.gitlib import get_git_interface, GitAuthor
 from lmcommon.logging import LMLogger
 from lmcommon.notes import NoteLogLevel, NoteStore
 
-from .schemas import validate_schema
+from lmcommon.labbook.schemas import validate_schema
 
 GIT_IGNORE_DEFAULT = """.DS_Store"""
 logger = LMLogger.get_logger()
