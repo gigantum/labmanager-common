@@ -188,10 +188,15 @@ class LabBook(object):
         if len(self.name) > 100:
             raise ValueError("Invalid `name`. Max length is 100 characters")
 
-        if not validate_schema(self.LABBOOK_DATA_SCHEMA_VERSION, self.data):
-            errmsg = f"Schema in Labbook {str(self)} does not match indicated version {self.LABBOOK_DATA_SCHEMA_VERSION}"
-            logger.error(errmsg)
-            raise ValueError(errmsg)
+        # TODO: Remove in the future after breaking changes are completed
+        # Skip schema check if it doesn't exist (aka an old labbook)
+        if "schema" in self.data:
+            if not validate_schema(self.LABBOOK_DATA_SCHEMA_VERSION, self.data):
+                errmsg = f"Schema in Labbook {str(self)} does not match indicated version {self.LABBOOK_DATA_SCHEMA_VERSION}"
+                logger.error(errmsg)
+                raise ValueError(errmsg)
+        else:
+            logger.info("Skipping schema check on old LabBook")
 
     # TODO: Get feedback on better way to sanitize
     def _santize_input(self, value: str) -> str:
