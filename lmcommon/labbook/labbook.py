@@ -190,13 +190,14 @@ class LabBook(object):
 
         # TODO: Remove in the future after breaking changes are completed
         # Skip schema check if it doesn't exist (aka an old labbook)
-        if "schema" in self.data:
-            if not validate_schema(self.LABBOOK_DATA_SCHEMA_VERSION, self.data):
-                errmsg = f"Schema in Labbook {str(self)} does not match indicated version {self.LABBOOK_DATA_SCHEMA_VERSION}"
-                logger.error(errmsg)
-                raise ValueError(errmsg)
-        else:
-            logger.info("Skipping schema check on old LabBook")
+        if self.data:
+            if "schema" in self.data:
+                if not validate_schema(self.LABBOOK_DATA_SCHEMA_VERSION, self.data):
+                    errmsg = f"Schema in Labbook {str(self)} does not match indicated version {self.LABBOOK_DATA_SCHEMA_VERSION}"
+                    logger.error(errmsg)
+                    raise ValueError(errmsg)
+            else:
+                logger.info("Skipping schema check on old LabBook")
 
     # TODO: Get feedback on better way to sanitize
     def _santize_input(self, value: str) -> str:
@@ -720,6 +721,10 @@ class LabBook(object):
         dirs = [
             'code', 'input', 'output', '.gigantum',
             os.path.join('.gigantum', 'env'),
+            os.path.join('.gigantum', 'env', 'base_image'),
+            os.path.join('.gigantum', 'env', 'dev_env'),
+            os.path.join('.gigantum', 'env', 'custom'),
+            os.path.join('.gigantum', 'env', 'package_manager'),
             os.path.join('.gigantum', 'notes'),
             os.path.join('.gigantum', 'notes', 'log'),
             os.path.join('.gigantum', 'notes', 'index'),
