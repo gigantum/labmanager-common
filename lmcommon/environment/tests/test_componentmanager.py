@@ -26,33 +26,8 @@ import shutil
 import yaml
 
 from lmcommon.environment import ComponentManager, RepositoryManager
+from lmcommon.fixtures import mock_config_file
 from lmcommon.labbook import LabBook
-
-
-@pytest.fixture()
-def mock_config_file():
-    """A pytest fixture that creates a temporary directory and a config file to match. Deletes directory after test"""
-    # Create a temporary working directory
-    temp_dir = os.path.join(tempfile.tempdir, uuid.uuid4().hex)
-    os.makedirs(temp_dir)
-    
-    with tempfile.NamedTemporaryFile(mode="wt") as fp:
-        # Write a temporary config file
-        fp.write("""core:
-  team_mode: false 
-  
-environment:
-  repo_url:
-    - "https://github.com/gig-dev/environment-components.git"
-git:
-  backend: 'filesystem'
-  working_directory: '{}'""".format(temp_dir))
-        fp.seek(0)
-
-        yield fp.name, temp_dir  # provide the fixture value
-
-    # Remove the temp_dir
-    shutil.rmtree(temp_dir)
 
 
 @pytest.fixture(scope="module")
@@ -105,10 +80,10 @@ class TestComponentManager(object):
                              owner={"username": "test"})
 
         # Verify missing dir structure
-        assert os.path.exists(os.path.join(labbook_dir, '.gigantum', 'env', 'base_image')) is False
-        assert os.path.exists(os.path.join(labbook_dir, '.gigantum', 'env', 'dev_env')) is False
-        assert os.path.exists(os.path.join(labbook_dir, '.gigantum', 'env', 'package_manager')) is False
-        assert os.path.exists(os.path.join(labbook_dir, '.gigantum', 'env', 'custom')) is False
+        assert os.path.exists(os.path.join(labbook_dir, '.gigantum', 'env', 'base_image')) is True
+        assert os.path.exists(os.path.join(labbook_dir, '.gigantum', 'env', 'dev_env')) is True
+        assert os.path.exists(os.path.join(labbook_dir, '.gigantum', 'env', 'package_manager')) is True
+        assert os.path.exists(os.path.join(labbook_dir, '.gigantum', 'env', 'custom')) is True
         assert os.path.exists(os.path.join(labbook_dir, '.gigantum', 'env', 'entrypoint.sh')) is False
 
         cm = ComponentManager(lb)
@@ -147,6 +122,7 @@ class TestComponentManager(object):
 
         # Ensure all four packages exist.
         package_files = [f for f in os.listdir(package_path)]
+        package_files = [p for p in package_files if p != '.gitkeep']
         assert len(package_files) == 4
 
         # Ensure the fields in each of the 4 packages exist.

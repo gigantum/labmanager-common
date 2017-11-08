@@ -34,59 +34,9 @@ import git
 
 from lmcommon.imagebuilder import ImageBuilder
 from lmcommon.environment import ComponentManager, RepositoryManager
+from lmcommon.fixtures import labbook_dir_tree, mock_config_file
 from lmcommon.labbook import LabBook
 from lmcommon.configuration import get_docker_client
-
-@pytest.fixture()
-def mock_config_file():
-    """A pytest fixture that creates a temporary directory and a config file to match. Deletes directory after test"""
-    # Create a temporary working directory
-    temp_dir = os.path.join(tempfile.tempdir, uuid.uuid4().hex)
-    os.makedirs(temp_dir)
-
-    with tempfile.NamedTemporaryFile(mode="wt") as fp:
-        # Write a temporary config file
-        fp.write("""core:
-  team_mode: false 
-
-environment:
-  repo_url:
-    - "https://github.com/gig-dev/environment-components.git"
-
-git:
-  backend: 'filesystem'
-  working_directory: '{}'""".format(temp_dir))
-        fp.seek(0)
-
-        yield fp.name, temp_dir  # provide the fixture value
-
-    # Remove the temp_dir
-    shutil.rmtree(temp_dir)
-
-@pytest.fixture()
-def labbook_dir_tree():
-    with tempfile.TemporaryDirectory() as tempdir:
-
-        subdirs = [['.gigantum'],
-                   ['.gigantum', 'env'],
-                   ['.gigantum', 'env', 'base_image'],
-                   ['.gigantum', 'env', 'dev_env'],
-                   ['.gigantum', 'env', 'custom'],
-                   ['.gigantum', 'env', 'package_manager']]
-
-        for subdir in subdirs:
-            os.makedirs(os.path.join(tempdir, "my-temp-labbook", *subdir), exist_ok=True)
-
-        with tempfile.TemporaryDirectory() as checkoutdir:
-            repo = git.Repo.clone_from("https://github.com/gig-dev/environment-components-dev.git", checkoutdir)
-            shutil.copy(os.path.join(checkoutdir, "base_image/gigantum/ubuntu1604-python3/ubuntu1604-python3-v0_4.yaml"),
-                        os.path.join(tempdir, "my-temp-labbook", ".gigantum", "env", "base_image"))
-            shutil.copy(os.path.join(checkoutdir, "dev_env/gigantum/jupyter-ubuntu/jupyter-ubuntu-v0_0.yaml"),
-                        os.path.join(tempdir, "my-temp-labbook", ".gigantum", "env", "dev_env"))
-            shutil.copy(os.path.join(checkoutdir, "custom/gigantum/ubuntu-python3-pillow/ubuntu-python3-pillow-v0_3.yaml"),
-                        os.path.join(tempdir, "my-temp-labbook", ".gigantum", "env", "custom"))
-
-        yield os.path.join(tempdir, 'my-temp-labbook')
 
 
 class TestImageBuilder(object):
@@ -220,9 +170,11 @@ class TestImageBuilder(object):
         unit_test_tag = "unit-test-please-delete"
         client = get_docker_client()
 
+        # NOTE: DO NOT run these following lines on CircleCI
         if getpass.getuser() != 'circleci':
-            # NOTE: DO NOT run these following lines on CircleCI
-            docker_image_id = ib.build_image(docker_client=client, image_tag=unit_test_tag, nocache=True)['docker_image_id']
+            # Right now assume username is "default"
+            docker_image_id = ib.build_image(docker_client=client, image_tag=unit_test_tag,
+                                             nocache=True, username='default')['docker_image_id']
             client.images.remove(docker_image_id, force=True, noprune=False)
 
     @pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Cannot build images on CircleCI")
@@ -251,13 +203,16 @@ class TestImageBuilder(object):
         client = get_docker_client()
 
         # Build image once
-        ib.build_image(docker_client=client, image_tag=unit_test_tag)
+        # Right now assume username is "default"
+        ib.build_image(docker_client=client, image_tag=unit_test_tag, username='default')
 
         # Start container
         docker_container = client.containers.run(unit_test_tag, detach=True, name=unit_test_tag)
 
         # Try to build it again
-        docker_image_id = ib.build_image(docker_client=client, image_tag=unit_test_tag)['docker_image_id']
+        # Right now assume username is "default"
+        docker_image_id = ib.build_image(docker_client=client, image_tag=unit_test_tag,
+                                         username='default')['docker_image_id']
 
         # Clean up
         client.images.remove(docker_image_id, force=True, noprune=False)

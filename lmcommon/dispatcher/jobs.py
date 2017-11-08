@@ -40,7 +40,7 @@ from lmcommon.logging import LMLogger
 # ANY use of globals will cause the following methods to fail.
 
 
-def export_labbook_as_zip(labbook_path: str) -> str:
+def export_labbook_as_zip(labbook_path: str, lb_export_directory: str) -> str:
     """Return path to archive file of exported labbook. """
     p = os.getpid()
     logger = LMLogger.get_logger()
@@ -51,9 +51,12 @@ def export_labbook_as_zip(labbook_path: str) -> str:
             # A gigantum labbook will contain a .gigantum hidden directory inside it.
             raise ValueError(f'(Job {p}) Directory at {labbook_path} does not appear to be a Gigantum LabBook')
 
+        if not os.path.isdir(lb_export_directory):
+            os.makedirs(lb_export_directory, exist_ok=True)
+            # raise ValueError(f'(Job {p}) Export directory at `{lb_export_directory}` not found')
+
         labbook: LabBook = LabBook()
         labbook.from_directory(labbook_path)
-        lb_export_directory = os.path.join(labbook.labmanager_config.config['git']['working_directory'], 'export')
 
         logger.info(f"(Job {p}) Exporting `{labbook.root_dir}` to `{lb_export_directory}`")
         if not os.path.exists(lb_export_directory):
@@ -78,8 +81,19 @@ def export_labbook_as_zip(labbook_path: str) -> str:
 
 
 def import_labboook_from_zip(archive_path: str, username: str, owner: str,
-                             config_file: Optional[str] = None) -> str:
-    """Return directory path of imported labbook. """
+                             config_file: Optional[str] = None, base_filename: Optional[str] = None) -> str:
+    """Method to import a labbook from a zip file
+
+    Args:
+        archive_path(str): Path to the uploaded zip
+        username(str): Username
+        owner(str): Owner username
+        config_file(str): Optional path to a labmanager config file
+        base_filename(str): The desired basename for the upload, without an upload ID prepended
+
+    Returns:
+        str: directory path of imported labbook
+    """
     p = os.getpid()
     logger = LMLogger.get_logger()
     logger.info(f"(Job {p}) Starting import_labbook_from_zip(archive_path={archive_path},"
@@ -96,21 +110,24 @@ def import_labboook_from_zip(archive_path: str, username: str, owner: str,
         lm_config = Configuration(config_file)
         lm_working_dir: str = lm_config.config['git']['working_directory']
 
-        lb_name = os.path.basename(archive_path).split('_')[0]
+        # Infer the final labbook name
+        inferred_labbook_name = os.path.basename(archive_path).split('_')[0]
+        if base_filename:
+            inferred_labbook_name = base_filename.split('_')[0]
         lb_containing_dir: str = os.path.join(lm_working_dir, username, owner, 'labbooks')
 
-        if os.path.isdir(os.path.join(lb_containing_dir, lb_name)):
-            raise ValueError(f'(Job {p}) LabBook {lb_name} already exists at {lb_containing_dir}, cannot overwrite.')
+        if os.path.isdir(os.path.join(lb_containing_dir, inferred_labbook_name)):
+            raise ValueError(f'(Job {p}) LabBook {inferred_labbook_name} already exists at {lb_containing_dir}, cannot overwrite.')
 
         logger.info(f"(Job {p}) Extracting LabBook from archive {archive_path} into {lb_containing_dir}")
         with zipfile.ZipFile(archive_path) as lb_zip:
             lb_zip.extractall(path=lb_containing_dir)
 
-        new_lb_path = os.path.join(lb_containing_dir, lb_name)
+        new_lb_path = os.path.join(lb_containing_dir, inferred_labbook_name)
         if not os.path.isdir(new_lb_path):
             raise ValueError(f"(Job {p}) Expected LabBook not found at {new_lb_path}")
 
-        logger.info(f"(Job {p}) LabBook {lb_name} imported to {new_lb_path}")
+        logger.info(f"(Job {p}) LabBook {inferred_labbook_name} imported to {new_lb_path}")
         return new_lb_path
     except Exception as e:
         logger.exception(f"(Job {p}) Error on import_labbook_from_zip({archive_path}): {e}")
@@ -135,9 +152,18 @@ def build_docker_image(path, tag, pull, nocache) -> str:
 
     try:
         docker_client = get_docker_client()
-        docker_image = docker_client.images.build(path=path, tag=tag, pull=pull, nocache=nocache)
-        logger.info("Completed build_docker_image in pid {}: {}".format(os.getpid(), str(docker_image)))
-        return docker_image.id
+        [logger.info(ln) for ln in docker_client.api.build(path=path,
+                                                           tag=tag,
+                                                           nocache=nocache,
+                                                           pull=pull,
+                                                           stream=True, decode=True)]
+
+        # Assume build worked and get the image
+        completed_image = docker_client.images.get(tag)
+
+        logger.info("Completed build_docker_image in pid {}: {}".format(os.getpid(), str(completed_image)))
+        logger.info("test: {}".format(completed_image.id))
+        return completed_image.id
     except Exception as e:
         logger.error("Error on build_docker_image in pid {}: {}".format(os.getpid(), e))
         raise

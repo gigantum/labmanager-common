@@ -101,6 +101,7 @@ class Dispatcher(object):
     def all_jobs(self) -> List[JobStatus]:
         """Return a list of dicts containing information about all jobs in the backend. """
         redis_keys = self._redis_conn.keys("rq:job:*")
+        redis_keys = [x for x in redis_keys if "dependents" not in x.decode()]
 
         # Ignore type checking on the following line cause we filter out None-results.
         return [self.query_task(JobKey(q.decode())) for q in redis_keys if q] # type: ignore

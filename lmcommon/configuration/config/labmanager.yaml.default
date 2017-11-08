@@ -8,6 +8,13 @@ core:
   team_mode: false # Should the LabManager run in Team Mode (multi-user)
   logging_config: "/etc/gigantum/logging.json" # Location of configuration file for the LabManager logger
 
+# Authentication Configuration
+auth:
+  provider_domain: gigantum.auth0.com
+  audience: api.gigantum.io
+  signing_algorithm: RS256
+  identity_manager: local
+
 # Environment Management Configuration
 environment:
   repo_url:

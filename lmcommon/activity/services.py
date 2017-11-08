@@ -46,11 +46,12 @@ logger = LMLogger.get_logger()
 #       process_id: <id for the background task>
 #        ... custom fields for the specific activity monitor class
 
-def start_labbook_monitor(labbook: LabBook, database: int = 1) -> None:
+def start_labbook_monitor(labbook: LabBook, username: str, database: int = 1) -> None:
     """Method to start Development Environment Monitors for a given Lab Book if available
 
     Args:
         labbook(LabBook): A populated LabBook instance to start monitoring
+        username(str): The username of the logged in user
         database(int): The redis database ID to use for key storage. Default should be 1
 
     Returns:
@@ -87,7 +88,7 @@ def start_labbook_monitor(labbook: LabBook, database: int = 1) -> None:
         try:
             if dev_env_mgr.is_available(de['info']['name']):
                 # Add record to redis for Dev Env Monitor
-                dev_env_monitor_key = "dev_env_monitor:{}:{}:{}:{}".format("default",
+                dev_env_monitor_key = "dev_env_monitor:{}:{}:{}:{}".format(username,
                                                                            labbook.owner['username'],
                                                                            labbook.name,
                                                                            de['info']['name'])
@@ -98,7 +99,7 @@ def start_labbook_monitor(labbook: LabBook, database: int = 1) -> None:
                           'key': dev_env_monitor_key}
                 job_key = d.schedule_task(run_dev_env_monitor, kwargs=kwargs, repeat=None, interval=5)
 
-                redis_conn.hset(dev_env_monitor_key, "container_name", "{}-{}-{}".format("default",
+                redis_conn.hset(dev_env_monitor_key, "container_name", "{}-{}-{}".format(username,
                                                                                          labbook.owner['username'],
                                                                                          labbook.name))
                 redis_conn.hset(dev_env_monitor_key, "process_id", job_key.key_str)
@@ -141,11 +142,12 @@ def stop_dev_env_monitors(dev_env_key: str, redis_conn: redis.Redis, labbook_nam
                                                                                 process_id))
 
 
-def stop_labbook_monitor(labbook: LabBook, database: int = 1) -> None:
+def stop_labbook_monitor(labbook: LabBook, username: str, database: int = 1) -> None:
     """Method to stop a Development Environment Monitors for a given Lab Book
 
     Args:
         labbook(LabBook): A populated LabBook instance to start monitoring
+        username(str): Username of the logged in user
         database(int): The redis database ID to use for key storage. Default should be 1
 
     Returns:
@@ -160,8 +162,7 @@ def stop_labbook_monitor(labbook: LabBook, database: int = 1) -> None:
     dev_envs = cm.get_component_list('dev_env')
 
     for de in dev_envs:
-        # TODO: Fix username once auth implemented properly
-        dev_env_monitor_key = "dev_env_monitor:{}:{}:{}:{}".format("default",
+        dev_env_monitor_key = "dev_env_monitor:{}:{}:{}:{}".format(username,
                                                                    labbook.owner['username'],
                                                                    labbook.name,
                                                                    de['info']['name'])
