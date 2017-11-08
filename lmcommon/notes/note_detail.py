@@ -26,7 +26,7 @@ import redis_lock
 class NoteDetailDB():
     """File based representation of key values"""
 
-    def __init__(self, path: str) -> None:
+    def __init__(self, path: str, config) -> None:
         """Constructor
 
         Args:
@@ -37,6 +37,8 @@ class NoteDetailDB():
         # TODO derived from UUID/machine/something unique
         #       derive in a smart way for merge.
         self.basename = "labbook_notes_log_"
+
+        self.config = config
 
         # get the latest log on open
         self.logmdfname = os.path.abspath(os.path.join(path,'.logfilename'))
@@ -66,7 +68,7 @@ class NoteDetailDB():
         """
         fp = open(os.path.abspath(os.path.join(self.dirpath, self.basename+str(self.latestfnum))), "ba" )
 
-        # rotate file when too big TODO get from settings
+        # rotate file when too big.  Set this at 4 MB override by config file
         # this will write one record after the limit, i.e. it's a soft limit
         sizelimit = self.config.config["logfilesize"] if "logfilesize" in self.config.config else 4000000
         if fp.tell() > sizelimit:

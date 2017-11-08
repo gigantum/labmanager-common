@@ -100,5 +100,3 @@ class TestNoteDetailObject:
         ndo2 = NoteDetailObject.from_json(json_str)
 
         assert ndo.__dict__ == ndo2.__dict__
-
-

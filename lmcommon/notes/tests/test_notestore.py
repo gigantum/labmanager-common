@@ -319,4 +319,3 @@ class TestNoteStore:
             note_detail_db.put(os.urandom(100000))
 
         assert(note_detail_db.latestfnum == oldfnum+2)
-
