@@ -36,6 +36,7 @@ import rq
 from lmcommon.imagebuilder import ImageBuilder
 from lmcommon.configuration import get_docker_client
 from lmcommon.environment import ComponentManager, RepositoryManager
+from lmcommon.fixtures import mock_config_file
 from lmcommon.dispatcher import Dispatcher
 from lmcommon.labbook import LabBook
 
@@ -75,33 +76,6 @@ def temporary_worker():
     yield worker_proc, dispatcher
 
     worker_proc.terminate()
-
-
-@pytest.fixture()
-def mock_config_file():
-    """A pytest fixture that creates a temporary directory and a config file to match. Deletes directory after test"""
-    # Create a temporary working directory
-    temp_dir = os.path.join(tempfile.tempdir, uuid.uuid4().hex)
-    os.makedirs(temp_dir)
-
-    with tempfile.NamedTemporaryFile(mode="wt") as fp:
-        # Write a temporary config file
-        fp.write("""core:
-  team_mode: false 
-
-environment:
-  repo_url:
-    - "https://github.com/gig-dev/environment-components.git"
-
-git:
-  backend: 'filesystem'
-  working_directory: '{}'""".format(temp_dir))
-        fp.seek(0)
-
-        yield fp.name, temp_dir  # provide the fixture value
-
-    # Remove the temp_dir
-    shutil.rmtree(temp_dir)
 
 
 class TestDispatcher(object):

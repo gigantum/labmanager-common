@@ -24,34 +24,7 @@ import uuid
 import shutil
 import json
 
-from lmcommon.labbook import LabBook
-
-
-@pytest.fixture()
-def mock_labbook():
-    """A pytest fixture that creates a temporary directory and a config file to match. Deletes directory after test"""
-    # Create a temporary working directory
-    temp_dir = os.path.join(tempfile.tempdir, uuid.uuid4().hex)
-    os.makedirs(temp_dir)
-    
-    with tempfile.NamedTemporaryFile(mode="wt") as fp:
-        # Write a temporary config file
-        fp.write("""core:
-  team_mode: false 
-git:
-  backend: 'filesystem'
-  working_directory: '{}'""".format(temp_dir))
-        fp.seek(0)
-
-        lb = LabBook(fp.name)
-
-        labbook_dir = lb.new(username="test", name="labbook1", description="my first labbook",
-                             owner={"username": "test"})
-
-        yield fp.name, labbook_dir, lb
-
-    # Remove the temp_dir
-    shutil.rmtree(temp_dir)
+from lmcommon.fixtures import mock_labbook
 
 
 class TestLabBookFavorites(object):

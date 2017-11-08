@@ -31,12 +31,17 @@ from lmcommon.gitlib import get_git_interface, GitAuthor
 from lmcommon.logging import LMLogger
 from lmcommon.notes import NoteLogLevel, NoteStore
 
+from .schemas import validate_schema
+
 GIT_IGNORE_DEFAULT = """.DS_Store"""
 logger = LMLogger.get_logger()
 
 
 class LabBook(object):
     """Class representing a single LabBook"""
+
+    # If this is not definied, implicity the version is "0.0".
+    LABBOOK_DATA_SCHEMA_VERSION = "0.1"
 
     def __init__(self, config_file: str = None) -> None:
         self.labmanager_config = Configuration(config_file)
@@ -102,7 +107,7 @@ class LabBook(object):
         else:
             raise ValueError("Lab Book root dir not specified. Failed to configure git.")
         
-        # Update the root directory to the knew directory name
+        # Update the root directory to the new directory name
         self._set_root_dir(os.path.join(base_dir, value))
 
     @property
@@ -159,6 +164,18 @@ class LabBook(object):
         with open(os.path.join(self.root_dir, ".gigantum", "labbook.yaml"), 'wt') as lbfile:
             lbfile.write(yaml.dump(self._data, default_flow_style=False))
 
+    def _load_labbook_data(self) -> None:
+        """Method to load the labbook YAML file to a dictionary
+
+        Returns:
+            None
+        """
+        if not self.root_dir:
+            raise ValueError("No root directory assigned to lab book. Failed to get root directory.")
+
+        with open(os.path.join(self.root_dir, ".gigantum", "labbook.yaml"), 'rt') as lbfile:
+            self._data = yaml.load(lbfile)
+
     def _validate_labbook_data(self) -> None:
         """Method to validate the LabBook data file contents
 
@@ -170,6 +187,17 @@ class LabBook(object):
 
         if len(self.name) > 100:
             raise ValueError("Invalid `name`. Max length is 100 characters")
+
+        # TODO: Remove in the future after breaking changes are completed
+        # Skip schema check if it doesn't exist (aka an old labbook)
+        if self.data:
+            if "schema" in self.data:
+                if not validate_schema(self.LABBOOK_DATA_SCHEMA_VERSION, self.data):
+                    errmsg = f"Schema in Labbook {str(self)} does not match indicated version {self.LABBOOK_DATA_SCHEMA_VERSION}"
+                    logger.error(errmsg)
+                    raise ValueError(errmsg)
+            else:
+                logger.info("Skipping schema check on old LabBook")
 
     # TODO: Get feedback on better way to sanitize
     def _santize_input(self, value: str) -> str:
@@ -211,12 +239,13 @@ class LabBook(object):
                   'modified_at': file_info.st_mtime
                }
 
-    def insert_file(self, src_file: str, dst_dir: str) -> Dict[str, Any]:
-        """Copy the file at `src_file` into the `dst_dir`. Filename stays the same.
+    def insert_file(self, src_file: str, dst_dir: str, base_filename: Optional[str] = None) -> Dict[str, Any]:
+        """Copy the file at `src_file` into the `dst_dir`. Filename removes upload ID if present.
 
         Args:
             src_file(str): Full path of file to insert into
             dst_dir(str): Relative path within labbook where `src_file` should be copied to
+            base_filename(str): The desired basename for the file, without an upload ID prepended
 
         Returns:
             dict: The inserted file's info
@@ -230,17 +259,30 @@ class LabBook(object):
 
         # Remove any leading "/" -- without doing so os.path.join will break.
         dst_dir = LabBook._make_path_relative(dst_dir)
-        dst_path = os.path.join(self.root_dir, dst_dir.replace('..', ''))
-        if not os.path.isdir(dst_path):
-            raise ValueError(f"Target `{dst_path}` not a directory")
+
+        # Check if this file contains an upload_id (which means it came from a chunked upload)
+        if base_filename:
+            dst_filename = base_filename
+        else:
+            dst_filename = os.path.basename(src_file)
+
+        # Create the absolute file path for the destination
+        dst_path = os.path.join(self.root_dir, dst_dir.replace('..', ''), dst_filename)
+        if not os.path.isdir(os.path.join(self.root_dir, dst_dir.replace('..', ''))):
+            raise ValueError(f"Target dir `{os.path.join(self.root_dir, dst_dir.replace('..', ''))}` does not exist")
 
         try:
-            logger.info(f"Copying new file for {str(self)} from `{src_file}` to `{dst_path}")
-            copied_path = shutil.copy(src_file, dst_path)
-            rel_path = copied_path.replace(self.root_dir, '')
-            commit_msg = f"Added new file {rel_path}."
-            self.git.add(copied_path)
+            # Copy file to destination
+            logger.info(f"Inserting new file for {str(self)} from `{src_file}` to `{dst_path}")
+            shutil.copyfile(src_file, dst_path)
+
+            # Create commit
+            rel_path = dst_path.replace(self.root_dir, '')
+            commit_msg = f"Added new file {rel_path}"
+            self.git.add(dst_path)
             commit = self.git.commit(commit_msg)
+
+            # Create Activity record
             _, ext = os.path.splitext(rel_path) or 'file'
             ns = NoteStore(self)
             ns.create_note({
@@ -256,36 +298,62 @@ class LabBook(object):
             logger.exception(e)
             raise
 
-    def delete_file(self, relative_path: str) -> bool:
-        """Delete file from inside lb directory"""
-        if not relative_path:
-            raise ValueError(f"Target file `{relative_path}` to delete cannot be None or empty")
+    def delete_file(self, relative_path: str, directory: bool = False) -> bool:
+        """Delete file (or directory) from inside lb directory.
+
+        Part of the intention is to mirror the unix "rm" command. Thus, there
+        needs to be some extra arguments in order to delete a directory, especially
+        one with contents inside of it. In this case, `directory` must be true in order
+        to delete a directory at the given path.
+
+        Args:
+            relative_path(str): Relative path from labbook root to target
+            directory(bool): True if relative_path is a directory
+
+        Returns:
+            None
+        """
 
         relative_path = LabBook._make_path_relative(relative_path)
-        target_file_path = os.path.join(self.root_dir, relative_path)
-        if not os.path.exists(target_file_path):
-            raise ValueError(f"Attempted to delete non-existent path at `{target_file_path}`")
-        if not os.path.isfile(target_file_path):
-            raise ValueError(f"Attempted to delete non-existent file at `{target_file_path}`")
+        target_path = os.path.join(self.root_dir, relative_path)
+        if not os.path.exists(target_path):
+            raise ValueError(f"Attempted to delete non-existent path at `{target_path}`")
         else:
             try:
-                logger.info(f"Removing file at `{target_file_path}`")
-                os.remove(target_file_path)
-                commit_msg = f"Removed file {relative_path}."
-                self.git.remove(target_file_path)
+                target_type = 'file' if os.path.isfile(target_path) else 'directory'
+                logger.info(f"Removing {target_type} at `{target_path}`")
+                if os.path.isdir(target_path):
+                    if directory:
+                        shutil.rmtree(target_path)
+                    else:
+                        errmsg = f"Cannot recursively remove directory unless `directory` arg is True"
+                        logger.error(errmsg)
+                        raise ValueError(errmsg)
+                elif os.path.isfile(target_path):
+                    os.remove(target_path)
+                else:
+                    errmsg = f"File at {target_path} neither file nor directory"
+                    logger.error(errmsg)
+                    raise ValueError(errmsg)
+
+                commit_msg = f"Removed {target_type} {relative_path}."
+                self.git.remove(target_path)
                 commit = self.git.commit(commit_msg)
-                _, ext = os.path.splitext(target_file_path) or 'file'
+                if os.path.isfile(target_path):
+                    _, ext = os.path.splitext(target_path)
+                else:
+                    ext = 'directory'
                 ns = NoteStore(self)
                 ns.create_note({
                     'linked_commit': commit.hexsha,
                     'message': commit_msg,
                     'level': NoteLogLevel.USER_MAJOR,
-                    'tags': [ext],
+                    'tags': ['remove', ext],
                     'free_text': '',
                     'objects': ''
                 })
                 return True
-            except IOError as e:
+            except (IOError, FileNotFoundError) as e:
                 logger.exception(e)
                 raise
 
@@ -607,7 +675,8 @@ class LabBook(object):
             "labbook": {"id": uuid.uuid4().hex,
                         "name": name,
                         "description": self._santize_input(description or '')},
-            "owner": owner
+            "owner": owner,
+            "schema": self.LABBOOK_DATA_SCHEMA_VERSION
         }
 
         # Validate data
@@ -652,6 +721,10 @@ class LabBook(object):
         dirs = [
             'code', 'input', 'output', '.gigantum',
             os.path.join('.gigantum', 'env'),
+            os.path.join('.gigantum', 'env', 'base_image'),
+            os.path.join('.gigantum', 'env', 'dev_env'),
+            os.path.join('.gigantum', 'env', 'custom'),
+            os.path.join('.gigantum', 'env', 'package_manager'),
             os.path.join('.gigantum', 'notes'),
             os.path.join('.gigantum', 'notes', 'log'),
             os.path.join('.gigantum', 'notes', 'index'),
@@ -684,14 +757,53 @@ class LabBook(object):
 
         return self.root_dir
 
-    def from_directory(self, root_dir: str):
+    def rename(self, new_name: str) -> None:
+        """Method to rename a labbook
+
+        Args:
+            new_name(str): New desired labbook name
+
+        Returns:
+            None
+        """
+        # TODO Grab LabBook Lock
+
+        # Make sure name does not already exist
+        labbooks_dir = self.root_dir.rsplit(os.path.sep, 1)[0]
+        if os.path.exists(os.path.join(labbooks_dir, new_name)):
+            raise ValueError(f"New LabBook name '{new_name}' already exists")
+
+        try:
+            # Rename labbook directory to new directory and update YAML file
+            old_name = self.name
+            self.name = new_name
+
+            # Commit Change
+            self.git.add(os.path.join(self.root_dir, ".gigantum", "labbook.yaml"))
+            commit = self.git.commit(f"Renamed LabBook '{old_name}' to '{new_name}'")
+
+            # Add Activity record
+            ns = NoteStore(self)
+            ns.create_note({
+                'linked_commit': commit.hexsha,
+                'message': f"Renamed LabBook '{old_name}' to '{new_name}'",
+                'level': NoteLogLevel.USER_MAJOR,
+                'tags': ['rename'],
+                'free_text': '',
+                'objects': ''
+            })
+        finally:
+            # TODO: Release LabBook lock
+            pass
+
+    def from_directory(self, root_dir: str) -> None:
         """Method to populate a LabBook instance from a directory
 
         Args:
             root_dir(str): The absolute path to the directory containing the LabBook
 
         Returns:
-            LabBook
+            None
         """
 
         logger.debug(f"Populating LabBook from directory {root_dir}")
@@ -700,8 +812,7 @@ class LabBook(object):
         self._set_root_dir(root_dir)
 
         # Load LabBook data file
-        with open(os.path.join(self.root_dir, ".gigantum", "labbook.yaml"), "rt") as data_file:
-            self._data = yaml.load(data_file)
+        self._load_labbook_data()
 
     def from_name(self, username: str, owner:str, labbook_name:str):
         """Method to populate a LabBook instance based on the user and name of the labbook
@@ -738,8 +849,7 @@ class LabBook(object):
         self._set_root_dir(labbook_path)
 
         # Load LabBook data file
-        with open(os.path.join(self.root_dir, ".gigantum", "labbook.yaml"), "rt") as data_file:
-            self._data = yaml.load(data_file)
+        self._load_labbook_data()
 
     def list_local_labbooks(self, username: str = None) -> Optional[Dict[Optional[str], List[Dict[str, str]]]]:
         """Method to list available LabBooks

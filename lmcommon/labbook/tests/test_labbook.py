@@ -27,28 +27,7 @@ import shutil
 import yaml
 
 from lmcommon.labbook import LabBook
-
-
-@pytest.fixture()
-def mock_config_file():
-    """A pytest fixture that creates a temporary directory and a config file to match. Deletes directory after test"""
-    # Create a temporary working directory
-    temp_dir = os.path.join(tempfile.tempdir, uuid.uuid4().hex)
-    os.makedirs(temp_dir)
-    
-    with tempfile.NamedTemporaryFile(mode="wt") as fp:
-        # Write a temporary config file
-        fp.write("""core:
-  team_mode: false 
-git:
-  backend: 'filesystem'
-  working_directory: '{}'""".format(temp_dir))
-        fp.seek(0)
-
-        yield fp.name, temp_dir  # provide the fixture value
-
-    # Remove the temp_dir
-    shutil.rmtree(temp_dir)
+from lmcommon.fixtures import mock_config_file
 
 
 @pytest.fixture()
@@ -61,6 +40,7 @@ def sample_src_file():
 
 
 class TestLabBook(object):
+
     def test_create_labbook(self, mock_config_file):
         """Test creating an empty labbook"""
         lb = LabBook(mock_config_file[0])
@@ -139,6 +119,57 @@ class TestLabBook(object):
 
         with pytest.raises(ValueError):
             lb.new(owner={"username": "test"}, name="labbook1", description="my first labbook")
+
+    def test_rename_labbook(self, mock_config_file):
+        """Test renaming a LabBook"""
+        lb = LabBook(mock_config_file[0])
+        lb.new(username="test", name="labbook1", description="my first labbook", owner={"username": "test"})
+
+        assert lb.root_dir == os.path.join(mock_config_file[1], "test", "test", "labbooks", "labbook1")
+        assert type(lb) == LabBook
+
+        # Rename
+        original_dir = lb.root_dir
+        lb.rename('renamed-labbook-1')
+
+        # Validate copy
+        assert lb.root_dir == os.path.join(mock_config_file[1], "test", "test", "labbooks", "renamed-labbook-1")
+        assert os.path.exists(lb.root_dir) is True
+        assert os.path.isdir(lb.root_dir) is True
+
+        # Validate directory structure
+        assert os.path.isdir(os.path.join(lb.root_dir, "code")) is True
+        assert os.path.isdir(os.path.join(lb.root_dir, "input")) is True
+        assert os.path.isdir(os.path.join(lb.root_dir, "output")) is True
+        assert os.path.isdir(os.path.join(lb.root_dir, ".gigantum")) is True
+        assert os.path.isdir(os.path.join(lb.root_dir, ".gigantum", "env")) is True
+        assert os.path.isdir(os.path.join(lb.root_dir, ".gigantum", "notes")) is True
+        assert os.path.isdir(os.path.join(lb.root_dir, ".gigantum", "notes", "log")) is True
+        assert os.path.isdir(os.path.join(lb.root_dir, ".gigantum", "notes", "index")) is True
+
+        # Validate labbook data file
+        with open(os.path.join(lb.root_dir, ".gigantum", "labbook.yaml"), "rt") as data_file:
+            data = yaml.load(data_file)
+
+        assert data["labbook"]["name"] == "renamed-labbook-1"
+        assert data["labbook"]["description"] == "my first labbook"
+        assert "id" in data["labbook"]
+        assert data["owner"]["username"] == "test"
+
+        # Validate old dir is gone
+        assert os.path.exists(original_dir) is False
+        assert os.path.isdir(original_dir) is False
+
+    def test_rename_existing_labbook(self, mock_config_file):
+        """Test renaming a LabBook to an existing labbook"""
+        lb = LabBook(mock_config_file[0])
+        lb.new(username="test", name="labbook1", description="my first labbook", owner={"username": "test"})
+        lb.new(username="test", name="labbook2", description="my first labbook", owner={"username": "test"})
+
+        # Fail to Rename
+        assert lb.name == 'labbook2'
+        with pytest.raises(ValueError):
+            lb.rename('labbook1')
 
     def test_list_labbooks(self, mock_config_file):
         """Test listing labbooks for all users"""
@@ -321,6 +352,21 @@ class TestLabBook(object):
         assert new_file_data['key'] == f'code/{base_name}'
         assert new_file_data['is_dir'] is False
 
+    def test_insert_file_upload_id(self, mock_config_file):
+        lb = LabBook(mock_config_file[0])
+        lb.new(owner={"username": "test"}, name="test-insert-files-100", description="validate tests.")
+
+        test_file = os.path.join(tempfile.gettempdir(), "asdfasdf-testfile.txt")
+        with open(test_file, 'wt') as sample_f:
+            # Fill sample file with some deterministic crap
+            sample_f.write("n4%nm4%M435A EF87kn*C" * 40)
+
+        new_file_data = lb.insert_file(test_file, "code", base_filename='testfile.txt')
+
+        assert os.path.exists(os.path.join(lb.root_dir, 'code', 'testfile.txt'))
+        assert new_file_data['key'] == 'code/testfile.txt'
+        assert new_file_data['is_dir'] is False
+
     def test_insert_file_success_2(self, mock_config_file, sample_src_file):
         lb = LabBook(mock_config_file[0])
         lb.new(owner={"username": "test"}, name="test-insert-files-4", description="validate tests.")
@@ -354,6 +400,22 @@ class TestLabBook(object):
         new_file_path = os.path.join('blah', 'invalid.txt')
         with pytest.raises(ValueError):
             lb.delete_file(new_file_path)
+
+    def test_remove_dir(self, mock_config_file, sample_src_file):
+        lb = LabBook(mock_config_file[0])
+        lb.new(owner={"username": "test"}, name="test-remove-dir-1", description="validate tests.")
+        new_file_path = lb.insert_file(sample_src_file, "code")
+        base_name = os.path.basename(sample_src_file)
+
+        assert os.path.exists(os.path.join(lb.root_dir, 'code', base_name))
+
+        with pytest.raises(ValueError):
+            lb.delete_file('code', directory=False)
+
+        # Delete the directory
+        lb.delete_file('code', directory=True)
+        assert not os.path.exists(os.path.join(lb.root_dir, 'code', base_name))
+        assert not os.path.exists(os.path.join(lb.root_dir, 'code'))
 
     def test_move_file_as_rename_in_same_dir(self, mock_config_file, sample_src_file):
         # Create lb

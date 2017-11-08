@@ -21,7 +21,7 @@
 import os
 import yaml
 
-from typing import (Any, Dict)
+from typing import (Any, Dict, Optional)
 from pkg_resources import resource_filename
 
 from lmcommon.logging import LMLogger
@@ -34,7 +34,7 @@ class Configuration(object):
     """
     INSTALLED_LOCATION = "/etc/gigantum/labmanager.yaml"
 
-    def __init__(self, config_file: str = None) -> None:
+    def __init__(self, config_file: Optional[str] = None) -> None:
         """
         
         Args:

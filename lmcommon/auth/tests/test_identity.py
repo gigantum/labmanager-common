@@ -20,12 +20,11 @@
 import pytest
 import os
 
+from lmcommon.fixtures import mock_config_file_with_auth
 from lmcommon.configuration import Configuration
 from lmcommon.auth.identity import get_identity_manager
 from lmcommon.auth.local import LocalIdentityManager
 from lmcommon.auth import User
-
-from lmcommon.auth.tests.fixtures import mock_config_file
 
 
 class TestIdentity(object):
@@ -48,9 +47,9 @@ class TestIdentity(object):
         assert u.given_name == "Testy"
         assert u.family_name == "McTestface"
 
-    def test_get_identity_manager_errors(self, mock_config_file):
+    def test_get_identity_manager_errors(self, mock_config_file_with_auth):
         """Testing get_identity_manager error handling"""
-        config = Configuration(mock_config_file[0])
+        config = Configuration(mock_config_file_with_auth[0])
         config.config['auth']['identity_manager'] = "asdfasdf"
 
         with pytest.raises(ValueError):
@@ -66,13 +65,13 @@ class TestIdentity(object):
         with pytest.raises(ValueError):
             get_identity_manager(config)
 
-    def test_get_identity_manager(self, mock_config_file):
+    def test_get_identity_manager(self, mock_config_file_with_auth):
         """test getting an identity manager"""
-        config = Configuration(mock_config_file[0])
+        config = Configuration(mock_config_file_with_auth[0])
 
         mgr = get_identity_manager(config)
 
         assert type(mgr) == LocalIdentityManager
         assert mgr.config == config
-        assert mgr.auth_dir == os.path.join(mock_config_file[1], '.labmanager', 'identity')
+        assert mgr.auth_dir == os.path.join(mock_config_file_with_auth[1], '.labmanager', 'identity')
         assert mgr.user is None

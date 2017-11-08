@@ -81,8 +81,19 @@ def export_labbook_as_zip(labbook_path: str, lb_export_directory: str) -> str:
 
 
 def import_labboook_from_zip(archive_path: str, username: str, owner: str,
-                             config_file: Optional[str] = None) -> str:
-    """Return directory path of imported labbook. """
+                             config_file: Optional[str] = None, base_filename: Optional[str] = None) -> str:
+    """Method to import a labbook from a zip file
+
+    Args:
+        archive_path(str): Path to the uploaded zip
+        username(str): Username
+        owner(str): Owner username
+        config_file(str): Optional path to a labmanager config file
+        base_filename(str): The desired basename for the upload, without an upload ID prepended
+
+    Returns:
+        str: directory path of imported labbook
+    """
     p = os.getpid()
     logger = LMLogger.get_logger()
     logger.info(f"(Job {p}) Starting import_labbook_from_zip(archive_path={archive_path},"
@@ -99,21 +110,24 @@ def import_labboook_from_zip(archive_path: str, username: str, owner: str,
         lm_config = Configuration(config_file)
         lm_working_dir: str = lm_config.config['git']['working_directory']
 
-        lb_name = os.path.basename(archive_path).split('_')[0]
+        # Infer the final labbook name
+        inferred_labbook_name = os.path.basename(archive_path).split('_')[0]
+        if base_filename:
+            inferred_labbook_name = base_filename.split('_')[0]
         lb_containing_dir: str = os.path.join(lm_working_dir, username, owner, 'labbooks')
 
-        if os.path.isdir(os.path.join(lb_containing_dir, lb_name)):
-            raise ValueError(f'(Job {p}) LabBook {lb_name} already exists at {lb_containing_dir}, cannot overwrite.')
+        if os.path.isdir(os.path.join(lb_containing_dir, inferred_labbook_name)):
+            raise ValueError(f'(Job {p}) LabBook {inferred_labbook_name} already exists at {lb_containing_dir}, cannot overwrite.')
 
         logger.info(f"(Job {p}) Extracting LabBook from archive {archive_path} into {lb_containing_dir}")
         with zipfile.ZipFile(archive_path) as lb_zip:
             lb_zip.extractall(path=lb_containing_dir)
 
-        new_lb_path = os.path.join(lb_containing_dir, lb_name)
+        new_lb_path = os.path.join(lb_containing_dir, inferred_labbook_name)
         if not os.path.isdir(new_lb_path):
             raise ValueError(f"(Job {p}) Expected LabBook not found at {new_lb_path}")
 
-        logger.info(f"(Job {p}) LabBook {lb_name} imported to {new_lb_path}")
+        logger.info(f"(Job {p}) LabBook {inferred_labbook_name} imported to {new_lb_path}")
         return new_lb_path
     except Exception as e:
         logger.exception(f"(Job {p}) Error on import_labbook_from_zip({archive_path}): {e}")

@@ -23,26 +23,27 @@ import requests
 import getpass
 
 from lmcommon.configuration import Configuration
+from lmcommon.fixtures import mock_config_file_with_auth
 from lmcommon.auth.identity import get_identity_manager, AuthenticationError
 from lmcommon.auth.local import LocalIdentityManager
 from lmcommon.auth import User
 
-from lmcommon.auth.tests.fixtures import mock_config_file
+#from lmcommon.auth.tests.fixtures import mock_config_file
 
 
 class TestIdentityLocal(object):
-    def test_load_user_no_user(self, mock_config_file):
+    def test_load_user_no_user(self, mock_config_file_with_auth):
         """test getting an identity manager"""
-        config = Configuration(mock_config_file[0])
+        config = Configuration(mock_config_file_with_auth[0])
         mgr = get_identity_manager(config)
         assert type(mgr) == LocalIdentityManager
 
         # Load User
         assert mgr._load_user() is None
 
-    def test_save_load_user(self, mock_config_file):
+    def test_save_load_user(self, mock_config_file_with_auth):
         """test getting an identity manager"""
-        config = Configuration(mock_config_file[0])
+        config = Configuration(mock_config_file_with_auth[0])
         mgr = get_identity_manager(config)
         assert type(mgr) == LocalIdentityManager
 
@@ -67,9 +68,9 @@ class TestIdentityLocal(object):
         assert u.given_name == u2.given_name
         assert u.family_name == u2.family_name
 
-    def test_logout_user(self, mock_config_file):
+    def test_logout_user(self, mock_config_file_with_auth):
         """test getting an identity manager"""
-        config = Configuration(mock_config_file[0])
+        config = Configuration(mock_config_file_with_auth[0])
         mgr = get_identity_manager(config)
         assert type(mgr) == LocalIdentityManager
 
@@ -91,9 +92,9 @@ class TestIdentityLocal(object):
         assert mgr.user is None
         assert mgr._load_user() is None
 
-    def test_authenticate_user_exists(self, mock_config_file):
+    def test_authenticate_user_exists(self, mock_config_file_with_auth):
         """test getting an identity manager"""
-        config = Configuration(mock_config_file[0])
+        config = Configuration(mock_config_file_with_auth[0])
         mgr = get_identity_manager(config)
         assert type(mgr) == LocalIdentityManager
 
@@ -118,9 +119,9 @@ class TestIdentityLocal(object):
         assert u.given_name == u2.given_name
         assert u.family_name == u2.family_name
 
-    def test_get_profile_attribute(self, mock_config_file):
+    def test_get_profile_attribute(self, mock_config_file_with_auth):
         """test getting profile attributes safely from the profile dictionary"""
-        config = Configuration(mock_config_file[0])
+        config = Configuration(mock_config_file_with_auth[0])
         mgr = get_identity_manager(config)
 
         profile_data = {"username": "",
@@ -142,10 +143,10 @@ class TestIdentityLocal(object):
         assert mgr._get_profile_attribute(profile_data, "first_name", False) is None
 
     @pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Cannot test auth0 on CircleCI")
-    def test_authenticate(self, mock_config_file):
+    def test_authenticate(self, mock_config_file_with_auth):
         """test get authenticating a user from a JWT"""
         # TODO: Possibly move to integration tests or fully mock since this makes a call out to Auth0
-        config = Configuration(mock_config_file[0])
+        config = Configuration(mock_config_file_with_auth[0])
         mgr = get_identity_manager(config)
         assert type(mgr) == LocalIdentityManager
 
@@ -154,7 +155,7 @@ class TestIdentityLocal(object):
             mgr.authenticate()
 
         # Go get a JWT for the test user from the dev auth client (real users are not in this DB)
-        response = requests.post("https://gigantum.auth0.com/oauth/token", json=mock_config_file[2])
+        response = requests.post("https://gigantum.auth0.com/oauth/token", json=mock_config_file_with_auth[2])
         token_data = response.json()
 
         # Load User

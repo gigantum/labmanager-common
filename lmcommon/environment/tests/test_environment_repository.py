@@ -27,44 +27,13 @@ import pickle
 import yaml
 
 from lmcommon.environment import RepositoryManager, ComponentRepository
-
-
-@pytest.fixture()
-def mock_config_file():
-    """A pytest fixture that creates a temporary directory and a config file to match. Deletes directory after test"""
-    # Create a temporary working directory
-    temp_dir = os.path.join(tempfile.tempdir, uuid.uuid4().hex)
-    os.makedirs(temp_dir)
-
-    with tempfile.NamedTemporaryFile(mode="wt") as fp:
-        # Write a temporary config file
-        fp.write("""core:
-  team_mode: false 
-  
-environment:
-  repo_url:
-    - "https://github.com/gig-dev/environment-components.git"
-    
-git:
-  backend: 'filesystem'
-  working_directory: '{}'""".format(temp_dir))
-        fp.seek(0)
-
-        # Build index
-        erm = RepositoryManager(fp.name)
-        erm.update_repositories()
-        erm.index_repositories()
-
-        yield fp.name, erm  # provide the fixture value
-
-    # Remove the temp_dir
-    shutil.rmtree(temp_dir)
+from lmcommon.fixtures import mock_config_file, mock_config_with_repo
 
 
 class TestEnvironmentRepository(object):
-    def test_get_list_index_base_image(self, mock_config_file):
+    def test_get_list_index_base_image(self, mock_config_with_repo):
         """Test accessing the list version of the index"""
-        repo = ComponentRepository(mock_config_file[0])
+        repo = ComponentRepository(mock_config_with_repo[0])
         data = repo.get_component_list("base_image")
 
         assert type(data) == list
@@ -74,9 +43,9 @@ class TestEnvironmentRepository(object):
         assert data[0]['###repository###'] == 'gig-dev_environment-components'
         assert data[1]['info']['name'] == 'ubuntu1604-python3-dup'
 
-    def test_get_component_index_base_image(self, mock_config_file):
+    def test_get_component_index_base_image(self, mock_config_with_repo):
         """Test accessing the detail version of the index"""
-        repo = ComponentRepository(mock_config_file[0])
+        repo = ComponentRepository(mock_config_with_repo[0])
         data = repo.get_component_versions('base_image', 'gig-dev_environment-components', 'gigantum',
                                            'ubuntu1604-python3')
 
@@ -88,9 +57,9 @@ class TestEnvironmentRepository(object):
         assert data[0][1]['###namespace###'] == 'gigantum'
         assert data[0][1]['###repository###'] == 'gig-dev_environment-components'
 
-    def test_get_component_version_base_image(self, mock_config_file):
+    def test_get_component_version_base_image(self, mock_config_with_repo):
         """Test accessing the a single version of the index"""
-        repo = ComponentRepository(mock_config_file[0])
+        repo = ComponentRepository(mock_config_with_repo[0])
         data = repo.get_component('base_image', 'gig-dev_environment-components', 'gigantum',
                                   'ubuntu1604-python3', '0.2')
 
@@ -104,9 +73,9 @@ class TestEnvironmentRepository(object):
         assert data['###namespace###'] == 'gigantum'
         assert data['###repository###'] == 'gig-dev_environment-components'
 
-    def test_get_component_version_base_image_does_not_exist(self, mock_config_file):
+    def test_get_component_version_base_image_does_not_exist(self, mock_config_with_repo):
         """Test accessing the a single version of the index that does not exist"""
-        repo = ComponentRepository(mock_config_file[0])
+        repo = ComponentRepository(mock_config_with_repo[0])
         with pytest.raises(ValueError):
             repo.get_component('base_image', 'gig-dev_environment-componentsXXX', 'gigantum',
                                'ubuntu1604-python3', '0.1')

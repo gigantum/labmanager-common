@@ -29,46 +29,16 @@ import docker
 
 from lmcommon.configuration import get_docker_client
 from lmcommon.dispatcher import jobs
+from lmcommon.fixtures import mock_config_file, mock_config_with_repo
 from lmcommon.environment import ComponentManager,  RepositoryManager
 from lmcommon.labbook import LabBook
 
 
-@pytest.fixture()
-def mock_config_file():
-    """A pytest fixture that creates a temporary directory and a config file to match. Deletes directory after test"""
-    # Create a temporary working directory
-    temp_dir = os.path.join(tempfile.tempdir, uuid.uuid4().hex)
-    os.makedirs(temp_dir)
-
-    with tempfile.NamedTemporaryFile(mode="wt") as fp:
-        # Write a temporary config file
-        fp.write("""core:
-  team_mode: false 
-
-environment:
-  repo_url:
-    - "https://github.com/gig-dev/environment-components.git"
-
-git:
-  backend: 'filesystem'
-  working_directory: '{}'""".format(temp_dir))
-        fp.seek(0)
-
-        erm = RepositoryManager(fp.name)
-        erm.update_repositories()
-        erm.index_repositories()
-
-        yield fp.name, temp_dir  # provide the fixture value
-
-    # Remove the temp_dir
-    shutil.rmtree(temp_dir)
-
-
 class TestJobs(object):
-    def test_success_import_export_zip(self, mock_config_file):
+    def test_success_import_export_zip(self, mock_config_with_repo):
 
         # Create new LabBook to be exported
-        lb = LabBook(mock_config_file[0])
+        lb = LabBook(mock_config_with_repo[0])
         labbook_dir = lb.new(name="lb-for-export-import-test", description="Testing import-export.",
                              owner={"username": "test"})
         cm = ComponentManager(lb)
@@ -78,7 +48,7 @@ class TestJobs(object):
         lb_root = lb.root_dir
         with tempfile.TemporaryDirectory() as temp_dir_path:
             # Export the labbook
-            export_dir = os.path.join(mock_config_file[1], "export")
+            export_dir = os.path.join(mock_config_with_repo[1], "export")
             exported_archive_path = jobs.export_labbook_as_zip(lb.root_dir, export_dir)
 
             # Delete the labbook
@@ -86,7 +56,7 @@ class TestJobs(object):
             assert not os.path.exists(lb_root), f"LabBook at {lb_root} should not exist."
 
             imported_lb_path = jobs.import_labboook_from_zip(archive_path=exported_archive_path, username="test",
-                                                             owner="test", config_file=mock_config_file[0])
+                                                             owner="test", config_file=mock_config_with_repo[0])
 
             assert imported_lb_path == lb_root, "Imported labbook directory should be same as the one exported."
 
@@ -104,10 +74,10 @@ class TestJobs(object):
                 pprint.pprint(e)
                 raise
 
-    def test_fail_import_export_zip(self, mock_config_file):
+    def test_fail_import_export_zip(self, mock_config_with_repo):
 
         # Create new LabBook to be exported
-        lb = LabBook(mock_config_file[0])
+        lb = LabBook(mock_config_with_repo[0])
         labbook_dir = lb.new(name="lb-fail-export-import-test", description="Failing import-export.",
                              owner={"username": "test"})
         cm = ComponentManager(lb)
@@ -117,7 +87,7 @@ class TestJobs(object):
         lb_root = lb.root_dir
         with tempfile.TemporaryDirectory() as temp_dir_path:
             # Export the labbook
-            export_dir = os.path.join(mock_config_file[1], "export")
+            export_dir = os.path.join(mock_config_with_repo[1], "export")
             try:
                 exported_archive_path = jobs.export_labbook_as_zip("/tmp", export_dir)
                 assert False, "Exporting /tmp should fail"
@@ -129,14 +99,14 @@ class TestJobs(object):
 
             try:
                 imported_lb_path = jobs.import_labboook_from_zip(archive_path=exported_archive_path, username="test",
-                                                                 owner="test", config_file=mock_config_file[0])
+                                                                 owner="test", config_file=mock_config_with_repo[0])
                 assert False, f"Should not be able to import LabBook because it already exited at {lb_root}"
             except ValueError as e:
                 pass
 
             try:
                 imported_lb_path = jobs.import_labboook_from_zip(archive_path="/t", username="test",
-                                                                 owner="test", config_file=mock_config_file[0])
+                                                                 owner="test", config_file=mock_config_with_repo[0])
                 assert False, f"Should not be able to import LabBook from strange directory /t"
             except ValueError as e:
                 pass
@@ -144,4 +114,4 @@ class TestJobs(object):
             shutil.rmtree(lb.root_dir)
             assert not os.path.exists(lb_root), f"LabBook at {lb_root} should not exist."
             imported_lb_path = jobs.import_labboook_from_zip(archive_path=exported_archive_path, username="test",
-                                                             owner="test", config_file=mock_config_file[0])
+                                                             owner="test", config_file=mock_config_with_repo[0])
