@@ -40,7 +40,7 @@ from lmcommon.logging import LMLogger
 # ANY use of globals will cause the following methods to fail.
 
 
-def export_labbook_as_zip(labbook_path: str) -> str:
+def export_labbook_as_zip(labbook_path: str, lb_export_directory: str) -> str:
     """Return path to archive file of exported labbook. """
     p = os.getpid()
     logger = LMLogger.get_logger()
@@ -51,9 +51,12 @@ def export_labbook_as_zip(labbook_path: str) -> str:
             # A gigantum labbook will contain a .gigantum hidden directory inside it.
             raise ValueError(f'(Job {p}) Directory at {labbook_path} does not appear to be a Gigantum LabBook')
 
+        if not os.path.isdir(lb_export_directory):
+            os.makedirs(lb_export_directory, exist_ok=True)
+            # raise ValueError(f'(Job {p}) Export directory at `{lb_export_directory}` not found')
+
         labbook: LabBook = LabBook()
         labbook.from_directory(labbook_path)
-        lb_export_directory = os.path.join(labbook.labmanager_config.config['git']['working_directory'], 'export')
 
         logger.info(f"(Job {p}) Exporting `{labbook.root_dir}` to `{lb_export_directory}`")
         if not os.path.exists(lb_export_directory):
@@ -135,9 +138,18 @@ def build_docker_image(path, tag, pull, nocache) -> str:
 
     try:
         docker_client = get_docker_client()
-        docker_image = docker_client.images.build(path=path, tag=tag, pull=pull, nocache=nocache)
-        logger.info("Completed build_docker_image in pid {}: {}".format(os.getpid(), str(docker_image)))
-        return docker_image.id
+        [logger.info(ln) for ln in docker_client.api.build(path=path,
+                                                           tag=tag,
+                                                           nocache=nocache,
+                                                           pull=pull,
+                                                           stream=True, decode=True)]
+
+        # Assume build worked and get the image
+        completed_image = docker_client.images.get(tag)
+
+        logger.info("Completed build_docker_image in pid {}: {}".format(os.getpid(), str(completed_image)))
+        logger.info("test: {}".format(completed_image.id))
+        return completed_image.id
     except Exception as e:
         logger.error("Error on build_docker_image in pid {}: {}".format(os.getpid(), e))
         raise

@@ -220,9 +220,11 @@ class TestImageBuilder(object):
         unit_test_tag = "unit-test-please-delete"
         client = get_docker_client()
 
+        # NOTE: DO NOT run these following lines on CircleCI
         if getpass.getuser() != 'circleci':
-            # NOTE: DO NOT run these following lines on CircleCI
-            docker_image_id = ib.build_image(docker_client=client, image_tag=unit_test_tag, nocache=True)['docker_image_id']
+            # Right now assume username is "default"
+            docker_image_id = ib.build_image(docker_client=client, image_tag=unit_test_tag,
+                                             nocache=True, username='default')['docker_image_id']
             client.images.remove(docker_image_id, force=True, noprune=False)
 
     @pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Cannot build images on CircleCI")
@@ -251,13 +253,16 @@ class TestImageBuilder(object):
         client = get_docker_client()
 
         # Build image once
-        ib.build_image(docker_client=client, image_tag=unit_test_tag)
+        # Right now assume username is "default"
+        ib.build_image(docker_client=client, image_tag=unit_test_tag, username='default')
 
         # Start container
         docker_container = client.containers.run(unit_test_tag, detach=True, name=unit_test_tag)
 
         # Try to build it again
-        docker_image_id = ib.build_image(docker_client=client, image_tag=unit_test_tag)['docker_image_id']
+        # Right now assume username is "default"
+        docker_image_id = ib.build_image(docker_client=client, image_tag=unit_test_tag,
+                                         username='default')['docker_image_id']
 
         # Clean up
         client.images.remove(docker_image_id, force=True, noprune=False)

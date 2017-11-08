@@ -78,7 +78,8 @@ class TestJobs(object):
         lb_root = lb.root_dir
         with tempfile.TemporaryDirectory() as temp_dir_path:
             # Export the labbook
-            exported_archive_path = jobs.export_labbook_as_zip(lb.root_dir)
+            export_dir = os.path.join(mock_config_file[1], "export")
+            exported_archive_path = jobs.export_labbook_as_zip(lb.root_dir, export_dir)
 
             # Delete the labbook
             shutil.rmtree(lb.root_dir)
@@ -116,14 +117,15 @@ class TestJobs(object):
         lb_root = lb.root_dir
         with tempfile.TemporaryDirectory() as temp_dir_path:
             # Export the labbook
+            export_dir = os.path.join(mock_config_file[1], "export")
             try:
-                exported_archive_path = jobs.export_labbook_as_zip("/tmp")
+                exported_archive_path = jobs.export_labbook_as_zip("/tmp", export_dir)
                 assert False, "Exporting /tmp should fail"
             except ValueError as e:
                 pass
 
             # Export the labbook, then remove before re-importing
-            exported_archive_path = jobs.export_labbook_as_zip(lb.root_dir)
+            exported_archive_path = jobs.export_labbook_as_zip(lb.root_dir, export_dir)
 
             try:
                 imported_lb_path = jobs.import_labboook_from_zip(archive_path=exported_archive_path, username="test",
