@@ -68,4 +68,3 @@ def get_docker_client(check_server_version=True, fallback=True):
                 raise e
     else:
         return docker.from_env()
-

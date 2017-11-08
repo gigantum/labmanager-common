@@ -17,12 +17,12 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-import datetime
-from typing import (Any, Callable, Dict, List, Tuple)
+from datetime import datetime
+from typing import (Any, Callable, cast, Dict, List, Optional, Tuple)
 
-import rq_scheduler
 import redis
 import rq
+import rq_scheduler
 
 import lmcommon.dispatcher.jobs
 from lmcommon.logging import LMLogger
@@ -30,19 +30,66 @@ from lmcommon.logging import LMLogger
 logger = LMLogger.get_logger()
 
 
+class JobKey(object):
+    """ Represents a key for a background job in Redis. """
+    def __init__(self, key: str) -> None:
+        try:
+            self._validate(key)
+        except AssertionError as e:
+            logger.error(e)
+            raise
+        self._key_str: str = key
+
+    def __str__(self) -> str:
+        return self._key_str
+
+    def __repr__(self):
+        return self._key_str
+
+    def __eq__(self, other: object) -> bool:
+        return type(other) == type(self) and str(self) == str(other)
+
+    def _validate(self, key):
+        assert key, f"Key '{key}' cannot be None or empty"
+        assert isinstance(key, str), f"`key` must be str, not {type(key)}"
+        assert len(key.split(':')) == 3, "Key must be in format of `rq:job:<uuid>`"
+
+    @property
+    def key_str(self):
+        return self._key_str
+
+
+class JobStatus(object):
+    """ Represents a background job known to the backend processing system. """
+    def __init__(self, redis_dict: Dict[str, object]) -> None:
+        self.job_key: JobKey = JobKey(cast(str, redis_dict['_key']))
+        self.status: Optional[str] = cast(str, redis_dict.get('status'))
+        self.result: Optional[object] = cast(str, redis_dict.get('result'))
+        self.description: Optional[str] = cast(str, redis_dict.get('description'))
+        self.meta: Dict[str, str] = cast(Dict[str, str], redis_dict.get('meta') or {})
+        self.started_at: Optional[datetime] = cast(datetime, redis_dict.get('started_at'))
+        self.finished_at: Optional[datetime] = cast(datetime, redis_dict.get('finished_at'))
+
+    def __str__(self) -> str:
+        return f'<BackgroundJob {str(self.job_key)}>'
+
+    def __eq__(self, other: object) -> bool:
+        return type(other) == type(self) and str(self) == str(other)
+
+
 class Dispatcher(object):
     """Class to serve as an interface to the background job processing service.
     """
 
-    DEFAULT_JOB_QUEUE = 'labmanager_jobs'
+    DEFAULT_JOB_QUEUE: str = 'labmanager_jobs'
 
-    def __init__(self, queue_name=DEFAULT_JOB_QUEUE) -> None:
+    def __init__(self, queue_name: str = DEFAULT_JOB_QUEUE) -> None:
         self._redis_conn = redis.Redis()
         self._job_queue = rq.Queue(queue_name, connection=self._redis_conn)
         self._scheduler = rq_scheduler.Scheduler(queue_name=queue_name, connection=self._redis_conn)
 
     def __str__(self) -> str:
-        return "<Dispatcher: {}>".format(self._job_queue)
+        return "<Dispatcher: queue={}>".format(self._job_queue)
 
     @staticmethod
     def _is_job_in_registry(method_reference: Callable) -> bool:
@@ -51,101 +98,101 @@ class Dispatcher(object):
         return any([method_reference == n for n in job_list])
 
     @property
-    def all_jobs(self) -> Dict[str, Any]:
+    def all_jobs(self) -> List[JobStatus]:
         """Return a list of dicts containing information about all jobs in the backend. """
         redis_keys = self._redis_conn.keys("rq:job:*")
+        redis_keys = [x for x in redis_keys if "dependents" not in x.decode()]
 
-        return {q.decode(): self.query_task(q) for q in redis_keys}
+        # Ignore type checking on the following line cause we filter out None-results.
+        return [self.query_task(JobKey(q.decode())) for q in redis_keys if q] # type: ignore
 
     @property
-    def failed_jobs(self) -> Dict[str, str]:
+    def failed_jobs(self) -> List[JobStatus]:
         """Return all explicity-failed jobs. """
-        jobs = self.all_jobs
-        failed = {}
-        # Note - there might be a more clever one-liner to do this, but this is straightforward.
-        for k in jobs.keys():
-            if jobs[k].get('status') == 'failed':
-                failed[k] = jobs[k]
-
-        return failed
+        return [job for job in self.all_jobs if job.status == 'failed']
 
     @property
-    def completed_jobs(self) -> Dict[str, Any]:
+    def finished_jobs(self) -> List[JobStatus]:
         """Return a list of all jobs that are considered "complete" (i.e., no error). """
-        jobs = self.all_jobs
-        complete = {}
-        # Note - there might be a more clever one-liner to do this, but this is straightforward.
-        for k in jobs.keys():
-            if jobs[k].get('status') == 'finished':
-                complete[k] = jobs[k]
+        return [job for job in self.all_jobs if job.status == 'finished']
 
-        return complete
-
-    def get_jobs_for_labbook(self, labbook_key: str) -> List[str]:
+    def get_jobs_for_labbook(self, labbook_key: str) -> List[JobStatus]:
         """Return all background job keys pertaining to the given labbook, as indexed by its root_directory. """
-        def is_match(j):
-            job_s = self.query_task(j)
-            return job_s.get('meta') and job_s['meta'].get('labbook') == labbook_key
+        def is_match(job):
+            return job.meta and job.meta.get('labbook') == labbook_key
 
-        return [job for job in self.all_jobs if is_match(job)]
+        labbook_jobs = [job for job in self.all_jobs if is_match(job)]
+        if not labbook_jobs:
+            logger.warning(f"No background jobs found for labbook `{labbook_key}`")
 
-    def query_task(self, key) -> Dict[str, str]:
-        """Return a dictionary of metadata pertaining to the given task's Redis key.
+        return labbook_jobs
+
+    def query_task(self, job_key: JobKey) -> Optional[JobStatus]:
+        """Return a JobStatus containing all info pertaining to background job.
 
         Args:
-            key(str): Redis key of job in format of rq:job:<unique-id>
+            job_key(JobKey): JobKey containing redis key of job.
 
         Returns:
-            dict
+            JobStatus
         """
-        logger.debug("Querying for task {}".format(key))
+        logger.debug("Querying for task {}".format(job_key))
 
         # The job_dict is returned from redis is contains strictly binary data, to be more usable
         # it needs to be parsed and loaded as proper data types. The decoded data is stored in the
         # `decoded_dict`.
-        job_dict = self._redis_conn.hgetall(key)
-        decoded_dict = {}
+        job_dict = self._redis_conn.hgetall(job_key.key_str)
+        if not job_dict:
+            logger.warning(f"Query to task {job_key} not found in Redis")
+            return None
 
         # Fetch the RQ job. There needs to be a little processing done on it first.
-        rq_job = rq.job.Job.fetch(str(key).split(':')[-1].replace("'", ''), connection=redis.Redis())
+        rq_job = rq.job.Job.fetch(job_key.key_str.split(':')[-1].replace("'", ''), connection=redis.Redis())
 
         # Build the properly decoded dict, which will be returned.
+        decoded_dict = {}
         for k in job_dict.keys():
-            decoded_dict[k.decode('utf-8')] = getattr(rq_job, k.decode())
+            try:
+                decoded_dict[k.decode('utf-8')] = getattr(rq_job, k.decode())
+            except AttributeError as e:
+                logger.debug(e)
 
-        return decoded_dict
+        decoded_dict.update({'_key': job_key.key_str})
+        return JobStatus(decoded_dict)
 
-    def unschedule_task(self, job_id: str) -> bool:
+    def unschedule_task(self, job_key: JobKey) -> bool:
         """Cancel a scheduled task. Note, this does NOT cancel "dispatched" tasks, only ones created
            via `schedule_task`.
 
         Args:
-            job_id(str): ID of the task that was returned via `schedule_task`.
+            job_key(str): ID of the task that was returned via `schedule_task`.
 
         Returns:
             bool: True if task scheduled successfully, False if task not found.
         """
 
-        if not job_id:
-            raise ValueError("job_id cannot be None or empty")
+        if not job_key:
+            raise ValueError("job_key cannot be None or empty")
 
-        if type(job_id) == bytes:
-            raise ValueError("job_id must be a decoded str")
+        if not type(job_key) == JobKey:
+            raise ValueError("job_key must be type JobKey")
 
         # Encode job_id as byes from regular string, strip off the "rq:job" prefix.
-        enc_job_id = job_id.split(':')[-1].encode()
+        enc_job_id = job_key.key_str.split(':')[-1].encode()
         
         if enc_job_id in self._scheduler:
-            logger.info("Job `{}` found in scheduler, cancelling".format(enc_job_id))
+            logger.info("Job (encoded id=`{}`) found in scheduler, cancelling".format(enc_job_id))
             self._scheduler.cancel(enc_job_id)
-            logger.info("Unscheduled job `{}`".format(enc_job_id))
+            logger.info("Unscheduled job (encoded id=`{}`)".format(enc_job_id))
             return True
         else:
-            logger.warning("Job `{}` NOT FOUND in scheduler, nothing to cancel".format(enc_job_id))
+            logger.warning("Job (encoded id=`{}`) NOT FOUND in scheduler, nothing to cancel".format(enc_job_id))
             return False
 
-    def schedule_task(self, method_reference: Callable, args: Tuple[Any] = None, kwargs: Dict[str, Any] = None,
-                      scheduled_time=None, repeat=0, interval=None) -> str:
+    def schedule_task(self, method_reference: Callable, args: Optional[Tuple[Any]] = None,
+                      kwargs: Optional[Dict[str, Any]] = None,
+                      scheduled_time: Optional[datetime] = None, repeat: Optional[int] = 0,
+                      interval: Optional[int] = None) -> JobKey:
         """Schedule at task to run at a particular time in the future, and/or with certain recurrence.
 
         Args:
@@ -164,36 +211,26 @@ class Dispatcher(object):
         if not Dispatcher._is_job_in_registry(method_reference):
             raise ValueError("Method `{}` not in available registry".format(method_reference.__name__))
 
-        if type(scheduled_time) not in (datetime.datetime, type(None)):
-            raise ValueError("scheduled_time `{}` must be a Datetime object or None".format(scheduled_time))
+        job_args = args or tuple()
+        job_kwargs = kwargs or {}
+        rq_job_ref = self._scheduler.schedule(scheduled_time=scheduled_time or datetime.utcnow(),
+                                              func=method_reference,
+                                              args=job_args,
+                                              kwargs=job_kwargs,
+                                              interval=interval,
+                                              repeat=repeat)
 
-        if type(repeat) not in (int, type(None)) or (repeat and repeat < 0):
-            raise ValueError('repeat `{}` must be a non-negative integer or None'.format(repeat))
-
-        if type(interval) not in (int, type(None)) or (interval and interval <= 0):
-            raise ValueError('interval `{}` ({}) must be a positive integer or None'.format(interval, type(interval)))
-
-        if not args:
-            args = ()
-
-        if not kwargs:
-            kwargs = {}
-
-        job_ref = self._scheduler.schedule(scheduled_time=scheduled_time or datetime.datetime.utcnow(),
-                                           func=method_reference,
-                                           args=args,
-                                           kwargs=kwargs,
-                                           interval=interval,
-                                           repeat=repeat)
-
-        logger.info("Scheduled job `{}`, job={}".format(method_reference.__name__, str(job_ref)))
+        logger.info(f"Scheduled job `{method_reference.__name__}`, job={str(rq_job_ref)}")
 
         # job_ref.key is in bytes.. should be decode()-ed to form a python string.
-        return job_ref.key.decode()
+        return JobKey(rq_job_ref.key.decode())
 
     def dispatch_task(self, method_reference: Callable, args: Tuple[Any, ...] = None, kwargs: Dict[str, Any] = None,
-                      metadata: Dict[str, Any] = None, persist: bool = False) -> str:
+                      metadata: Dict[str, Any] = None, persist: bool = False, dependent_job: JobKey = None) -> JobKey:
         """Dispatch new task to run in background, which runs as soon as it can.
+
+        Note: If the dependent_job task is populated, then this task will NOT run until the dependent_job
+        finished **successfully**. If the dependent_job fails, this task will NOT run.
 
         Args:
             method_reference(Callable): The method in dispatcher.jobs to run
@@ -201,6 +238,7 @@ class Dispatcher(object):
             kwargs(dict): Keyword Argument to method_reference
             metadata(dict): Optional dict of metadata
             persist(bool): Never timeout if True, otherwise abort after 5 minutes.
+            dependent_job(JobKey): The JobKey of the job this task depends on.
 
         Returns:
             str: unique key of dispatched task
@@ -227,22 +265,31 @@ class Dispatcher(object):
             # Currently, one month.
             timeout = '730h'
         else:
-            timeout = '10m'
+            timeout = '2h'
 
         logger.info(
             f"Dispatching {'persistent' if persist else 'ephemeral'} task `{method_reference.__name__}` to queue")
 
         try:
-            job_ref = self._job_queue.enqueue(method_reference, args=args, kwargs=kwargs, timeout=timeout)
+            dep_job_str = dependent_job.key_str.split(':')[-1] if dependent_job else None
+            rq_job_ref = self._job_queue.enqueue(method_reference, args=args, kwargs=kwargs, timeout=timeout,
+                                                 depends_on=dep_job_str)
         except Exception as e:
             logger.error("Cannot enqueue job `{}`: {}".format(method_reference.__name__, e))
             raise
 
-        job_ref.meta = metadata
-        job_ref.save_meta()
+        rq_job_ref.meta = metadata
+        rq_job_ref.save_meta()
+        rq_job_key_str = rq_job_ref.key.decode()
         logger.info(
             "Dispatched job `{}` to queue '{}', job={}".format(method_reference.__name__, self._job_queue.name,
-                                                               str(job_ref)))
+                                                               rq_job_key_str))
 
-        # job.key is in bytes.. should be decode()-ed to form a python string.
-        return job_ref.key.decode()
+        try:
+            assert rq_job_key_str
+            jk = JobKey(rq_job_key_str)
+        except Exception as e:
+            logger.exception(e)
+            raise
+
+        return jk

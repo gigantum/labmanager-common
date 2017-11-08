@@ -36,6 +36,7 @@ import rq
 from lmcommon.imagebuilder import ImageBuilder
 from lmcommon.configuration import get_docker_client
 from lmcommon.environment import ComponentManager, RepositoryManager
+from lmcommon.fixtures import mock_config_file
 from lmcommon.dispatcher import Dispatcher
 from lmcommon.labbook import LabBook
 
@@ -74,32 +75,7 @@ def temporary_worker():
     dispatcher = Dispatcher('labmanager_unittests')
     yield worker_proc, dispatcher
 
-
-@pytest.fixture()
-def mock_config_file():
-    """A pytest fixture that creates a temporary directory and a config file to match. Deletes directory after test"""
-    # Create a temporary working directory
-    temp_dir = os.path.join(tempfile.tempdir, uuid.uuid4().hex)
-    os.makedirs(temp_dir)
-
-    with tempfile.NamedTemporaryFile(mode="wt") as fp:
-        # Write a temporary config file
-        fp.write("""core:
-  team_mode: false 
-
-environment:
-  repo_url:
-    - "https://github.com/gig-dev/environment-components.git"
-
-git:
-  backend: 'filesystem'
-  working_directory: '{}'""".format(temp_dir))
-        fp.seek(0)
-
-        yield fp.name, temp_dir  # provide the fixture value
-
-    # Remove the temp_dir
-    shutil.rmtree(temp_dir)
+    worker_proc.terminate()
 
 
 class TestDispatcher(object):
@@ -127,8 +103,8 @@ class TestDispatcher(object):
 
         res = d.query_task(job_ref)
         assert res
-        assert res.get('status') == 'finished'
-        assert res.get('result') == 0
+        assert res.status == 'finished'
+        assert res.result == 0
 
         w.terminate()
 
@@ -139,7 +115,7 @@ class TestDispatcher(object):
 
         res = d.query_task(job_ref)
         assert res
-        assert res.get('status') == 'failed'
+        assert res.status == 'failed'
 
         w.terminate()
 
@@ -149,8 +125,8 @@ class TestDispatcher(object):
 
         time.sleep(1)
 
-        assert job_ref in d.failed_jobs
-        assert job_ref not in d.completed_jobs
+        assert job_ref in [j.job_key for j in d.failed_jobs]
+        assert job_ref not in [j.job_key for j in d.finished_jobs]
         w.terminate()
 
     def test_query_complete_tasks(self, temporary_worker):
@@ -159,8 +135,26 @@ class TestDispatcher(object):
 
         time.sleep(1)
 
-        assert job_ref in d.completed_jobs
-        assert job_ref not in d.failed_jobs
+        assert job_ref in [j.job_key for j in d.finished_jobs]
+        assert job_ref not in [j.job_key for j in d.failed_jobs]
+
+    def test_simple_dependent_job(self, temporary_worker):
+        w, d = temporary_worker
+        job_ref_1 = d.dispatch_task(bg_jobs.test_sleep, args=(2,))
+        job_ref_2 = d.dispatch_task(bg_jobs.test_exit_success, dependent_job=job_ref_1)
+        time.sleep(0.5)
+        assert d.query_task(job_ref_2).status == 'deferred'
+        time.sleep(3)
+        assert d.query_task(job_ref_1).status == 'finished'
+        assert d.query_task(job_ref_2).status == 'finished'
+
+    def test_fail_dependent_job(self, temporary_worker):
+        w, d = temporary_worker
+        job_ref_1 = d.dispatch_task(bg_jobs.test_exit_fail)
+        job_ref_2 = d.dispatch_task(bg_jobs.test_exit_success, dependent_job=job_ref_1)
+        time.sleep(3)
+        assert d.query_task(job_ref_1).status == 'failed'
+        assert d.query_task(job_ref_2).status == 'deferred'
 
     @pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Cannot build images on CircleCI")
     def test_build_docker_image(self, temporary_worker, mock_config_file):
@@ -197,7 +191,7 @@ class TestDispatcher(object):
 
         elapsed_time = 0
         while True:
-            status = d.query_task(job_ref)['status']
+            status = d.query_task(job_ref).status
             print(status)
             if status in ['success', 'failed', 'finished']:
                 break
@@ -211,7 +205,7 @@ class TestDispatcher(object):
 
         res = d.query_task(job_ref)
         assert res
-        assert res.get('status') == 'finished'
+        assert res.status == 'finished'
 
     @pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Cannot build images on CircleCI")
     def test_start_and_stop_docker_container(self, temporary_worker, mock_config_file):
@@ -238,7 +232,7 @@ class TestDispatcher(object):
         ib = ImageBuilder(lb.root_dir)
         unit_test_tag = "background-unit-test-delete-this"
 
-        ## Start building image.
+        # Start building image.
 
         docker_kwargs = {
             'path': os.path.join(labbook_dir, '.gigantum', 'env'),
@@ -261,12 +255,12 @@ class TestDispatcher(object):
         job_ref = d.dispatch_task(bg_jobs.build_docker_image, kwargs=docker_kwargs, metadata=m)
 
         j = d.query_task(job_ref)
-        assert 'meta' in j.keys()
-        assert j.get('meta').get('labbook') == 'test-test-catbook-test-dockerbuild'
+        assert hasattr(j, 'meta')
+        assert j.meta.get('labbook') == 'test-test-catbook-test-dockerbuild'
 
         elapsed_time = 0
         while True:
-            status = d.query_task(job_ref)['status']
+            status = d.query_task(job_ref).status
             print(status)
             if status in ['success', 'failed', 'finished']:
                 break
@@ -276,12 +270,12 @@ class TestDispatcher(object):
             elapsed_time = elapsed_time + 1
             time.sleep(1)
 
-        #w.terminate()
+        # w.terminate()
 
         res = d.query_task(job_ref)
         assert res
-        print(res.get('status'))
-        assert res.get('status') == 'finished'
+        print(res.status)
+        assert res.status == 'finished'
 
         ## Finish building image
 
@@ -297,7 +291,7 @@ class TestDispatcher(object):
 
         elapsed_time = 0
         while True:
-            status = d.query_task(start_ref)['status']
+            status = d.query_task(start_ref).status
             print(status)
             if status in ['success', 'failed', 'finished']:
                 break
@@ -309,14 +303,14 @@ class TestDispatcher(object):
 
         res = d.query_task(start_ref)
         assert res
-        assert res.get('status') == 'finished'
+        assert res.status == 'finished'
 
         ## Stop the docker container, and wait until that is done.
         stop_ref = d.dispatch_task(bg_jobs.stop_docker_container, args=(unit_test_tag,))
 
         elapsed_time = 0
         while True:
-            status = d.query_task(stop_ref)['status']
+            status = d.query_task(stop_ref).status
             print(status)
             if status in ['success', 'failed', 'finished']:
                 break
@@ -328,7 +322,7 @@ class TestDispatcher(object):
 
         res = d.query_task(stop_ref)
         assert res
-        assert res.get('status') == 'finished'
+        assert res.status == 'finished'
 
         w.terminate()
 

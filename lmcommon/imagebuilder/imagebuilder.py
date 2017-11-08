@@ -17,22 +17,21 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-import glob
 import datetime
 import functools
-import yaml
+import glob
 import os
 import re
-import typing
+from typing import (Any, Dict, List, Optional, Union)
+import yaml
 
 from docker.errors import NotFound
-from typing import (Any, Dict, List, Union)
 
 from lmcommon.environment.componentmanager import ComponentManager
 from lmcommon.dispatcher import Dispatcher, jobs
 from lmcommon.labbook import LabBook
-from lmcommon.notes import NoteLogLevel, NoteStore
 from lmcommon.logging import LMLogger
+from lmcommon.notes import NoteLogLevel, NoteStore
 
 logger = LMLogger.get_logger()
 
@@ -60,7 +59,7 @@ class ImageBuilder(object):
             raise IOError("Labbook directory {} does not exist.".format(self.labbook_directory))
         self._validate_labbook_tree()
 
-    def _get_yaml_files(self, directory: str) -> typing.List[typing.AnyStr]:
+    def _get_yaml_files(self, directory: str) -> List[str]:
         """Method to get all YAML files in a directory
 
         Args:
@@ -153,7 +152,7 @@ class ImageBuilder(object):
 
         docker_lines = ['## Adding Custom Packages']
         for custom in sorted(custom_dep_files):
-            pkg_fields = {}
+            pkg_fields: Dict[str, Any] = {}
             with open(custom) as custom_content:
                 pkg_fields.update(yaml.load(custom_content))
                 docker_lines.append('## Installing {}'.format(pkg_fields['info']['description']))
@@ -172,7 +171,7 @@ class ImageBuilder(object):
 
         docker_lines = ['## Adding individual packages']
         for package in sorted(package_files):
-            pkg_fields = {}
+            pkg_fields: Dict[str, Any] = {}
             with open(package) as package_content:
                 pkg_fields.update(yaml.load(package_content))
             manager = pkg_fields.get('package_manager')
@@ -219,7 +218,7 @@ class ImageBuilder(object):
 
         return docker_lines
 
-    def assemble_dockerfile(self, write: bool=False) -> str:
+    def assemble_dockerfile(self, write: bool = False) -> str:
         """Create the content of a Dockerfile per the fields in the indexed data.
 
         Returns:
@@ -234,7 +233,7 @@ class ImageBuilder(object):
 
         # flat map the results of executing the pipeline.
         try:
-            docker_lines = functools.reduce(lambda a, b: a + b, [f() for f in assembly_pipeline], [])
+            docker_lines: List[str] = functools.reduce(lambda a, b: a + b, [f() for f in assembly_pipeline], [])
         except KeyError as e:
             logger.error('Component file missing key: {}'.format(e))
             raise
@@ -271,7 +270,8 @@ class ImageBuilder(object):
 
         return os.linesep.join(docker_lines)
 
-    def build_image(self, docker_client, image_tag: str, assemble: bool=True, nocache: bool=False, background=False):
+    def build_image(self, docker_client, image_tag: str, username: str, assemble: bool = True, nocache: bool = False,
+                    background: bool = False, owner: Optional[str] = None) -> Dict[str, Optional[str]]:
         """Build docker image according to the Dockerfile just assembled.
 
         Args:
@@ -280,6 +280,8 @@ class ImageBuilder(object):
             assemble(bool): Re-assemble the docker file using assemble_dockerfile if True
             nocache(bool): Don't user the Docker cache if True
             background(bool): Run the task in the background using the dispatcher.
+            username(str): The current logged in username
+            owner(str): The owner of the lab book
 
         Returns:
             dict: Contains the following keys, 'background_job_key' and 'docker_image_id', depending
@@ -306,27 +308,30 @@ class ImageBuilder(object):
         if assemble:
             self.assemble_dockerfile(write=True)
 
-        return_keys: Dict[str, Union[str, Any]] = {
+        return_keys: Dict[str, Optional[str]] = {
             'background_job_key': None,
             'docker_image_id': None
         }
 
         if background:
             job_dispatcher = Dispatcher()
-            # FIXME -- Labbook owner and user should be properly loaded and not be "default"
+            # No owner provided, assume user's namespace
+            if not owner:
+                owner = username
             job_metadata = {
-                'labbook': "{}-{}-{}".format("default", "default", self.labbook_directory.split('/')[-1]),
+                'labbook': "{}-{}-{}".format(username, owner, self.labbook_directory.split('/')[-1]),
                 'method': 'build_image'}
             job_key = job_dispatcher.dispatch_task(jobs.build_docker_image, args=(env_dir, image_tag, True, nocache),
                                                    metadata=job_metadata)
-            return_keys['background_job_key'] = job_key
+            return_keys['background_job_key'] = job_key.key_str
         else:
             docker_image = docker_client.images.build(path=env_dir, tag=image_tag, pull=True, nocache=nocache)
             return_keys['docker_image_id'] = docker_image.id
 
         return return_keys
 
-    def run_container(self, docker_client, docker_image_id, labbook: LabBook, background=False):
+    def run_container(self, docker_client, docker_image_id: str, labbook: LabBook,
+                      background: bool = False) -> Dict[str, Optional[str]]:
         """Launch docker container from image that was just (re-)built.
 
         Args:
@@ -342,6 +347,9 @@ class ImageBuilder(object):
         if not docker_image_id:
             raise ValueError("docker_image_id cannot be None or empty")
 
+        if not os.environ.get('HOST_WORK_DIR'):
+            raise ValueError("Environment variable HOST_WORK_DIR must be set")
+
         env_manager = ComponentManager(labbook)
         dev_envs_list = env_manager.get_component_list('dev_env')
 
@@ -356,17 +364,13 @@ class ImageBuilder(object):
         for dev_env in dev_envs_list:
             exposed_ports.update({"{}/tcp".format(port): port for port in dev_env['exposed_tcp_ports']})
 
-        mnt_point = labbook.root_dir.replace('/mnt/gigantum', os.environ.get('HOST_WORK_DIR'))
-
-        # Setup mount point for "application" share dir. A mount shared between lab book and labmanager containers
-        app_share_mnt_point = os.path.join(os.environ.get('HOST_WORK_DIR'), '.labmanager', 'share')
-        logger.info("Kicking of container, share: {}".format(app_share_mnt_point))
+        mnt_point = labbook.root_dir.replace('/mnt/gigantum', os.environ['HOST_WORK_DIR'])
 
         # Map volumes - The labbook docker container is unaware of labbook name, all labbooks
         # map to /mnt/labbook.
         volumes_dict = {
-            mnt_point: {'bind': '/mnt/labbook', 'mode': 'rw'},
-            app_share_mnt_point:  {'bind': '/mnt/share', 'mode': 'rw'}
+            mnt_point: {'bind': '/mnt/labbook', 'mode': 'cached'},
+            'labmanager_share_vol':  {'bind': '/mnt/share', 'mode': 'rw'}
         }
 
         # If re-mapping permissions, be sure to configure the container
@@ -374,7 +378,7 @@ class ImageBuilder(object):
             env_var = ["LOCAL_USER_ID={}".format(os.environ['LOCAL_USER_ID'])]
             logger.info("Starting labbook container with user: {}".format(env_var))
         else:
-            env_var = []
+            env_var = ["WINDOWS_HOST=1"]
 
         # If using Jupyter, set work dir (TEMPORARY HARD CODE)
         if 'JUPYTER_RUNTIME_DIR' in os.environ:
@@ -387,7 +391,7 @@ class ImageBuilder(object):
             "Running container id {} -- ports {} -- volumes {}".format(docker_image_id, ', '.join(exposed_ports.keys()),
                                                                        ', '.join(volumes_dict.keys())))
 
-        return_keys: Dict[str, Union[Any, str]] = {
+        return_keys: Dict[str, Optional[str]] = {
             'background_job_key': None,
             'docker_container_id': None
         }
@@ -407,8 +411,8 @@ class ImageBuilder(object):
                 logger.exception(e, exc_info=True)
                 raise
 
-            logger.info("Background job key for run_container: {}".format(key))
-            return_keys['background_job_key'] = key
+            logger.info(f"Background job key for run_container: {key}")
+            return_keys['background_job_key'] = key.key_str
         else:
             logger.info("Launching container in-process for container {}".format(docker_image_id))
             if float(docker_client.version()['ApiVersion']) < 1.25:

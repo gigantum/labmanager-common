@@ -17,25 +17,121 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-import json
-import time
-import sys
-import os
+import datetime
 import importlib
+import json
+import os
+import time
+from typing import Optional
+import zipfile
 
 from rq import get_current_job
 from docker.errors import NotFound
 
-from lmcommon.configuration import get_docker_client
-from lmcommon.logging import LMLogger
-
 from lmcommon.activity.monitors.devenv import DevEnvMonitorManager
+from lmcommon.configuration import get_docker_client, Configuration
+from lmcommon.labbook import LabBook
+from lmcommon.logging import LMLogger
 
 
 # PLEASE NOTE -- No global variables!
 #
 # None of the following methods can use global variables.
 # ANY use of globals will cause the following methods to fail.
+
+
+def export_labbook_as_zip(labbook_path: str, lb_export_directory: str) -> str:
+    """Return path to archive file of exported labbook. """
+    p = os.getpid()
+    logger = LMLogger.get_logger()
+    logger.info(f"(Job {p}) Starting export_labbook_as_zip({labbook_path})")
+
+    try:
+        if not os.path.exists(os.path.join(labbook_path, '.gigantum')):
+            # A gigantum labbook will contain a .gigantum hidden directory inside it.
+            raise ValueError(f'(Job {p}) Directory at {labbook_path} does not appear to be a Gigantum LabBook')
+
+        if not os.path.isdir(lb_export_directory):
+            os.makedirs(lb_export_directory, exist_ok=True)
+            # raise ValueError(f'(Job {p}) Export directory at `{lb_export_directory}` not found')
+
+        labbook: LabBook = LabBook()
+        labbook.from_directory(labbook_path)
+
+        logger.info(f"(Job {p}) Exporting `{labbook.root_dir}` to `{lb_export_directory}`")
+        if not os.path.exists(lb_export_directory):
+            logger.warning(f"(Job {p}) Creating Lab Manager export directory at `{lb_export_directory}`")
+            os.makedirs(lb_export_directory)
+
+        lb_zip_name = f'{labbook.name}_{datetime.datetime.now().strftime("%Y-%m-%d")}.lbk'
+        zip_path = os.path.join(lb_export_directory, lb_zip_name)
+        with zipfile.ZipFile(zip_path, 'w') as lb_archive:
+            basename = os.path.basename(labbook_path)
+            for root, dirs, files in os.walk(labbook_path):
+                for file_ in files:
+                    rel_path = os.path.join(root, file_).replace(labbook_path, basename)
+                    logger.debug(f"Adding file `{os.path.join(root, file_)}` as `{rel_path}`")
+                    lb_archive.write(os.path.join(root, file_), arcname=rel_path)
+
+        logger.info(f"(Job {p}) Finished exporting {str(labbook)} to {zip_path}")
+        return zip_path
+    except Exception as e:
+        logger.exception(f"(Job {p}) Error on export_labbook_as_zip: {e}")
+        raise
+
+
+def import_labboook_from_zip(archive_path: str, username: str, owner: str,
+                             config_file: Optional[str] = None, base_filename: Optional[str] = None) -> str:
+    """Method to import a labbook from a zip file
+
+    Args:
+        archive_path(str): Path to the uploaded zip
+        username(str): Username
+        owner(str): Owner username
+        config_file(str): Optional path to a labmanager config file
+        base_filename(str): The desired basename for the upload, without an upload ID prepended
+
+    Returns:
+        str: directory path of imported labbook
+    """
+    p = os.getpid()
+    logger = LMLogger.get_logger()
+    logger.info(f"(Job {p}) Starting import_labbook_from_zip(archive_path={archive_path},"
+                f"username={username}, owner={owner}, config_file={config_file})")
+
+    try:
+        if not os.path.isfile(archive_path):
+            raise ValueError(f'Archive at {archive_path} is not a file or does not exist')
+
+        if '.lbk' not in archive_path:
+            raise ValueError(f'Archive at {archive_path} does not have .lbk extension')
+
+        logger.info(f"(Job {p}) Using {config_file or 'default'} LabManager configuration.")
+        lm_config = Configuration(config_file)
+        lm_working_dir: str = lm_config.config['git']['working_directory']
+
+        # Infer the final labbook name
+        inferred_labbook_name = os.path.basename(archive_path).split('_')[0]
+        if base_filename:
+            inferred_labbook_name = base_filename.split('_')[0]
+        lb_containing_dir: str = os.path.join(lm_working_dir, username, owner, 'labbooks')
+
+        if os.path.isdir(os.path.join(lb_containing_dir, inferred_labbook_name)):
+            raise ValueError(f'(Job {p}) LabBook {inferred_labbook_name} already exists at {lb_containing_dir}, cannot overwrite.')
+
+        logger.info(f"(Job {p}) Extracting LabBook from archive {archive_path} into {lb_containing_dir}")
+        with zipfile.ZipFile(archive_path) as lb_zip:
+            lb_zip.extractall(path=lb_containing_dir)
+
+        new_lb_path = os.path.join(lb_containing_dir, inferred_labbook_name)
+        if not os.path.isdir(new_lb_path):
+            raise ValueError(f"(Job {p}) Expected LabBook not found at {new_lb_path}")
+
+        logger.info(f"(Job {p}) LabBook {inferred_labbook_name} imported to {new_lb_path}")
+        return new_lb_path
+    except Exception as e:
+        logger.exception(f"(Job {p}) Error on import_labbook_from_zip({archive_path}): {e}")
+        raise
 
 
 def build_docker_image(path, tag, pull, nocache) -> str:
@@ -56,9 +152,18 @@ def build_docker_image(path, tag, pull, nocache) -> str:
 
     try:
         docker_client = get_docker_client()
-        docker_image = docker_client.images.build(path=path, tag=tag, pull=pull, nocache=nocache)
-        logger.info("Completed build_docker_image in pid {}: {}".format(os.getpid(), str(docker_image)))
-        return docker_image.id
+        [logger.info(ln) for ln in docker_client.api.build(path=path,
+                                                           tag=tag,
+                                                           nocache=nocache,
+                                                           pull=pull,
+                                                           stream=True, decode=True)]
+
+        # Assume build worked and get the image
+        completed_image = docker_client.images.get(tag)
+
+        logger.info("Completed build_docker_image in pid {}: {}".format(os.getpid(), str(completed_image)))
+        logger.info("test: {}".format(completed_image.id))
+        return completed_image.id
     except Exception as e:
         logger.error("Error on build_docker_image in pid {}: {}".format(os.getpid(), e))
         raise

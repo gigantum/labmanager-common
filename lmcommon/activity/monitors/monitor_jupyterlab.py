@@ -146,8 +146,8 @@ class JupyterLabNotebookMonitor(ActivityMonitor):
 
         # Tracking variables during message processing
         self.kernel_status = 'idle'
-        self.code: Optional[Dict[str, Any]] = None
-        self.result: Optional[Dict[str, Any]] = None
+        self.code: Dict[str, Any] = {}
+        self.result: Dict[str, Any] = {}
         self.execution_count = 0
 
     def register_python_processors(self) -> None:
@@ -185,15 +185,15 @@ class JupyterLabNotebookMonitor(ActivityMonitor):
                     note_commit = self.create_note(commit, note_object)
 
                     # Successfully committed changes. Clear out state
-                    self.result = None
-                    self.code = None
+                    self.result = {}
+                    self.code = {}
 
                     logger.info("Created auto-generated note based on kernel activity: {}".format(note_commit))
 
                 except StopProcessingException:
                     # Don't want to save changes. Move along.
-                    self.result = None
-                    self.code = None
+                    self.result = {}
+                    self.code = {}
                     pass
 
             # Update status

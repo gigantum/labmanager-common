@@ -1,0 +1,4 @@
+include logging/*.default
+include configuration/config/*.default
+recursive-exclude *.pyc
+exclude __pycache__
