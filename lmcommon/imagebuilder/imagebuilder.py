@@ -270,8 +270,8 @@ class ImageBuilder(object):
 
         return os.linesep.join(docker_lines)
 
-    def build_image(self, docker_client, image_tag: str, assemble: bool = True, nocache: bool = False,
-                    background: bool = False) -> Dict[str, Optional[str]]:
+    def build_image(self, docker_client, image_tag: str, username: str, assemble: bool = True, nocache: bool = False,
+                    background: bool = False, owner: Optional[str] = None) -> Dict[str, Optional[str]]:
         """Build docker image according to the Dockerfile just assembled.
 
         Args:
@@ -280,6 +280,8 @@ class ImageBuilder(object):
             assemble(bool): Re-assemble the docker file using assemble_dockerfile if True
             nocache(bool): Don't user the Docker cache if True
             background(bool): Run the task in the background using the dispatcher.
+            username(str): The current logged in username
+            owner(str): The owner of the lab book
 
         Returns:
             dict: Contains the following keys, 'background_job_key' and 'docker_image_id', depending
@@ -313,9 +315,11 @@ class ImageBuilder(object):
 
         if background:
             job_dispatcher = Dispatcher()
-            # FIXME -- Labbook owner and user should be properly loaded and not be "default"
+            # No owner provided, assume user's namespace
+            if not owner:
+                owner = username
             job_metadata = {
-                'labbook': "{}-{}-{}".format("default", "default", self.labbook_directory.split('/')[-1]),
+                'labbook': "{}-{}-{}".format(username, owner, self.labbook_directory.split('/')[-1]),
                 'method': 'build_image'}
             job_key = job_dispatcher.dispatch_task(jobs.build_docker_image, args=(env_dir, image_tag, True, nocache),
                                                    metadata=job_metadata)

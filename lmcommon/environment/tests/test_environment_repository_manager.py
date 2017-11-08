@@ -27,7 +27,7 @@ import pickle
 import yaml
 
 from lmcommon.environment import RepositoryManager
-
+from lmcommon.fixtures import mock_config_file
 
 @pytest.fixture(scope="module")
 def setup_index():

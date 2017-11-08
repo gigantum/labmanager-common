@@ -71,6 +71,25 @@ lmlog.warning("This is my warning message")
 lmlog.error("This is my error message")
 ```
 
+### auth
+
+The auth package provides user authentication tools and middleware to create user identities from JSON Web Tokens (JWT)
+that come from auth0. To get all tests to pass, you need to set the auth server info in `lmcommon/auth/tests/auth_config.json`.
+Ask a developer for this file.
+
+To configure from scratch:
+
+- In Auth0 create a new database connection that will hold your test user
+- Add a test user to the connection with the following attributes:
+    - username: johndoe
+    - given_name: John
+    - family_name: Doe
+    - email: john.doe@gmail.com
+- Create a new test API and client, configuring the client to only allow password grants
+- Update API to use RSA
+- Update `lmcommon/auth/tests/auth_config.json.example` to `lmcommon/auth/tests/auth_config.json`, setting all values
+
+
 
 ## Testing
 

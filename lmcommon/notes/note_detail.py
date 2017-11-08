@@ -70,8 +70,7 @@ class NoteDetailDB():
 
         # rotate file when too big.  Set this at 4 MB override by config file
         # this will write one record after the limit, i.e. it's a soft limit
-        import pdb; pdb.set_trace()
-        sizelimit = self.config["logfilesize"] if "logfilesize" in self.config else 4000000
+        sizelimit = self.config.config["logfilesize"] if "logfilesize" in self.config.config else 4000000
         if fp.tell() > sizelimit:
             self.latestfnum = self.latestfnum+1
             with open(self.logmdfname,"w+") as fp2:

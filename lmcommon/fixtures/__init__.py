@@ -17,7 +17,7 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-from lmcommon.labbook import LabBook
-from lmcommon.logging import LMLogger
 
-logger = LMLogger.get_logger()
+from .fixtures import (labbook_dir_tree, mock_config_file, mock_config_with_repo,
+                       mock_config_file_team, mock_config_file_with_auth, mock_labbook)
+
