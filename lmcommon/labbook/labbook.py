@@ -728,6 +728,7 @@ class LabBook(object):
             os.path.join('.gigantum', 'notes'),
             os.path.join('.gigantum', 'notes', 'log'),
             os.path.join('.gigantum', 'notes', 'index'),
+            os.path.join('.gigantum', 'notes', 'importance'),
         ]
 
         for d in dirs:

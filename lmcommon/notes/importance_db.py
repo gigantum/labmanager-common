@@ -20,14 +20,37 @@
 import os
 import json
 import dbm.gnu as gdbm
+from typing import (Any, Dict, List, Union)
 
 
 class ImportanceObject():
     """Object/structure that describes importance/visibility of a detail record"""
-    def __init__(importance: int, weight: float=0.0, visible: bool=True) -> None:
+    def __init__(self, detail_id: bytes, importance: int, weight: float=0.0, visible: bool=True) -> None:
+        self.detail_id =  detail_id
         self.importance = importance
         self.weight = weight
-        self.visibile = visible
+        self.visible = visible
+
+    @staticmethod
+    def from_dict(imp_dict: Dict) -> 'ImportanceObject':
+        """Static method to create a ImportanceObject instance from a dictionary
+
+        Args:
+            imp_dict(Dict): The json representation of a ImportanceObject
+
+        Returns:
+            ImportanceObject
+        """
+        return ImportanceObject(imp_dict["importance"], imp_dict["weight"], imp_dict["visible"])
+
+
+    def to_dict(self) -> Dict[str, Union[int, float, bool]]:
+        """Method to dump an object to a dictionary"""
+        return {"detail_id": self.detail_id,
+                "importance": self.importance,
+                "weight": self.weight,
+                "visible": self.visible}
+
 
 class ImportanceDB():
     """Key value store (in a file) to keep importance information for UI."""
@@ -49,10 +72,10 @@ class ImportanceDB():
         with gdbm.open(self.dbfilename,"c"):
             pass
 
-    def addList(hexsha: str, importance: List(ImportanceObject)) -> None:
+    def addList(self, hexsha: str, importance: List[ImportanceObject]) -> None:
         NotImplemented
 
-    def add(hexsha: str, importance: ImportanceObject) -> None:
+    def add(self, hexsha: str, importance: ImportanceObject) -> None:
         """Add an importance structure in the database for the commit at hexsha.
             For adding importance items one at a time.
     
@@ -64,14 +87,16 @@ class ImportanceDB():
         with gdbm.open(self.dbfilename,"w") as idb:
             # access old list, add record, store new list
             try:
-                implist = idb.get(hexsha)
-            except E
-            implist.append(importance)
-            idb.store(hexsha,implist)
+                impbytes = idb[hexsha]
+                implist = json.loads(impbytes.decode('utf-8'))
+            except KeyError:
+                implist=[]
+                
+            implist.append(importance.to_dict())
+            idb[hexsha] = json.dumps(implist).encode('utf-8')
 
-    def items(commitsha: str) -> ImportanceStruct:
+    def items(self, commitsha: str) -> ImportanceObject:
         """Generator of importance items for a hexsha"""
-        with gdbm.open(self.dbfilename,"r"):
-            implist = idb.get()
-            for importance in implist:
-                yield implist
+        with gdbm.open(self.dbfilename,"r") as idb:
+            for iodict in json.loads(idb[commitsha].decode('utf-8')):
+                yield ImportanceObject.from_dict(iodict)

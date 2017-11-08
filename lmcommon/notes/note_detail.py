@@ -18,6 +18,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 import os
+import re
 import json
 from redis import StrictRedis
 import redis_lock
@@ -36,7 +37,8 @@ class NoteDetailDB():
 
         # TODO derived from UUID/machine/something unique
         #       derive in a smart way for merge.
-        self.basename = "labbook_notes_log_"
+        self.basename = "labbook_notes_log_XX"
+        assert(len(self.basename)==20)
 
         self.config = config
 
@@ -51,8 +53,9 @@ class NoteDetailDB():
                     self.latestfnum = logmeta['filenumber']
                 # logging on a new node/system
                 else:
+                    # this being correct depends upon each checkout being unique
+                    # i.e. no way to get the same id when returning to a branch
                     self.latestfnum = 1
-        
         else:
             # no logmeta file, first time open
             with open(self.logmdfname,"w+") as fp:
@@ -60,6 +63,52 @@ class NoteDetailDB():
                 logmeta = {'basename': self.basename, 'filenumber': 1}
                 json.dump(logmeta, fp)
 
+    def _generate_detail_header(self, offset: int, length: int) -> bytes:
+        """Helper function to generate a log-sequence header.  Must hold a lock when calling."""
+        return b'__g__lsn' + self.latestfnum.to_bytes(4, byteorder='little') \
+                                      + offset.to_bytes(4, byteorder='little') \
+                                      + length.to_bytes(4, byteorder='little')
+
+    def _parse_detail_header(self, detail_header: bytes) -> (int, int, int):
+        """Helper function that returns offset and length from detail header
+
+        Arguments: 
+            detail_header: bytes
+
+        Returns: (fnum, offset, length)
+            fnum(int): file number in the rotation for this checkout
+            offset(int): seek offset for record
+            length(int): length of record
+        
+        """
+        if detail_header[0:8] != b'__g__lsn':
+            raise ValueError("Invalid log record header")
+        else:
+            fnum = int.from_bytes(detail_header[8:12],'little') 
+            offset= int.from_bytes(detail_header[12:16],'little') 
+            length = int.from_bytes(detail_header[16:20],'little') 
+
+        return (fnum, offset, length)
+
+    def _generate_detail_key(self, detail_header: bytes) -> bytes:
+        """Helper function to turn a header in to a key.  Must hold a lock when calling."""
+        return self.basename.encode('utf-8') + detail_header
+
+    def _parse_detail_key(self, detail_key: bytes) -> (str,bytes):
+        """Helper function to turn a header in to a key.  Must hold a lock when calling.
+
+         Arguments:
+            detail_key: key returns from previous entry
+
+         Returns:
+            basename(str): name of log file family that contains record
+            detail_header(bytes): detail header to be parse for rotation #, offset, and length
+        """
+        basename = detail_key[0:20].decode('utf-8')
+        detail_header = detail_key[20:]
+
+        return basename, detail_header
+        
     def _open_for_append_and_rotate(self):
         """ Return and open file handle.  Rotate the log as we need.
             Can't check the type -> file doesn't work
@@ -86,10 +135,10 @@ class NoteDetailDB():
         """Put a note into the files and return a key to access it
 
         Args:
-            value(str): note detail objects
+            value(bytes): note detail objects
 
         Returns:
-            note_key(str): key used to access and identify the object
+            note_key(bytes): key used to access and identify the object
         """
         conn = StrictRedis()
         
@@ -101,10 +150,7 @@ class NoteDetailDB():
                 offset = fh.tell()
                 length=len(value)
 
-                # header in the log and key are the same byte string
-                detail_header = b'_glm_lsn' + self.latestfnum.to_bytes(4, byteorder='little') \
-                                            + offset.to_bytes(4, byteorder='little') \
-                                            + length.to_bytes(4, byteorder='little')
+                detail_header = self._generate_detail_header(offset, length)
 
                 # append the record to the active log
                 fh.write(detail_header)
@@ -113,25 +159,24 @@ class NoteDetailDB():
             finally:
                 fh.close()
 
-        return detail_header
+            detail_key = self._generate_detail_key(detail_header)
 
-    def get(self, node_key: bytes) -> bytes:
+        # unlock
+        return detail_key
+
+    def get(self, detail_key: bytes) -> bytes:
         """Return a detailed note.
 
         Args:
-            node_key: json encoded array that contains file_name, offsest, length
+            detail_key: json encoded array that contains file_name, offsest, length
 
         Returns:
             detail_record(str): detail records stored by put
         """
-        if node_key[0:8] != b'_glm_lsn':
-            raise ValueError("Invalid log record header")
-        else:
-            fnum = int.from_bytes(node_key[8:12],'little') 
-            offset= int.from_bytes(node_key[12:16],'little') 
-            length = int.from_bytes(node_key[16:20],'little') 
+        basename, detail_header = self._parse_detail_key(detail_key)
+        fnum, offset, length = self._parse_detail_header(detail_header)
      
-        with open(os.path.abspath(os.path.join(self.dirpath, self.basename+str(fnum))),"br") as fh:
+        with open(os.path.abspath(os.path.join(self.dirpath, basename+str(fnum))),"br") as fh:
             fh.seek(offset)
             retval = fh.read(length+20)   # plus the header length
 
