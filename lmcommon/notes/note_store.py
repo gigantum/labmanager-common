@@ -356,7 +356,7 @@ class NoteStore(object):
                  dict
         """
         # Create DB connection
-        note_detail_db = NoteDetailDB(self._entries_path)
+        note_detail_db = NoteDetailDB(self._entries_path, self.labbook.labmanager_config)
 
         # Get value from key-value store
         note_record = note_detail_db.get(note_key)

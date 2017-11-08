@@ -26,7 +26,7 @@ import random
 from datetime import datetime
 
 from lmcommon.labbook import LabBook
-from lmcommon.notes import NoteStore, NoteDetailObject, NoteLogLevel
+from lmcommon.notes import NoteStore, NoteDetailObject, NoteLogLevel, NoteDetailDB
 
 
 @pytest.fixture()
@@ -304,3 +304,19 @@ class TestNoteStore:
 
             for obj_truth, obj_test in zip(truth[0]["objects"], test["objects"]):
                 assert obj_truth.__dict__ == obj_test.__dict__
+
+    def test_rotate_log(self, mock_create_notestore):
+        # insert objects until the log rotates twice
+        note_detail_db = NoteDetailDB(mock_create_notestore[0]._entries_path, mock_create_notestore[0].labbook.labmanager_config)
+        oldfnum = note_detail_db.latestfnum
+
+        while note_detail_db.latestfnum == oldfnum:
+            note_detail_db.put(os.urandom(100000))
+
+        secondoldfnum = note_detail_db.latestfnum
+
+        while note_detail_db.latestfnum == secondoldfnum:
+            note_detail_db.put(os.urandom(100000))
+
+        assert(note_detail_db.latestfnum == oldfnum+2)
+

@@ -68,7 +68,8 @@ class NoteDetailDB():
 
         # rotate file when too big TODO get from settings
         # this will write one record after the limit, i.e. it's a soft limit
-        if fp.tell() > 10000:
+        sizelimit = self.config.config["logfilesize"] if "logfilesize" in self.config.config else 4000000
+        if fp.tell() > sizelimit:
             self.latestfnum = self.latestfnum+1
             with open(self.logmdfname,"w+") as fp2:
                 logmeta = {'basename': self.basename, 'filenumber': self.latestfnum}
