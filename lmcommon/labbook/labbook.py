@@ -111,7 +111,7 @@ class LabBook(object):
             os.rename(self._root_dir, os.path.join(base_dir, value))
         else:
             raise ValueError("Lab Book root dir not specified. Failed to configure git.")
-        
+
         # Update the root directory to the new directory name
         self._set_root_dir(os.path.join(base_dir, value))
 
@@ -205,12 +205,16 @@ class LabBook(object):
         if len(self.name) > 100:
             raise ValueError("Invalid `name`. Max length is 100 characters")
 
-        # TODO Temporarily support old, schemaless labbooks (will remove once we introduce first breaking change)
-        if 'schema' in self.data:
-            if not validate_schema(self.LABBOOK_DATA_SCHEMA_VERSION, self.data):
-                errmsg = f"Schema in Labbook {str(self)} does not match indicated version {self.LABBOOK_DATA_SCHEMA_VERSION}"
-                logger.error(errmsg)
-                raise ValueError(errmsg)
+        # TODO: Remove in the future after breaking changes are completed
+        # Skip schema check if it doesn't exist (aka an old labbook)
+        if self.data:
+            if "schema" in self.data:
+                if not validate_schema(self.LABBOOK_DATA_SCHEMA_VERSION, self.data):
+                    errmsg = f"Schema in Labbook {str(self)} does not match indicated version {self.LABBOOK_DATA_SCHEMA_VERSION}"
+                    logger.error(errmsg)
+                    raise ValueError(errmsg)
+            else:
+                logger.info("Skipping schema check on old LabBook")
 
     # TODO: Get feedback on better way to sanitize
     def _santize_input(self, value: str) -> str:
@@ -737,14 +741,18 @@ class LabBook(object):
             # Init repository
             self.git.initialize()
 
-            # Create Directory Structure
-            dirs = [
-                'code', 'input', 'output', '.gigantum',
-                os.path.join('.gigantum', 'env'),
-                os.path.join('.gigantum', 'notes'),
-                os.path.join('.gigantum', 'notes', 'log'),
-                os.path.join('.gigantum', 'notes', 'index'),
-            ]
+        # Create Directory Structure
+        dirs = [
+            'code', 'input', 'output', '.gigantum',
+            os.path.join('.gigantum', 'env'),
+            os.path.join('.gigantum', 'env', 'base_image'),
+            os.path.join('.gigantum', 'env', 'dev_env'),
+            os.path.join('.gigantum', 'env', 'custom'),
+            os.path.join('.gigantum', 'env', 'package_manager'),
+            os.path.join('.gigantum', 'notes'),
+            os.path.join('.gigantum', 'notes', 'log'),
+            os.path.join('.gigantum', 'notes', 'index'),
+        ]
 
             for d in dirs:
                 self.makedir(d, make_parents=True)
@@ -932,4 +940,3 @@ class LabBook(object):
             dict
         """
         return self.git.log_entry(commit)
-

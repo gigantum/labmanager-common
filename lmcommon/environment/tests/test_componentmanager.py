@@ -80,10 +80,10 @@ class TestComponentManager(object):
                              owner={"username": "test"})
 
         # Verify missing dir structure
-        assert os.path.exists(os.path.join(labbook_dir, '.gigantum', 'env', 'base_image')) is False
-        assert os.path.exists(os.path.join(labbook_dir, '.gigantum', 'env', 'dev_env')) is False
-        assert os.path.exists(os.path.join(labbook_dir, '.gigantum', 'env', 'package_manager')) is False
-        assert os.path.exists(os.path.join(labbook_dir, '.gigantum', 'env', 'custom')) is False
+        assert os.path.exists(os.path.join(labbook_dir, '.gigantum', 'env', 'base_image')) is True
+        assert os.path.exists(os.path.join(labbook_dir, '.gigantum', 'env', 'dev_env')) is True
+        assert os.path.exists(os.path.join(labbook_dir, '.gigantum', 'env', 'package_manager')) is True
+        assert os.path.exists(os.path.join(labbook_dir, '.gigantum', 'env', 'custom')) is True
         assert os.path.exists(os.path.join(labbook_dir, '.gigantum', 'env', 'entrypoint.sh')) is False
 
         cm = ComponentManager(lb)
@@ -122,6 +122,7 @@ class TestComponentManager(object):
 
         # Ensure all four packages exist.
         package_files = [f for f in os.listdir(package_path)]
+        package_files = [p for p in package_files if p != '.gitkeep']
         assert len(package_files) == 4
 
         # Ensure the fields in each of the 4 packages exist.
