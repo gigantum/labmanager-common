@@ -55,6 +55,11 @@ def _create_temp_work_dir(override_dict: dict = None):
         },
         'auth': {
             'audience': "io.gigantum.api.dev"
+        },
+        'lock': {
+            'redis': {
+                'strict': False
+            }
         }
     }
 

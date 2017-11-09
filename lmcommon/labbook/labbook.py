@@ -25,8 +25,6 @@ from typing import (Any, Dict, List, Optional, Set, Tuple)
 import uuid
 import yaml
 import json
-from redis import StrictRedis
-import redis_lock
 
 from lmcommon.configuration import Configuration
 from lmcommon.gitlib import get_git_interface, GitAuthor
@@ -741,18 +739,18 @@ class LabBook(object):
             # Init repository
             self.git.initialize()
 
-        # Create Directory Structure
-        dirs = [
-            'code', 'input', 'output', '.gigantum',
-            os.path.join('.gigantum', 'env'),
-            os.path.join('.gigantum', 'env', 'base_image'),
-            os.path.join('.gigantum', 'env', 'dev_env'),
-            os.path.join('.gigantum', 'env', 'custom'),
-            os.path.join('.gigantum', 'env', 'package_manager'),
-            os.path.join('.gigantum', 'notes'),
-            os.path.join('.gigantum', 'notes', 'log'),
-            os.path.join('.gigantum', 'notes', 'index'),
-        ]
+            # Create Directory Structure
+            dirs = [
+                'code', 'input', 'output', '.gigantum',
+                os.path.join('.gigantum', 'env'),
+                os.path.join('.gigantum', 'env', 'base_image'),
+                os.path.join('.gigantum', 'env', 'dev_env'),
+                os.path.join('.gigantum', 'env', 'custom'),
+                os.path.join('.gigantum', 'env', 'package_manager'),
+                os.path.join('.gigantum', 'notes'),
+                os.path.join('.gigantum', 'notes', 'log'),
+                os.path.join('.gigantum', 'notes', 'index'),
+            ]
 
             for d in dirs:
                 self.makedir(d, make_parents=True)
