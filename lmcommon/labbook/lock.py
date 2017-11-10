@@ -19,17 +19,16 @@
 # SOFTWARE.
 from contextlib import contextmanager
 from lmcommon.logging import LMLogger
-from lmcommon.labbook import LabBook
 import time
 
-from redis import StrictRedis
+from redis import StrictRedist
 import redis_lock
 
 logger = LMLogger.get_logger()
 
 
 @contextmanager
-def lock_labbook(labbook: LabBook):
+def lock_labbook(labbook):
     """A context manager for locking labbook operations that is decorator compatible
 
     Manages the lock process along with catching and logging exceptions that may occur
@@ -45,20 +44,18 @@ def lock_labbook(labbook: LabBook):
                                    db=config['redis']['db'])
 
         # Get a lock
-        # Todo switch to labbook identifier when available
-        # key = labbook.key()
-        key = 'labbook_lock'
-        lock = redis_lock.Lock(redis_client, key,
+        lock = redis_lock.Lock(redis_client, f'filesystem_lock|{labbook.key}',
                                expire=config['expire'],
                                auto_renewal=config['auto_renewal'],
-                               strict=config['redis']['false'])
+                               strict=config['redis']['strict'])
 
         if lock.acquire(timeout=config['timeout']):
             # Do the work
             start_time = time.time()
             yield
-            if (time.time() - start_time) > config['expire']:
-                logger.warning(f"LabBook task took more than {config['expire']}s. File locking possibly invalid.")
+            if config['expire']:
+                if (time.time() - start_time) > config['expire']:
+                    logger.warning(f"LabBook task took more than {config['expire']}s. File locking possibly invalid.")
         else:
             raise IOError(f"Could not acquire LabBook lock within {LOCK_TIMEOUT} seconds.")
 
@@ -68,4 +65,8 @@ def lock_labbook(labbook: LabBook):
     finally:
         # Release the Lock
         if lock:
-            lock.release()
+            try:
+                lock.release()
+            except redis_lock.NotAcquired as e:
+                logger.error(e)
+

@@ -17,13 +17,12 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-
 import json
 import os
 import shutil
 import tempfile
 import uuid
-
+import collections
 import git
 from pkg_resources import resource_filename
 import pytest
@@ -35,11 +34,22 @@ from lmcommon.labbook import LabBook
 
 def _create_temp_work_dir(override_dict: dict = None):
     """Helper method to create a temporary working directory and associated config file"""
+    def merge_dict(d1, d2) -> None:
+        """Method to merge 1 dictionary into another, updating and adding key/values as needed
+        """
+        for k, v2 in d2.items():
+            v1 = d1.get(k)  # returns None if v1 has no value for this key
+            if (isinstance(v1, collections.Mapping) and
+                    isinstance(v2, collections.Mapping)):
+                merge_dict(v1, v2)
+            else:
+                d1[k] = v2
+
     # Create a temporary working directory
     unit_test_working_dir = os.path.join(tempfile.gettempdir(), uuid.uuid4().hex)
     os.makedirs(unit_test_working_dir)
 
-    default_config = {
+    default_override_config = {
         'core': {
             'team_mode': False
         },
@@ -58,13 +68,14 @@ def _create_temp_work_dir(override_dict: dict = None):
         },
         'lock': {
             'redis': {
-                'strict': False
+                'strict': False,
+                'db': 4
             }
         }
     }
 
     config = Configuration()
-    config.config = default_config
+    merge_dict(config.config, default_override_config)
     if override_dict:
         config.config.update(override_dict)
 

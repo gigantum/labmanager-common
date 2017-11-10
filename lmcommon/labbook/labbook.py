@@ -30,7 +30,7 @@ from lmcommon.configuration import Configuration
 from lmcommon.gitlib import get_git_interface, GitAuthor
 from lmcommon.logging import LMLogger
 from lmcommon.notes import NoteLogLevel, NoteStore
-
+from lmcommon.labbook.lock import lock_labbook
 from lmcommon.labbook.schemas import validate_schema
 
 GIT_IGNORE_DEFAULT = """.DS_Store"""
@@ -185,7 +185,7 @@ class LabBook(object):
         if not self.root_dir:
             raise ValueError("No root directory assigned to lab book. Failed to get root directory.")
 
-        with redis_lock.Lock(self.redis_client, "replace-with-key-method"):
+        with lock_labbook(self):
             with open(os.path.join(self.root_dir, ".gigantum", "labbook.yaml"), 'wt') as lbfile:
                 lbfile.write(yaml.dump(self._data, default_flow_style=False))
 
@@ -282,8 +282,7 @@ class LabBook(object):
         if not os.path.isfile(src_file):
             raise ValueError(f"Source file does not exist at `{src_file}`")
 
-        with redis_lock.Lock(self.redis_client, "replace-with-key-method"):
-
+        with lock_labbook(self):
             # Remove any leading "/" -- without doing so os.path.join will break.
             dst_dir = LabBook._make_path_relative(dst_dir)
 
@@ -340,7 +339,7 @@ class LabBook(object):
         Returns:
             None
         """
-        with redis_lock.Lock(self.redis_client, "replace-with-key-method"):
+        with lock_labbook(self):
             relative_path = LabBook._make_path_relative(relative_path)
             target_path = os.path.join(self.root_dir, relative_path)
             if not os.path.exists(target_path):
@@ -392,7 +391,7 @@ class LabBook(object):
             src_rel_path(str): Source file or directory
             dst_rel_path(str): Target file name and/or directory
         """
-        with redis_lock.Lock(self.redis_client, "replace-with-key-method"):
+        with lock_labbook(self):
 
             # Start with Validations
             if not src_rel_path:
@@ -454,7 +453,7 @@ class LabBook(object):
         if not relative_path:
             raise ValueError("relative_path argument cannot be None or empty")
 
-        with redis_lock.Lock(self.redis_client, "replace-with-key-method"):
+        with lock_labbook(self):
             relative_path = LabBook._make_path_relative(relative_path)
             new_directory_path = os.path.join(self.root_dir, relative_path)
             if os.path.exists(new_directory_path):
@@ -527,7 +526,7 @@ class LabBook(object):
         if target_sub_dir not in ['code', 'input', 'output']:
             raise ValueError("Favorites only supported in `code`, `input`, and `output` Lab Book directories")
 
-        with redis_lock.Lock(self.redis_client, "replace-with-key-method"):
+        with lock_labbook(self):
             # Generate desired absolute path
             target_path_rel = os.path.join(target_sub_dir, relative_path)
 
@@ -604,7 +603,7 @@ class LabBook(object):
         if target_sub_dir not in ['code', 'input', 'output']:
             raise ValueError("Favorites only supported in `code`, `input`, and `output` Lab Book directories")
 
-        with redis_lock.Lock(self.redis_client, "replace-with-key-method"):
+        with lock_labbook(self):
             try:
                 # Open existing Favorites json if exists
                 favorites_dir = os.path.join(self.root_dir, '.gigantum', 'favorites')
@@ -701,93 +700,93 @@ class LabBook(object):
         if name == 'export':
             raise ValueError("LabBook cannot be named `export`.")
 
-        with redis_lock.Lock(self.redis_client, "replace-with-key-method"):
-            # Build data file contents
-            self._data = {
-                "labbook": {"id": uuid.uuid4().hex,
-                            "name": name,
-                            "description": self._santize_input(description or '')},
-                "owner": owner,
-                "schema": self.LABBOOK_DATA_SCHEMA_VERSION
-            }
+        # Build data file contents
+        self._data = {
+            "labbook": {"id": uuid.uuid4().hex,
+                        "name": name,
+                        "description": self._santize_input(description or '')},
+            "owner": owner,
+            "schema": self.LABBOOK_DATA_SCHEMA_VERSION
+        }
 
-            # Validate data
-            self._validate_labbook_data()
+        # TODO: LOCK!
+        # Validate data
+        self._validate_labbook_data()
 
-            logger.info("Creating new labbook on disk for {}/{}/{} ...".format(username, owner, name))
+        logger.info("Creating new labbook on disk for {}/{}/{} ...".format(username, owner, name))
 
-            # Verify or Create user subdirectory
-            # Make sure you expand a user dir string
-            starting_dir = os.path.expanduser(self.labmanager_config.config["git"]["working_directory"])
-            user_dir = os.path.join(starting_dir, username)
-            if not os.path.isdir(user_dir):
-                os.makedirs(user_dir)
+        # Verify or Create user subdirectory
+        # Make sure you expand a user dir string
+        starting_dir = os.path.expanduser(self.labmanager_config.config["git"]["working_directory"])
+        user_dir = os.path.join(starting_dir, username)
+        if not os.path.isdir(user_dir):
+            os.makedirs(user_dir)
 
-            # Create owner dir - store LabBooks in working dir > logged in user > owner
-            owner_dir = os.path.join(user_dir, owner["username"])
-            if not os.path.isdir(owner_dir):
-                os.makedirs(owner_dir)
+        # Create owner dir - store LabBooks in working dir > logged in user > owner
+        owner_dir = os.path.join(user_dir, owner["username"])
+        if not os.path.isdir(owner_dir):
+            os.makedirs(owner_dir)
 
-                # Create `labbooks` subdir in the owner dir
-                owner_dir = os.path.join(owner_dir, "labbooks")
-            else:
-                owner_dir = os.path.join(owner_dir, "labbooks")
+            # Create `labbooks` subdir in the owner dir
+            owner_dir = os.path.join(owner_dir, "labbooks")
+        else:
+            owner_dir = os.path.join(owner_dir, "labbooks")
 
-            # Verify name not already in use
-            if os.path.isdir(os.path.join(owner_dir, name)):
-                # Exists already. Raise an exception
-                raise ValueError(f"LabBook `{name}` already exists locally. Choose a new LabBook name")
+        # Verify name not already in use
+        if os.path.isdir(os.path.join(owner_dir, name)):
+            # Exists already. Raise an exception
+            raise ValueError(f"LabBook `{name}` already exists locally. Choose a new LabBook name")
 
-            # Create LabBook subdirectory
-            new_root_dir = os.path.join(owner_dir, name)
+        # Create LabBook subdirectory
+        new_root_dir = os.path.join(owner_dir, name)
 
-            logger.info(f"Making labbook directory in {new_root_dir}")
+        logger.info(f"Making labbook directory in {new_root_dir}")
 
-            os.makedirs(new_root_dir)
-            self._set_root_dir(new_root_dir)
+        os.makedirs(new_root_dir)
+        self._set_root_dir(new_root_dir)
 
-            # Init repository
-            self.git.initialize()
+        # Init repository
+        self.git.initialize()
 
-            # Create Directory Structure
-            dirs = [
-                'code', 'input', 'output', '.gigantum',
-                os.path.join('.gigantum', 'env'),
-                os.path.join('.gigantum', 'env', 'base_image'),
-                os.path.join('.gigantum', 'env', 'dev_env'),
-                os.path.join('.gigantum', 'env', 'custom'),
-                os.path.join('.gigantum', 'env', 'package_manager'),
-                os.path.join('.gigantum', 'notes'),
-                os.path.join('.gigantum', 'notes', 'log'),
-                os.path.join('.gigantum', 'notes', 'index'),
-            ]
+        # Create Directory Structure
+        dirs = [
+            'code', 'input', 'output', '.gigantum',
+            os.path.join('.gigantum', 'env'),
+            os.path.join('.gigantum', 'env', 'base_image'),
+            os.path.join('.gigantum', 'env', 'dev_env'),
+            os.path.join('.gigantum', 'env', 'custom'),
+            os.path.join('.gigantum', 'env', 'package_manager'),
+            os.path.join('.gigantum', 'notes'),
+            os.path.join('.gigantum', 'notes', 'log'),
+            os.path.join('.gigantum', 'notes', 'index'),
+        ]
 
-            for d in dirs:
-                self.makedir(d, make_parents=True)
+        for d in dirs:
+            self.makedir(d, make_parents=True)
 
-            # Create labbook.yaml file
-            self._save_labbook_data()
+        # Create labbook.yaml file
+        self._save_labbook_data()
 
-            # Create blank Dockerfile
-            # TODO: Add better base dockerfile once environment service defines this
-            with open(os.path.join(self.root_dir, ".gigantum", "env", "Dockerfile"), 'wt') as dockerfile:
-                dockerfile.write("FROM ubuntu:16.04")
+        # Create blank Dockerfile
+        # TODO: Add better base dockerfile once environment service defines this
+        with open(os.path.join(self.root_dir, ".gigantum", "env", "Dockerfile"), 'wt') as dockerfile:
+            dockerfile.write("FROM ubuntu:16.04")
 
-            # Create .gitignore default file
-            # TODO: Use a base .gitignore file vs. global variable
-            with open(os.path.join(self.root_dir, ".gitignore"), 'wt') as gi_file:
-                gi_file.write(GIT_IGNORE_DEFAULT)
+        # Create .gitignore default file
+        # TODO: Use a base .gitignore file vs. global variable
+        with open(os.path.join(self.root_dir, ".gitignore"), 'wt') as gi_file:
+            gi_file.write(GIT_IGNORE_DEFAULT)
 
-            # Commit
-            # TODO: Once users are properly added, create a GitAuthor instance before commit
-            for s in ['code', 'input', 'output', '.gigantum']:
-                self.git.add_all(os.path.join(self.root_dir, s))
-            self.git.add(os.path.join(self.root_dir, ".gigantum", "labbook.yaml"))
-            self.git.add(os.path.join(self.root_dir, ".gigantum", "env", "Dockerfile"))
-            self.git.add(os.path.join(self.root_dir, ".gitignore"))
-            self.git.commit(f"Creating new empty LabBook: {name}")
+        # Commit
+        # TODO: Once users are properly added, create a GitAuthor instance before commit
+        for s in ['code', 'input', 'output', '.gigantum']:
+            self.git.add_all(os.path.join(self.root_dir, s))
+        self.git.add(os.path.join(self.root_dir, ".gigantum", "labbook.yaml"))
+        self.git.add(os.path.join(self.root_dir, ".gigantum", "env", "Dockerfile"))
+        self.git.add(os.path.join(self.root_dir, ".gitignore"))
+        self.git.commit(f"Creating new empty LabBook: {name}")
 
-            return self.root_dir
+        return self.root_dir
 
     def from_key(self, key: str) -> None:
         """Method to populate labbook from a unique key.
@@ -816,7 +815,7 @@ class LabBook(object):
         Returns:
             None
         """
-        with redis_lock.Lock(self.redis_client, "replace-with-key-method"):
+        with lock_labbook(self):
             # Make sure name does not already exist
             labbooks_dir = self.root_dir.rsplit(os.path.sep, 1)[0]
             if os.path.exists(os.path.join(labbooks_dir, new_name)):
