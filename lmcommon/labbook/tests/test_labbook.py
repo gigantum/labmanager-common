@@ -83,7 +83,7 @@ class TestLabBook(object):
         labbook_dir = lb.new(name="labbook1", description="my first labbook",
                              owner={"username": "test"})
 
-        assert labbook_dir == os.path.join(mock_config_file[1], "test", "test", "labbooks",   "labbook1")
+        assert labbook_dir == os.path.join(mock_config_file[1], "test", "test", "labbooks", "labbook1")
         assert type(lb) == LabBook
 
         # Validate directory structure
@@ -299,6 +299,7 @@ class TestLabBook(object):
         assert lb_loaded.id == lb.id
         assert lb_loaded.name == lb.name
         assert lb_loaded.description == lb.description
+        assert lb_loaded.key == 'test|test|labbook1'
 
     def test_change_properties(self, mock_config_file):
         """Test loading a labbook from a directory"""
@@ -480,6 +481,7 @@ class TestLabBook(object):
         assert os.path.isfile(os.path.join(lb.root_dir, 'code', 'subdir_moved', base_name))
 
     def test_makedir_simple(self, mock_config_file):
+        # Note that "score" refers to the count of .gitkeep files.
         lb = LabBook(mock_config_file[0])
         lb.new(owner={"username": "test"}, name="test-insert-files-1", description="validate tests.")
         long_dir = "/non/existant/dir/should/now/be/made"
@@ -548,3 +550,12 @@ class TestLabBook(object):
         ]
         for sample_input, expected_output in vectors:
             assert LabBook._make_path_relative(sample_input) == expected_output
+
+    def test_labbook_key(self, mock_config_file):
+        lb = LabBook(mock_config_file[0])
+        lb.new(owner={"username": "test"}, name="test-lb-key", description="validate tests.")
+        assert lb.key == 'test|test|test-lb-key'
+
+        lb1key = lb.key
+        lb2 = LabBook(mock_config_file[0])
+        lb2.from_key(lb1key)
