@@ -43,7 +43,7 @@ class LabBook(object):
     # If this is not defined, implicitly the version is "0.1"
     LABBOOK_DATA_SCHEMA_VERSION = "0.1"
 
-    def __init__(self, config_file: str = None) -> None:
+    def __init__(self, config_file: Optional[str] = None) -> None:
         self.labmanager_config = Configuration(config_file)
 
         # Create gitlib instance
@@ -112,6 +112,16 @@ class LabBook(object):
 
         # Update the root directory to the new directory name
         self._set_root_dir(os.path.join(base_dir, value))
+
+    @property
+    def key(self) -> str:
+        """Return a unique key for identifying and locating a labbbok.
+
+        Note: A labbook does not exist notionally outside of a directory structure, therefore
+        part of the key is determined by this structure. """
+
+        dir_elements = self.root_dir.split(os.sep)
+        return "|".join([dir_elements[-4], dir_elements[-3], dir_elements[-1]])
 
     @property
     def description(self) -> str:
@@ -778,6 +788,24 @@ class LabBook(object):
             self.git.commit(f"Creating new empty LabBook: {name}")
 
             return self.root_dir
+
+    def from_key(self, key: str) -> None:
+        """Method to populate labbook from a unique key.
+
+        Args:
+            key(str): Encoded key of labbook
+
+        Returns:
+            None (Populates this labbook instance)
+        """
+
+        logger.debug(f"Populating LabBook from key {key}")
+
+        if len(key.split("|")) != 3:
+            raise ValueError(f"Invalid LabBook key `{key}`")
+
+        user_key, owner_key, lb_name_key = key.split("|")
+        self.from_name(user_key, owner_key, lb_name_key)
 
     def rename(self, new_name: str) -> None:
         """Method to rename a labbook
