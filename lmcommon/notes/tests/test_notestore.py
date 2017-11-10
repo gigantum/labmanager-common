@@ -27,32 +27,7 @@ from datetime import datetime
 
 from lmcommon.labbook import LabBook
 from lmcommon.notes import NoteStore, NoteDetailObject, NoteLogLevel
-
-
-@pytest.fixture()
-def mock_create_notestore():
-    """A pytest fixture that creates a notestore (and labbook) and deletes directory after test"""
-    # Create a temporary working directory
-    temp_dir = os.path.join(tempfile.tempdir, uuid.uuid4().hex)
-    os.makedirs(temp_dir)
-    
-    with tempfile.NamedTemporaryFile(mode="wt") as fp:
-        # Write a temporary config file
-        fp.write("""core:
-  team_mode: false 
-git:
-  backend: 'filesystem'
-  working_directory: '{}'""".format(temp_dir))
-        fp.seek(0)
-
-        lb = LabBook(fp.name)
-        lb.new({"username": "default"}, "labbook1", username="default", description="my first labbook")
-        ns = NoteStore(lb)
-
-        yield ns, lb
-
-    # Remove the temp_dir
-    shutil.rmtree(temp_dir)
+from lmcommon.fixtures import mock_config_with_notestore
 
 
 def helper_create_labbook_change(labbook, cnt=0):
@@ -76,12 +51,12 @@ def helper_create_notedetailobject():
 
 class TestNoteStore:
 
-    def test_create_notestore(self, mock_create_notestore):
+    def test_create_notestore(self, mock_config_with_notestore):
         """Test to verify the notestore is initialized properly"""
-        assert type(mock_create_notestore[0]) == NoteStore
-        assert type(mock_create_notestore[0].labbook) == LabBook
+        assert type(mock_config_with_notestore[0]) == NoteStore
+        assert type(mock_config_with_notestore[0].labbook) == LabBook
 
-    def test_put_get_detail_record(self, mock_create_notestore):
+    def test_put_get_detail_record(self, mock_config_with_notestore):
         """Test to test storing and retrieving data from the notestore"""
 
         # Create test values
@@ -97,49 +72,49 @@ class TestNoteStore:
         free_text3 = ''.join(random.choice('0123456789abcdefghijklmnopqrstuv;') for i in range(1000))
         objects3 = [helper_create_notedetailobject()]
 
-        mock_create_notestore[0].put_detail_record(linked_hash1, free_text1, objects1)
-        mock_create_notestore[0].put_detail_record(linked_hash2, free_text2, objects2)
-        mock_create_notestore[0].put_detail_record(linked_hash3, free_text3, objects3)
+        mock_config_with_notestore[0].put_detail_record(linked_hash1, free_text1, objects1)
+        mock_config_with_notestore[0].put_detail_record(linked_hash2, free_text2, objects2)
+        mock_config_with_notestore[0].put_detail_record(linked_hash3, free_text3, objects3)
 
-        detail_record = mock_create_notestore[0].get_detail_record(linked_hash1)
+        detail_record = mock_config_with_notestore[0].get_detail_record(linked_hash1)
         assert free_text1 == detail_record["free_text"]
         for true_obj, test_obj in zip(objects1, detail_record["objects"]):
             assert true_obj.__dict__ == test_obj.__dict__
 
-        detail_record = mock_create_notestore[0].get_detail_record(linked_hash2)
+        detail_record = mock_config_with_notestore[0].get_detail_record(linked_hash2)
         assert free_text2 == detail_record["free_text"]
         for true_obj, test_obj in zip(objects2, detail_record["objects"]):
             assert true_obj.__dict__ == test_obj.__dict__
 
-        detail_record = mock_create_notestore[0].get_detail_record(linked_hash3)
+        detail_record = mock_config_with_notestore[0].get_detail_record(linked_hash3)
         assert free_text3 == detail_record["free_text"]
         for true_obj, test_obj in zip(objects3, detail_record["objects"]):
             assert true_obj.__dict__ == test_obj.__dict__
 
-    def test_validate_tags_length(self, mock_create_notestore):
+    def test_validate_tags_length(self, mock_config_with_notestore):
         """Method to test limiting tag length"""
-        max_length_tag = [''.join(random.choice('0123456789abcdef') for i in range(mock_create_notestore[0].max_tag_length))]
-        too_big_tag = [''.join(random.choice('0123456789abcdef') for i in range(mock_create_notestore[0].max_tag_length + 1))]
+        max_length_tag = [''.join(random.choice('0123456789abcdef') for i in range(mock_config_with_notestore[0].max_tag_length))]
+        too_big_tag = [''.join(random.choice('0123456789abcdef') for i in range(mock_config_with_notestore[0].max_tag_length + 1))]
 
-        assert max_length_tag == mock_create_notestore[0]._validate_tags(max_length_tag)
+        assert max_length_tag == mock_config_with_notestore[0]._validate_tags(max_length_tag)
 
         with pytest.raises(ValueError):
-            mock_create_notestore[0]._validate_tags(too_big_tag)
+            mock_config_with_notestore[0]._validate_tags(too_big_tag)
 
-    def test_validate_tags_num(self, mock_create_notestore):
+    def test_validate_tags_num(self, mock_config_with_notestore):
         """Method to test limiting number of tags"""
-        max_num_tag = ["{}".format(x) for x in range(mock_create_notestore[0].max_num_tags)]
-        too_many_tag = ["{}".format(x) for x in range(mock_create_notestore[0].max_num_tags+1)]
+        max_num_tag = ["{}".format(x) for x in range(mock_config_with_notestore[0].max_num_tags)]
+        too_many_tag = ["{}".format(x) for x in range(mock_config_with_notestore[0].max_num_tags+1)]
 
-        assert len(max_num_tag) == len(mock_create_notestore[0]._validate_tags(max_num_tag))
+        assert len(max_num_tag) == len(mock_config_with_notestore[0]._validate_tags(max_num_tag))
 
         with pytest.raises(ValueError):
-            mock_create_notestore[0]._validate_tags(too_many_tag)
+            mock_config_with_notestore[0]._validate_tags(too_many_tag)
 
-    def test_validate_tags_cleanup(self, mock_create_notestore):
+    def test_validate_tags_cleanup(self, mock_config_with_notestore):
         """Method to test tag validation and cleanup"""
         tags = ["goodtag", "another tag", "dup", "dup", "bad tag\`;"]
-        clean_tags = mock_create_notestore[0]._validate_tags(tags)
+        clean_tags = mock_config_with_notestore[0]._validate_tags(tags)
         assert len(clean_tags) == 4
         assert "bad tag\`;" not in clean_tags
         assert "bad tag" in clean_tags
@@ -147,10 +122,10 @@ class TestNoteStore:
         assert "another tag" in clean_tags
         assert "dup" in clean_tags
 
-    def test_create_get_note_summary(self, mock_create_notestore):
+    def test_create_get_note_summary(self, mock_config_with_notestore):
         """Method to test creating and getting an individual note summary"""
         # Create a repo change
-        linked_commit = helper_create_labbook_change(mock_create_notestore[1])
+        linked_commit = helper_create_labbook_change(mock_config_with_notestore[1])
 
         # Create Note Data
         note_data = {"linked_commit": linked_commit.hexsha,
@@ -162,10 +137,10 @@ class TestNoteStore:
                      }
 
         # Create Note
-        note_commit = mock_create_notestore[0].create_note(note_data)
+        note_commit = mock_config_with_notestore[0].create_note(note_data)
 
         # Get Note and check
-        stored_note = mock_create_notestore[0].get_note_summary(note_commit.hexsha)
+        stored_note = mock_config_with_notestore[0].get_note_summary(note_commit.hexsha)
 
         assert note_data["linked_commit"] == stored_note["linked_commit"]
         assert note_data["message"] == stored_note["message"]
@@ -175,10 +150,10 @@ class TestNoteStore:
         assert stored_note["timestamp"] == note_commit.committed_datetime
         assert stored_note["author"] == {'name': 'Gigantum AutoCommit', 'email': 'noreply@gigantum.io'}
 
-    def test_invalid_log_level(self, mock_create_notestore):
+    def test_invalid_log_level(self, mock_config_with_notestore):
         """Method to test trying to create a note with an invalid log level"""
         # Create a repo change
-        linked_commit = helper_create_labbook_change(mock_create_notestore[1])
+        linked_commit = helper_create_labbook_change(mock_config_with_notestore[1])
 
         # Create Note Data
         note_data = {"linked_commit": linked_commit.hexsha,
@@ -191,17 +166,17 @@ class TestNoteStore:
 
         # Create Note
         with pytest.raises(ValueError):
-            mock_create_notestore[0].create_note(note_data)
+            mock_config_with_notestore[0].create_note(note_data)
 
-    def test_get_note_does_not_exist(self, mock_create_notestore):
+    def test_get_note_does_not_exist(self, mock_config_with_notestore):
         """Test getting a note by a commit hash that does not exist"""
         with pytest.raises(ValueError):
-            mock_create_notestore[0].get_note_summary("abcdabcdacbd")
+            mock_config_with_notestore[0].get_note_summary("abcdabcdacbd")
 
-    def test_create_get_note(self, mock_create_notestore):
+    def test_create_get_note(self, mock_config_with_notestore):
         """Method to test creating and getting an individual note"""
         # Create a repo change
-        linked_commit = helper_create_labbook_change(mock_create_notestore[1])
+        linked_commit = helper_create_labbook_change(mock_config_with_notestore[1])
 
         # Create Note Data
         note_data = {"linked_commit": linked_commit.hexsha,
@@ -213,10 +188,10 @@ class TestNoteStore:
                      }
 
         # Create Note
-        note_commit = mock_create_notestore[0].create_note(note_data)
+        note_commit = mock_config_with_notestore[0].create_note(note_data)
 
         # Get Note and check
-        stored_note = mock_create_notestore[0].get_note(note_commit.hexsha)
+        stored_note = mock_config_with_notestore[0].get_note(note_commit.hexsha)
 
         assert note_data["linked_commit"] == stored_note["linked_commit"]
         assert note_data["message"] == stored_note["message"]
@@ -230,13 +205,13 @@ class TestNoteStore:
         for obj_truth, obj_test in zip(note_data["objects"], stored_note["objects"]):
             assert obj_truth.__dict__ == obj_test.__dict__
 
-    def test_get_note_summaries(self, mock_create_notestore):
+    def test_get_note_summaries(self, mock_config_with_notestore):
         """Method to test creating and getting a bunch of note summaries"""
 
         note_truth = []
         for cnt in range(0, 10):
             # Create a repo change
-            linked_commit = helper_create_labbook_change(mock_create_notestore[1])
+            linked_commit = helper_create_labbook_change(mock_config_with_notestore[1])
 
             # Create Note Data
             note_data = {"linked_commit": linked_commit.hexsha,
@@ -248,11 +223,11 @@ class TestNoteStore:
                          }
 
             # Create Note
-            note_commit = mock_create_notestore[0].create_note(note_data)
+            note_commit = mock_config_with_notestore[0].create_note(note_data)
             note_truth.append([note_data, note_commit])
 
         # Test Getting all the summaries
-        summaries = mock_create_notestore[0].get_all_note_summaries()
+        summaries = mock_config_with_notestore[0].get_all_note_summaries()
         note_truth.reverse()
 
         for truth, test in zip(note_truth, summaries):
@@ -264,13 +239,13 @@ class TestNoteStore:
             assert test["timestamp"] == truth[1].committed_datetime
             assert test["author"] == {'name': 'Gigantum AutoCommit', 'email': 'noreply@gigantum.io'}
 
-    def test_get_notes(self, mock_create_notestore):
+    def test_get_notes(self, mock_config_with_notestore):
         """Method to test creating and getting a bunch of note summaries and converting them to notes"""
 
         note_truth = []
         for cnt in range(0, 10):
             # Create a repo change
-            linked_commit = helper_create_labbook_change(mock_create_notestore[1])
+            linked_commit = helper_create_labbook_change(mock_config_with_notestore[1])
 
             # Create Note Data
             note_data = {"linked_commit": linked_commit.hexsha,
@@ -282,15 +257,15 @@ class TestNoteStore:
                          }
 
             # Create Note
-            note_commit = mock_create_notestore[0].create_note(note_data)
+            note_commit = mock_config_with_notestore[0].create_note(note_data)
             note_truth.append([note_data, note_commit])
 
         # Test Getting all the summaries
-        summaries = mock_create_notestore[0].get_all_note_summaries()
+        summaries = mock_config_with_notestore[0].get_all_note_summaries()
         note_truth.reverse()
 
         for truth, test in zip(note_truth, summaries):
-            test = mock_create_notestore[0].summary_to_note(test)
+            test = mock_config_with_notestore[0].summary_to_note(test)
             assert truth[0]["linked_commit"] == test["linked_commit"]
             assert truth[0]["message"] == test["message"]
             assert truth[0]["level"] == test["level"]

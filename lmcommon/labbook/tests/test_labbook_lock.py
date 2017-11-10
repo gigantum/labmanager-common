@@ -22,40 +22,57 @@ import time
 import os
 from multiprocessing import Process
 
-from lmcommon.labbook.lock import lock_labbook
+from lmcommon.labbook import LabBook
 from lmcommon.fixtures import mock_labbook
 
 
-def write_function(filename, delay, value):
+def write_function(filename: str, delay: int, value: str, labbook: LabBook) -> None:
     """
     A test function that appends to a file after a delay
     """
     time.sleep(delay)
-    with open(filename, 'at') as f:
-        f.write(value)
+    with labbook.lock_labbook():
+        with open(filename, 'at') as f:
+            f.write(value)
+            time.sleep(2)
 
 
 class TestLabBookLock(object):
     def test_simple_write(self, mock_labbook):
-        """Test creating favorite in an invalid subdir"""
+        """Test simple lock case"""
         filename = os.path.join(mock_labbook[2].root_dir, 'testfile.txt')
 
-        with lock_labbook(mock_labbook[2]):
-            write_function(filename, 0, "1")
+        write_function(filename, 0, "1", mock_labbook[2])
 
         with open(filename, 'rt') as f:
             data = f.read()
 
         assert data == "1"
 
-    #def test_simple_write(self, mock_labbook):
-    #    """Test creating favorite in an invalid subdir"""
-    #    filename = os.path.join(mock_labbook[2].root_dir, 'testfile.txt')
-#
-    #    proc1 = Process(target=write_function, args=(filename, 3, "1"))
-    #    proc1.start()
-    #    proc = Process(target=write_function, args=(filename, 3, "1"))
-#
-    #    with pytest.raises(ValueError):
-    #        mock_labbook[2].create_favorite("blah", "test/file.file")
+    def test_multiple_acquires(self, mock_labbook):
+        """Test trying to lock around multiple writes"""
+        filename = os.path.join(mock_labbook[2].root_dir, 'testfile.txt')
+
+        proc1 = Process(target=write_function, args=(filename, 1, "1", mock_labbook[2]))
+        proc1.start()
+        proc2 = Process(target=write_function, args=(filename, 0, "2", mock_labbook[2]))
+        proc2.start()
+        proc3 = Process(target=write_function, args=(filename, .5, "3", mock_labbook[2]))
+        proc3.start()
+
+        time.sleep(7)
+        proc1.join()
+        proc1.terminate()
+        proc2.join()
+        proc2.terminate()
+        proc3.join()
+        proc3.terminate()
+
+        with open(filename, 'rt') as f:
+            data = f.read()
+
+        assert data == "231"
+
+
+
 

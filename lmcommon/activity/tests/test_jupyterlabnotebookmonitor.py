@@ -17,8 +17,10 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-from lmcommon.activity.tests.fixtures import mock_labbook, redis_client, mock_kernel
+from lmcommon.activity.tests.fixtures import redis_client, mock_kernel
+from lmcommon.fixtures import mock_labbook
 import uuid
+import os
 
 from lmcommon.activity.monitors.monitor_jupyterlab import JupyterLabNotebookMonitor, BasicJupyterLabProcessor
 
@@ -27,28 +29,37 @@ class TestJupyterLabNotebookMonitor(object):
 
     def test_init(self, redis_client, mock_labbook):
         """Test getting the supported names of the dev env monitor"""
-        monitor_key = "dev_env_monitor:{}:{}:{}:{}:activity_monitor:{}".format('default',
-                                                                               'default',
-                                                                               'test-labbook',
+        # Create dummy file in lab book
+        dummy_file = os.path.join(mock_labbook[2].root_dir, 'Test.ipynb')
+        with open(dummy_file, 'wt') as tf:
+            tf.write("Dummy file")
+
+        monitor_key = "dev_env_monitor:{}:{}:{}:{}:activity_monitor:{}".format('test',
+                                                                               'test',
+                                                                               'labbook1',
                                                                                'jupyterlab-ubuntu1604',
                                                                                uuid.uuid4())
 
-        monitor = JupyterLabNotebookMonitor("default", "default", mock_labbook[0].name,
-                                            monitor_key, config_file=mock_labbook[1])
+        monitor = JupyterLabNotebookMonitor("test", "test", mock_labbook[2].name,
+                                            monitor_key, config_file=mock_labbook[0])
 
         assert len(monitor.processors) == 1
         assert type(monitor.processors[0]) == BasicJupyterLabProcessor
 
     def test_start(self, redis_client, mock_labbook, mock_kernel):
         """Test processing notebook activity"""
-        monitor_key = "dev_env_monitor:{}:{}:{}:{}:activity_monitor:{}".format('default',
-                                                                               'default',
-                                                                               'test-labbook',
+        dummy_file = os.path.join(mock_labbook[2].root_dir, 'Test.ipynb')
+        with open(dummy_file, 'wt') as tf:
+            tf.write("Dummy file")
+
+        monitor_key = "dev_env_monitor:{}:{}:{}:{}:activity_monitor:{}".format('test',
+                                                                               'test',
+                                                                               'labbook1',
                                                                                'jupyterlab-ubuntu1604',
                                                                                uuid.uuid4())
 
-        monitor = JupyterLabNotebookMonitor("default", "default", mock_labbook[0].name,
-                                            monitor_key, config_file=mock_labbook[1])
+        monitor = JupyterLabNotebookMonitor("test", "test", mock_labbook[2].name,
+                                            monitor_key, config_file=mock_labbook[0])
 
         # Setup monitoring metadata
         metadata = {"kernel_id": "XXXX",
@@ -60,7 +71,7 @@ class TestJupyterLabNotebookMonitor(object):
         mock_kernel[0].execute("print('Hello, World')")
 
         # Check lab book repo state
-        status = mock_labbook[0].git.status()
+        status = mock_labbook[2].git.status()
         assert len(status["untracked"]) == 1
         assert status["untracked"][0] == 'Test.ipynb'
 
@@ -84,7 +95,7 @@ class TestJupyterLabNotebookMonitor(object):
         assert len(monitor.result) > 0
 
         # Check lab book repo state
-        status = mock_labbook[0].git.status()
+        status = mock_labbook[2].git.status()
         assert len(status["untracked"]) == 1
         assert status["untracked"][0] == 'Test.ipynb'
 
@@ -93,12 +104,12 @@ class TestJupyterLabNotebookMonitor(object):
         assert monitor.kernel_status == 'idle'
 
         # Check lab book repo state
-        status = mock_labbook[0].git.status()
+        status = mock_labbook[2].git.status()
         assert len(status["untracked"]) == 0
         assert len(status["staged"]) == 0
         assert len(status["unstaged"]) == 0
 
         # Check note entry
-        log = mock_labbook[0].git.log()
+        log = mock_labbook[2].git.log()
         assert len(log) == 3
         assert 'Test.ipynb' in log[0]['message']

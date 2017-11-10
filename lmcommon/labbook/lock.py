@@ -17,56 +17,28 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-from contextlib import contextmanager
-from lmcommon.logging import LMLogger
-import time
-
-from redis import StrictRedist
 import redis_lock
+from redis import StrictRedis
+
+from lmcommon.logging import LMLogger
 
 logger = LMLogger.get_logger()
 
 
-@contextmanager
-def lock_labbook(labbook):
-    """A context manager for locking labbook operations that is decorator compatible
+def reset_all_locks(config: dict) -> None:
+    """ A helper method to reset all locks
 
-    Manages the lock process along with catching and logging exceptions that may occur
+    Typically used to clean things up after crashes or on startup when not auto-expiring keys.
+
+    Args:
+        config(dict): The configuration details for the 'lock' section of the config file
+
+    Returns:
+        None
 
     """
-    lock: redis_lock.Lock = None
-    try:
-        config = labbook.labmanager_config.config['lock']
+    client = StrictRedis(host=config['redis']['host'],
+                         port=config['redis']['port'],
+                         db=config['redis']['db'])
 
-        # Get a redis client
-        redis_client = StrictRedis(host=config['redis']['host'],
-                                   port=config['redis']['port'],
-                                   db=config['redis']['db'])
-
-        # Get a lock
-        lock = redis_lock.Lock(redis_client, f'filesystem_lock|{labbook.key}',
-                               expire=config['expire'],
-                               auto_renewal=config['auto_renewal'],
-                               strict=config['redis']['strict'])
-
-        if lock.acquire(timeout=config['timeout']):
-            # Do the work
-            start_time = time.time()
-            yield
-            if config['expire']:
-                if (time.time() - start_time) > config['expire']:
-                    logger.warning(f"LabBook task took more than {config['expire']}s. File locking possibly invalid.")
-        else:
-            raise IOError(f"Could not acquire LabBook lock within {LOCK_TIMEOUT} seconds.")
-
-    except Exception as e:
-        logger.error(e)
-        raise
-    finally:
-        # Release the Lock
-        if lock:
-            try:
-                lock.release()
-            except redis_lock.NotAcquired as e:
-                logger.error(e)
-
+    redis_lock.reset_all(client)

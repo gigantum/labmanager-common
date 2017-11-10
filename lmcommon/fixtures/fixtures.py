@@ -30,6 +30,7 @@ import pytest
 from lmcommon.configuration import Configuration
 from lmcommon.environment import RepositoryManager
 from lmcommon.labbook import LabBook
+from lmcommon.notes import NoteStore
 
 
 def _create_temp_work_dir(override_dict: dict = None):
@@ -112,6 +113,7 @@ def mock_config_with_repo():
     yield conf_file, working_dir
     shutil.rmtree(working_dir)
 
+
 @pytest.fixture()
 def mock_config_file_with_auth():
     """A pytest fixture that creates a temporary directory and a config file to match. Deletes directory after test"""
@@ -135,6 +137,21 @@ def mock_config_file_with_auth():
 
     conf_file, working_dir = _create_temp_work_dir(override_dict=overrides)
     yield conf_file, working_dir, auth_data  # provide the fixture value
+    shutil.rmtree(working_dir)
+
+
+@pytest.fixture()
+def mock_config_with_notestore():
+    """A pytest fixture that creates a notestore (and labbook) and deletes directory after test"""
+    # Create a temporary working directory
+    conf_file, working_dir = _create_temp_work_dir()
+    lb = LabBook(conf_file)
+    lb.new({"username": "default"}, "labbook1", username="default", description="my first labbook")
+    ns = NoteStore(lb)
+
+    yield ns, lb
+
+    # Remove the temp_dir
     shutil.rmtree(working_dir)
 
 
