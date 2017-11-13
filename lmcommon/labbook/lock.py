@@ -17,7 +17,28 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
+import redis_lock
+from redis import StrictRedis
 
-from .fixtures import (labbook_dir_tree, mock_config_file, mock_config_with_repo,
-                       mock_config_file_team, mock_config_file_with_auth, mock_labbook, mock_config_with_notestore)
+from lmcommon.logging import LMLogger
 
+logger = LMLogger.get_logger()
+
+
+def reset_all_locks(config: dict) -> None:
+    """ A helper method to reset all locks
+
+    Typically used to clean things up after crashes or on startup when not auto-expiring keys.
+
+    Args:
+        config(dict): The configuration details for the 'lock' section of the config file
+
+    Returns:
+        None
+
+    """
+    client = StrictRedis(host=config['redis']['host'],
+                         port=config['redis']['port'],
+                         db=config['redis']['db'])
+
+    redis_lock.reset_all(client)

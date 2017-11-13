@@ -25,6 +25,18 @@ git:
   backend: "filesystem"
   working_directory: "~/gigantum"
 
+# LabBook Lock Configuration
+lock:
+  redis:
+    host: localhost
+    port: 6379
+    db: 3
+    strict: true
+  reset_on_start: true
+  timeout: 120
+  expire: null
+  auto_renewal: false
+
 # Flask Configuration
 flask:
   DEBUG: true
