@@ -27,6 +27,7 @@ import yaml
 import json
 import time
 from contextlib import contextmanager
+from pkg_resources import resource_filename
 
 from lmcommon.configuration import Configuration
 from lmcommon.gitlib import get_git_interface, GitAuthor
@@ -57,6 +58,7 @@ class LabBook(object):
         # LabBook Properties
         self._root_dir: Optional[str] = None  # The root dir is the location of the labbook this instance represents
         self._data: Optional[Dict[str, Any]] = None
+        self._checkout_id: Optional[str] = None
 
         # LabBook Environment
         self._env = None
@@ -211,6 +213,19 @@ class LabBook(object):
         while len(path_str or '') >= 1 and path_str[0] == os.path.sep:
             path_str = path_str[1:]
         return path_str
+
+    @property
+    def checkout_id(self) -> str:
+        if self._checkout_id:
+            return self._checkout_id
+        else:
+            # Try to load checkout ID from disk
+            if os.path.exists(os.path.join(self.root_dir, '.gigantum', '.checkout')):
+                # Load from disk
+                pass
+            else:
+                # Create a new checkout ID and file
+                pass
 
     def _set_root_dir(self, new_root_dir: str) -> None:
         """Update the root directory and also reconfigure the git instance
@@ -838,9 +853,8 @@ class LabBook(object):
             dockerfile.write("FROM ubuntu:16.04")
 
         # Create .gitignore default file
-        # TODO: Use a base .gitignore file vs. global variable
-        with open(os.path.join(self.root_dir, ".gitignore"), 'wt') as gi_file:
-            gi_file.write(GIT_IGNORE_DEFAULT)
+        shutil.copyfile(os.path.join(resource_filename('lmcommon', 'labbook'), 'gitignore.default'),
+                        os.path.join(self.root_dir, ".gitignore"))
 
         # Commit
         # TODO: Once users are properly added, create a GitAuthor instance before commit
