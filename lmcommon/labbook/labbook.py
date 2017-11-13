@@ -216,16 +216,31 @@ class LabBook(object):
 
     @property
     def checkout_id(self) -> str:
+        """Property that provides a unique ID for a checkout. This is used in the activity feed database to ensure
+        parallel work in the same branch will merge safely
+
+        Returns:
+            str
+        """
         if self._checkout_id:
             return self._checkout_id
         else:
             # Try to load checkout ID from disk
-            if os.path.exists(os.path.join(self.root_dir, '.gigantum', '.checkout')):
+            checkout_file = os.path.join(self.root_dir, '.gigantum', '.checkout')
+            if os.path.exists(checkout_file):
                 # Load from disk
-                pass
+                with open(checkout_file, 'rt') as cf:
+                    self._checkout_id = cf.read()
             else:
                 # Create a new checkout ID and file
-                pass
+                self._checkout_id = f"{self.key}|{self.git.get_current_branch_name()}|{uuid.uuid4().hex[0:10]}"
+                self._checkout_id = self._checkout_id.replace('|', '-')
+                with open(checkout_file, 'wt') as cf:
+                    cf.write(self._checkout_id)
+
+                # Log new checkout ID creation
+                logger.info(f"Created new checkout context ID {self._checkout_id}")
+            return self._checkout_id
 
     def _set_root_dir(self, new_root_dir: str) -> None:
         """Update the root directory and also reconfigure the git instance
