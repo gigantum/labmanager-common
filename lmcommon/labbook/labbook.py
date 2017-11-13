@@ -456,7 +456,7 @@ class LabBook(object):
                 raise
             return self._get_file_info(relative_path)
 
-    def listdir(self, base_path: Optional[str] = None, show_hidden: bool = False) -> List[Dict[str, Any]]:
+    def walkdir(self, base_path: Optional[str] = None, show_hidden: bool = False) -> List[Dict[str, Any]]:
         """Return a list of all files and directories in the labbook. Never includes the .git or
          .gigantum directory.
 
@@ -472,7 +472,7 @@ class LabBook(object):
         # base_dir is the root directory to search, to account for relative paths inside labbook.
         base_dir = os.path.join(self.root_dir, base_path or '')
         if not os.path.isdir(base_dir):
-            raise ValueError(f"Labbook listdir base_dir {base_dir} not an existing directory")
+            raise ValueError(f"Labbook walkdir base_dir {base_dir} not an existing directory")
 
         for root, dirs, files in os.walk(base_dir):
             for f in files:
@@ -486,6 +486,37 @@ class LabBook(object):
             if not show_hidden and any([len(p) and p[0] == '.' for p in f_p.split('/')]):
                 continue
             stats.append(self._get_file_info(f_p))
+
+        # For more deterministic responses, sort resulting paths alphabetically.
+        return sorted(stats, key=lambda a: a['key'])
+
+    def listdir(self, base_path: Optional[str] = None, show_hidden: bool = False) -> List[Dict[str, Any]]:
+        """Return a list of all files and directories in a directory. Never includes the .git or
+         .gigantum directory.
+
+        Args:
+            base_path(str): Relative base path, if not listing from labbook's root.
+            show_hidden(bool): If True, include hidden directories (EXCLUDING .git and .gigantum)
+
+        Returns:
+            List[Dict[str, str]]: List of dictionaries containing file and directory metadata
+        """
+        # base_dir is the root directory to search, to account for relative paths inside labbook.
+        base_dir = os.path.join(self.root_dir, base_path or '')
+        if not os.path.isdir(base_dir):
+            raise ValueError(f"Labbook listdir base_dir {base_dir} not an existing directory")
+
+        stats: List[Dict[str, Any]] = list()
+        for item in os.listdir(base_dir):
+            if item in ['.git', '.gigantum']:
+                # Never include .git or .gigantum
+                continue
+
+            if not show_hidden and any([len(p) and p[0] == '.' for p in item.split('/')]):
+                continue
+
+            # Create tuple (isDir, key)
+            stats.append(self._get_file_info(os.path.join(base_path or "", item)))
 
         # For more deterministic responses, sort resulting paths alphabetically.
         return sorted(stats, key=lambda a: a['key'])
@@ -536,7 +567,13 @@ class LabBook(object):
                 with open(os.path.join(favorites_dir, f'{target_sub_dir}.json'), 'rt') as f_data:
                     favorite_data = json.load(f_data)
 
-            favorite_record = {"key": os.path.join(target_sub_dir, relative_path),
+            # Ensure the key has a trailing slash if a directory to meet convention
+            key = os.path.join(target_sub_dir, relative_path)
+            if is_dir:
+                if key[-1] != os.path.sep:
+                    key = key + os.path.sep
+
+            favorite_record = {"key": key,
                                "description": description,
                                "is_dir": is_dir}
 
