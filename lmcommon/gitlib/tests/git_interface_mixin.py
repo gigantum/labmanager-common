@@ -975,6 +975,29 @@ class GitInterfaceMixin(object):
         with pytest.raises(ValueError):
             git.checkout("a;lskjdfas;lkjhdf")
 
+    def test_checkout_branch_context(self, mock_initialized):
+        """Method to test checkout context ID file getting removed """
+        git = mock_initialized[0]
+
+        assert git.repo.head.ref.name == "master"
+
+        git.create_branch("test_branch1")
+
+        assert git.repo.head.ref.name == "master"
+
+        # Write a checkout context file for this test
+        os.makedirs(os.path.join(git.working_directory, '.gigantum'))
+        checkout_file = os.path.join(git.working_directory, '.gigantum', '.checkout')
+
+        with open(checkout_file, 'wt') as cf:
+            cf.write("dummy_id")
+        assert os.path.exists(checkout_file) is True
+
+        # Checkout branch
+        git.checkout("test_branch1")
+
+        assert os.path.exists(checkout_file) is False
+
     def test_list_branches(self, mock_initialized_remote):
         """Method to test listing branches"""
         git = mock_initialized_remote[0]

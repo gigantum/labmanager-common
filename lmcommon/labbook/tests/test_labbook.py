@@ -117,6 +117,59 @@ class TestLabBook(object):
         with pytest.raises(ValueError):
             lb.new(owner={"username": "test"}, name="labbook1", description="my first labbook")
 
+    def test_checkout_id_property(self, mock_config_file):
+        """Test trying to create a labbook with a name that already exists locally"""
+        lb = LabBook(mock_config_file[0])
+
+        lb.new(owner={"username": "test"}, name="labbook1", description="my first labbook")
+
+        checkout_file = os.path.join(lb.root_dir, '.gigantum', '.checkout')
+        assert os.path.exists(checkout_file) is False
+
+        checkout_id = lb.checkout_id
+
+        assert os.path.exists(checkout_file) is True
+
+        parts = checkout_id.split("-")
+        assert len(parts) == 5
+        assert parts[0] == "test"
+        assert parts[1] == "test"
+        assert parts[2] == "labbook1"
+        assert parts[3] == "master"
+        assert len(parts[4]) == 10
+
+        # Check repo is clean
+        status = lb.git.status()
+        for key in status:
+            assert len(status[key]) == 0
+
+        # Remove checkout file
+        os.remove(checkout_file)
+
+        # Repo should STILL be clean as it is not tracked
+        status = lb.git.status()
+        for key in status:
+            assert len(status[key]) == 0
+
+    def test_checkout_id_property_multiple_access(self, mock_config_file):
+        """Test getting a checkout id multiple times"""
+        lb = LabBook(mock_config_file[0])
+        lb.new(owner={"username": "test"}, name="labbook1", description="my first labbook")
+
+        checkout_file = os.path.join(lb.root_dir, '.gigantum', '.checkout')
+        assert os.path.exists(checkout_file) is False
+        checkout_id_1 = lb.checkout_id
+        assert os.path.exists(checkout_file) is True
+
+        assert checkout_id_1 == lb.checkout_id
+
+        # Remove checkout id
+        os.remove(checkout_file)
+        lb._checkout_id = None
+
+        # New ID should be created
+        assert checkout_id_1 != lb.checkout_id
+
     def test_rename_labbook(self, mock_config_file):
         """Test renaming a LabBook"""
         lb = LabBook(mock_config_file[0])
