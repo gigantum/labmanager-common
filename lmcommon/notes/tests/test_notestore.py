@@ -85,15 +85,15 @@ class TestNoteStore:
         """Test to test storing and retrieving data from the notestore"""
 
         # Create test values
-        linked_hash1 = ''.join(random.choice('0123456789abcdef') for i in range(30))
+        linked_hash1 = ''.join(random.choice('0123456789abcdef') for i in range(40))
         free_text1 = ''.join(random.choice('0123456789abcdefghijklmnopqrstuv;') for i in range(1000))
         objects1 = [helper_create_notedetailobject() for _ in range(1, 5)]
 
-        linked_hash2 = ''.join(random.choice('0123456789abcdef') for i in range(30))
+        linked_hash2 = ''.join(random.choice('0123456789abcdef') for i in range(40))
         free_text2 = ''.join(random.choice('0123456789abcdefghijklmnopqrstuv;') for i in range(1000))
         objects2 = [helper_create_notedetailobject() for _ in range(1, 2)]
 
-        linked_hash3 = ''.join(random.choice('0123456789abcdef') for i in range(30))
+        linked_hash3 = ''.join(random.choice('0123456789abcdef') for i in range(40))
         free_text3 = ''.join(random.choice('0123456789abcdefghijklmnopqrstuv;') for i in range(1000))
         objects3 = [helper_create_notedetailobject()]
 
