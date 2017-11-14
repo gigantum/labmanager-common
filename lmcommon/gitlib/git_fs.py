@@ -666,6 +666,11 @@ class GitFilesystem(GitRepoInterface):
         else:
             self.repo.heads[branch_name].checkout()
 
+        # Remove the checkout context id file if one exists
+        checkout_id_file = os.path.join(self.working_directory, '.gigantum', '.checkout')
+        if os.path.exists(checkout_id_file):
+            os.remove(checkout_id_file)
+
     # BRANCH METHODS
 
     # TAG METHODS
