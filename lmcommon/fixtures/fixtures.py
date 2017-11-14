@@ -17,13 +17,12 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-
 import json
 import os
 import shutil
 import tempfile
 import uuid
-
+import collections
 import git
 from pkg_resources import resource_filename
 import pytest
@@ -31,15 +30,27 @@ import pytest
 from lmcommon.configuration import Configuration
 from lmcommon.environment import RepositoryManager
 from lmcommon.labbook import LabBook
+from lmcommon.notes import NoteStore
 
 
 def _create_temp_work_dir(override_dict: dict = None):
     """Helper method to create a temporary working directory and associated config file"""
+    def merge_dict(d1, d2) -> None:
+        """Method to merge 1 dictionary into another, updating and adding key/values as needed
+        """
+        for k, v2 in d2.items():
+            v1 = d1.get(k)  # returns None if v1 has no value for this key
+            if (isinstance(v1, collections.Mapping) and
+                    isinstance(v2, collections.Mapping)):
+                merge_dict(v1, v2)
+            else:
+                d1[k] = v2
+
     # Create a temporary working directory
     unit_test_working_dir = os.path.join(tempfile.gettempdir(), uuid.uuid4().hex)
     os.makedirs(unit_test_working_dir)
 
-    default_config = {
+    default_override_config = {
         'core': {
             'team_mode': False
         },
@@ -55,11 +66,17 @@ def _create_temp_work_dir(override_dict: dict = None):
         },
         'auth': {
             'audience': "io.gigantum.api.dev"
+        },
+        'lock': {
+            'redis': {
+                'strict': False,
+                'db': 4
+            }
         }
     }
 
     config = Configuration()
-    config.config = default_config
+    merge_dict(config.config, default_override_config)
     if override_dict:
         config.config.update(override_dict)
 
@@ -96,6 +113,7 @@ def mock_config_with_repo():
     yield conf_file, working_dir
     shutil.rmtree(working_dir)
 
+
 @pytest.fixture()
 def mock_config_file_with_auth():
     """A pytest fixture that creates a temporary directory and a config file to match. Deletes directory after test"""
@@ -119,6 +137,21 @@ def mock_config_file_with_auth():
 
     conf_file, working_dir = _create_temp_work_dir(override_dict=overrides)
     yield conf_file, working_dir, auth_data  # provide the fixture value
+    shutil.rmtree(working_dir)
+
+
+@pytest.fixture()
+def mock_config_with_notestore():
+    """A pytest fixture that creates a notestore (and labbook) and deletes directory after test"""
+    # Create a temporary working directory
+    conf_file, working_dir = _create_temp_work_dir()
+    lb = LabBook(conf_file)
+    lb.new({"username": "default"}, "labbook1", username="default", description="my first labbook")
+    ns = NoteStore(lb)
+
+    yield ns, lb
+
+    # Remove the temp_dir
     shutil.rmtree(working_dir)
 
 

@@ -21,9 +21,6 @@
 import pytest
 import tempfile
 import os
-import pprint
-import uuid
-import shutil
 import yaml
 
 from lmcommon.labbook import LabBook
@@ -83,7 +80,7 @@ class TestLabBook(object):
         labbook_dir = lb.new(name="labbook1", description="my first labbook",
                              owner={"username": "test"})
 
-        assert labbook_dir == os.path.join(mock_config_file[1], "test", "test", "labbooks",   "labbook1")
+        assert labbook_dir == os.path.join(mock_config_file[1], "test", "test", "labbooks", "labbook1")
         assert type(lb) == LabBook
 
         # Validate directory structure
@@ -119,6 +116,59 @@ class TestLabBook(object):
 
         with pytest.raises(ValueError):
             lb.new(owner={"username": "test"}, name="labbook1", description="my first labbook")
+
+    def test_checkout_id_property(self, mock_config_file):
+        """Test trying to create a labbook with a name that already exists locally"""
+        lb = LabBook(mock_config_file[0])
+
+        lb.new(owner={"username": "test"}, name="labbook1", description="my first labbook")
+
+        checkout_file = os.path.join(lb.root_dir, '.gigantum', '.checkout')
+        assert os.path.exists(checkout_file) is False
+
+        checkout_id = lb.checkout_id
+
+        assert os.path.exists(checkout_file) is True
+
+        parts = checkout_id.split("-")
+        assert len(parts) == 5
+        assert parts[0] == "test"
+        assert parts[1] == "test"
+        assert parts[2] == "labbook1"
+        assert parts[3] == "master"
+        assert len(parts[4]) == 10
+
+        # Check repo is clean
+        status = lb.git.status()
+        for key in status:
+            assert len(status[key]) == 0
+
+        # Remove checkout file
+        os.remove(checkout_file)
+
+        # Repo should STILL be clean as it is not tracked
+        status = lb.git.status()
+        for key in status:
+            assert len(status[key]) == 0
+
+    def test_checkout_id_property_multiple_access(self, mock_config_file):
+        """Test getting a checkout id multiple times"""
+        lb = LabBook(mock_config_file[0])
+        lb.new(owner={"username": "test"}, name="labbook1", description="my first labbook")
+
+        checkout_file = os.path.join(lb.root_dir, '.gigantum', '.checkout')
+        assert os.path.exists(checkout_file) is False
+        checkout_id_1 = lb.checkout_id
+        assert os.path.exists(checkout_file) is True
+
+        assert checkout_id_1 == lb.checkout_id
+
+        # Remove checkout id
+        os.remove(checkout_file)
+        lb._checkout_id = None
+
+        # New ID should be created
+        assert checkout_id_1 != lb.checkout_id
 
     def test_rename_labbook(self, mock_config_file):
         """Test renaming a LabBook"""
@@ -299,6 +349,7 @@ class TestLabBook(object):
         assert lb_loaded.id == lb.id
         assert lb_loaded.name == lb.name
         assert lb_loaded.description == lb.description
+        assert lb_loaded.key == 'test|test|labbook1'
 
     def test_change_properties(self, mock_config_file):
         """Test loading a labbook from a directory"""
@@ -480,6 +531,7 @@ class TestLabBook(object):
         assert os.path.isfile(os.path.join(lb.root_dir, 'code', 'subdir_moved', base_name))
 
     def test_makedir_simple(self, mock_config_file):
+        # Note that "score" refers to the count of .gitkeep files.
         lb = LabBook(mock_config_file[0])
         lb.new(owner={"username": "test"}, name="test-insert-files-1", description="validate tests.")
         long_dir = "/non/existant/dir/should/now/be/made"
@@ -497,7 +549,7 @@ class TestLabBook(object):
         # Ensure that count of .gitkeep files equals the number of subdirs
         assert score == len(LabBook._make_path_relative(long_dir).split(os.sep))
 
-    def test_listdir(self, mock_config_file, sample_src_file):
+    def test_walkdir(self, mock_config_file, sample_src_file):
         lb = LabBook(mock_config_file[0])
         lb.new(owner={"username": "test"}, name="test-insert-files-1", description="validate tests.")
         dirs = ["cat_dir", "/dog_dir", "/mouse_dir/", "mouse_dir/new_dir", "/simple/.hidden_dir"]
@@ -505,17 +557,17 @@ class TestLabBook(object):
             res = lb.makedir(d)
         lb.insert_file(sample_src_file, 'simple/.hidden_dir')
 
-        dir_walks_hidden = lb.listdir(show_hidden=True)
+        dir_walks_hidden = lb.walkdir(show_hidden=True)
         assert any([os.path.basename(sample_src_file) in d['key'] for d in dir_walks_hidden])
         assert not any(['.git' in d['key'].split(os.path.sep) for d in dir_walks_hidden])
         assert not any(['.gigantum' in d['key'] for d in dir_walks_hidden])
         assert all([d['key'][0] != '/' for d in dir_walks_hidden])
 
         # Since the file is in a hidden directory, it should not be found.
-        dir_walks = lb.listdir(show_hidden=False)
+        dir_walks = lb.walkdir(show_hidden=False)
         assert not any([os.path.basename(sample_src_file) in d['key'] for d in dir_walks])
 
-    def test_listdir_relative_path(self, mock_config_file, sample_src_file):
+    def test_walkdir_relative_path(self, mock_config_file, sample_src_file):
         lb = LabBook(mock_config_file[0])
         lb.new(owner={"username": "test"}, name="test-insert-files-1", description="validate tests.")
         dirs = ["cat_dir", "/dog_dir", "/mouse_dir/", "mouse_dir/new_dir", "/simple/.hidden_dir"]
@@ -523,14 +575,82 @@ class TestLabBook(object):
             res = lb.makedir(d)
         lb.insert_file(sample_src_file, 'simple/.hidden_dir')
 
-        dir_walks = lb.listdir(base_path='simple', show_hidden=True)
+        dir_walks = lb.walkdir(base_path='simple', show_hidden=True)
         assert any([os.path.join(".hidden_dir", os.path.basename(sample_src_file)) in d['key'] for d in dir_walks])
         # Any directories in labbook root should not be found outside of "simple"
         assert not any(["input" in d['key'] for d in dir_walks])
 
         # Raise value error for non-existing directory.
         with pytest.raises(ValueError):
-            dir_walks = lb.listdir(base_path='mouse_dir/not_existing', show_hidden=True)
+            dir_walks = lb.walkdir(base_path='mouse_dir/not_existing', show_hidden=True)
+
+    def test_listdir(self, mock_config_file, sample_src_file):
+        def write_test_file(base, name):
+            with open(os.path.join(base, name), 'wt') as f:
+                f.write("Blah blah")
+
+        lb = LabBook(mock_config_file[0])
+        lb.new(owner={"username": "test"}, name="test-listdir", description="validate tests.")
+        dirs = ["code/new_dir", ".hidden_dir"]
+        for d in dirs:
+            lb.makedir(d)
+        write_test_file(lb.root_dir, 'test1.txt')
+        write_test_file(lb.root_dir, 'test2.txt')
+        write_test_file(lb.root_dir, '.hidden.txt')
+        write_test_file(lb.root_dir, 'code/test_subdir1.txt')
+        write_test_file(lb.root_dir, 'code/test_subdir2.txt')
+        write_test_file(lb.root_dir, 'code/new_dir/tester.txt')
+
+        # List just the root.
+        data = lb.listdir()
+        assert len(data) == 5
+        assert data[0]['key'] == 'code/'
+        assert data[1]['key'] == 'input/'
+        assert data[2]['key'] == 'output/'
+        assert data[3]['key'] == 'test1.txt'
+        assert data[4]['key'] == 'test2.txt'
+        assert data[0]['is_dir'] is True
+        assert data[1]['is_dir'] is True
+        assert data[2]['is_dir'] is True
+        assert data[3]['is_dir'] is False
+        assert data[4]['is_dir'] is False
+
+        # List just the root, with hidden.
+        data = lb.listdir(show_hidden=True)
+        assert len(data) == 8
+        assert data[0]['key'] == '.gitignore'
+        assert data[1]['key'] == '.hidden.txt'
+        assert data[2]['key'] == '.hidden_dir/'
+        assert data[3]['key'] == 'code/'
+        assert data[4]['key'] == 'input/'
+        assert data[5]['key'] == 'output/'
+        assert data[6]['key'] == 'test1.txt'
+        assert data[7]['key'] == 'test2.txt'
+
+        # List just the code dir
+        data = lb.listdir(base_path='code')
+        assert len(data) == 3
+        assert data[0]['key'] == 'code/new_dir/'
+        assert data[1]['key'] == 'code/test_subdir1.txt'
+        assert data[2]['key'] == 'code/test_subdir2.txt'
+
+        data = lb.listdir(base_path='code/')
+        assert len(data) == 3
+        assert data[0]['key'] == 'code/new_dir/'
+        assert data[1]['key'] == 'code/test_subdir1.txt'
+        assert data[2]['key'] == 'code/test_subdir2.txt'
+
+        # List just the code/subdir dir
+        data = lb.listdir(base_path='code/new_dir')
+        assert len(data) == 1
+        assert data[0]['key'] == 'code/new_dir/tester.txt'
+
+    def test_listdir_expect_error(self, mock_config_file, sample_src_file):
+        lb = LabBook(mock_config_file[0])
+        lb.new(owner={"username": "test"}, name="test-listdir", description="validate tests.")
+
+        with pytest.raises(ValueError):
+            lb.listdir(base_path='blah')
 
     def test_make_path_relative(self):
         vectors = [
@@ -548,3 +668,12 @@ class TestLabBook(object):
         ]
         for sample_input, expected_output in vectors:
             assert LabBook._make_path_relative(sample_input) == expected_output
+
+    def test_labbook_key(self, mock_config_file):
+        lb = LabBook(mock_config_file[0])
+        lb.new(owner={"username": "test"}, name="test-lb-key", description="validate tests.")
+        assert lb.key == 'test|test|test-lb-key'
+
+        lb1key = lb.key
+        lb2 = LabBook(mock_config_file[0])
+        lb2.from_key(lb1key)
