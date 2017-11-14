@@ -179,7 +179,7 @@ class NoteStore(object):
         """Create a new note record in the LabBook
 
             note_data Fields:
-                note_detail_key(bytes): can be undefined. will be set by creation.
+                note_detail_key(str): can be undefined. will be set by creation.
                 linked_commit(str): Commit hash to the git commit the note is describing
                 message(str): Short summary message, limited to 256 characters
                 level(NoteLogLevel): The level in the note hierarchy
@@ -215,7 +215,7 @@ class NoteStore(object):
         
         # Prep log message
         note_metadata = {'level': note_data['level'],
-                         'note_detail_key': base64.b64encode(note_detail_key).decode('utf-8'),
+                         'note_detail_key': note_detail_key,
                          'linked_commit': note_data['linked_commit'], 
                          'tags': self._validate_tags(note_data['tags'])}
 
@@ -278,7 +278,7 @@ class NoteStore(object):
                     "linked_commit": note_metadata["linked_commit"],
                     "message": message,
                     "level": NoteLogLevel(note_metadata["level"]),
-                    "note_detail_key": base64.b64decode(note_metadata['note_detail_key'].encode('utf-8')),
+                    "note_detail_key": note_metadata['note_detail_key'],
                     "timestamp": entry["committed_on"],
                     "tags": tags,
                     "author": entry["author"]
@@ -312,14 +312,14 @@ class NoteStore(object):
                                        "linked_commit": note_metadata["linked_commit"],
                                        "message": message,
                                        "level": NoteLogLevel(note_metadata["level"]),
-                                       "note_detail_key": base64.b64decode(note_metadata['note_detail_key'].encode('utf-8')),
+                                       "note_detail_key": note_metadata['note_detail_key'],
                                        "timestamp": entry["committed_on"],
                                        "tags": sorted(note_metadata["tags"]),
                                        "author": entry["author"]
                                        })
         return note_summaries
 
-    def put_detail_record(self, linked_commit_hash: str, free_text: str, objects: list) -> bytes: 
+    def put_detail_record(self, linked_commit_hash: str, free_text: str, objects: list) -> str: 
         """
             Put a notes detailed entry into a levelDB.
 
@@ -329,7 +329,7 @@ class NoteStore(object):
                 objects(list): a list of NoteDetailObjects
 
             Returns:
-                None
+                note_detail_key(str)
 
             Raises:
                 Exception
@@ -345,7 +345,7 @@ class NoteStore(object):
         note_key = note_detail_db.put(binary_value)
         return note_key
 
-    def get_detail_record(self, note_key: bytes) -> Dict[str, Any]:
+    def get_detail_record(self, note_key: str) -> Dict[str, Any]:
         """
             Fetch a notes detailed entry from a levelDB by commit hash
 

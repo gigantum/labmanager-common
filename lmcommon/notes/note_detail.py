@@ -20,6 +20,7 @@
 import os
 import re
 import json
+import base64
 from redis import StrictRedis
 import redis_lock
 
@@ -90,11 +91,11 @@ class NoteDetailDB():
 
         return (fnum, offset, length)
 
-    def _generate_detail_key(self, detail_header: bytes) -> bytes:
+    def _generate_detail_key(self, detail_header: bytes) -> str:
         """Helper function to turn a header in to a key.  Must hold a lock when calling."""
-        return self.basename.encode('utf-8') + detail_header
+        return self.basename + base64.b64encode(detail_header).decode('utf-8')
 
-    def _parse_detail_key(self, detail_key: bytes) -> (str,bytes):
+    def _parse_detail_key(self, detail_key: str) -> (str, bytes):
         """Helper function to turn a header in to a key.  Must hold a lock when calling.
 
          Arguments:
@@ -104,10 +105,10 @@ class NoteDetailDB():
             basename(str): name of log file family that contains record
             detail_header(bytes): detail header to be parse for rotation #, offset, and length
         """
-        basename = detail_key[0:20].decode('utf-8')
+        basename = detail_key[0:20]
         detail_header = detail_key[20:]
 
-        return basename, detail_header
+        return basename, base64.b64decode(detail_header.encode('utf-8'))
         
     def _open_for_append_and_rotate(self):
         """ Return and open file handle.  Rotate the log as we need.
@@ -131,14 +132,14 @@ class NoteDetailDB():
         else:
             return fp
         
-    def put(self, value: bytes) -> bytes:
+    def put(self, value: bytes) -> str:
         """Put a note into the files and return a key to access it
 
         Args:
             value(bytes): note detail objects
 
         Returns:
-            note_key(bytes): key used to access and identify the object
+            note_key(str): key used to access and identify the object
         """
         conn = StrictRedis()
         
@@ -162,6 +163,7 @@ class NoteDetailDB():
             detail_key = self._generate_detail_key(detail_header)
 
         # unlock
+        print(detail_key,type(detail_key))
         return detail_key
 
     def get(self, detail_key: bytes) -> bytes:

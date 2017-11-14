@@ -25,7 +25,7 @@ from typing import (Any, Dict, List, Union)
 
 class ImportanceObject():
     """Object/structure that describes importance/visibility of a detail record"""
-    def __init__(self, detail_id: bytes, importance: int, weight: float=0.0, visible: bool=True) -> None:
+    def __init__(self, detail_id: str, importance: int, weight: float=0.0, visible: bool=True) -> None:
         self.detail_id =  detail_id
         self.importance = importance
         self.weight = weight
@@ -41,7 +41,7 @@ class ImportanceObject():
         Returns:
             ImportanceObject
         """
-        return ImportanceObject(imp_dict["importance"], imp_dict["weight"], imp_dict["visible"])
+        return ImportanceObject(imp_dict["detail_id"], imp_dict["importance"], imp_dict["weight"], imp_dict["visible"])
 
 
     def to_dict(self) -> Dict[str, Union[int, float, bool]]:
