@@ -39,7 +39,6 @@ from redis import StrictRedis
 import redis_lock
 
 
-GIT_IGNORE_DEFAULT = """.DS_Store"""
 logger = LMLogger.get_logger()
 
 

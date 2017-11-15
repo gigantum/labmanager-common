@@ -18,66 +18,108 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 import os
-import re
 import json
 import base64
-from redis import StrictRedis
-import redis_lock
+from typing import Optional
+from lmcommon.logging import LMLogger
+
+logger = LMLogger.get_logger()
 
 
-class NoteDetailDB():
-    """File based representation of key values"""
-
-    def __init__(self, path: str, config) -> None:
+class ActivityDetailDB:
+    """Git-compliant file based representation of key values used to store Activity Detail Records
+    """
+    def __init__(self, root_path: str, checkout_id: str, logfile_limit: int=4000000) -> None:
         """Constructor
 
         Args:
             path(str): note detail directory
         """
-        self.dirpath = path
+        # The root directory for storing log files
+        self.root_path = root_path
 
-        # TODO derived from UUID/machine/something unique
-        #       derive in a smart way for merge.
-        self.basename = "labbook_notes_log_XX"
-        assert(len(self.basename)==20)
+        # Set base log file name
+        self.basename = f"detail_log|{checkout_id}".replace("|", "-")
+        # TODO: @randal - why the assert?
+        # assert(len(self.basename)==20)
 
-        self.config = config
+        # Set max length of the logfile in bytes before rolling
+        self.logfile_limit = logfile_limit
 
-        # get the latest log on open
-        self.logmdfname = os.path.abspath(os.path.join(path,'.logfilename'))
-        if os.path.exists(self.logmdfname):
-            # get most recently used file
-            with open(self.logmdfname,"r") as fp: 
-                logmeta = json.load(fp) 
-                # opening an existing log
-                if logmeta['basename']==self.basename:
-                    self.latestfnum = logmeta['filenumber']
-                # logging on a new node/system
-                else:
-                    # this being correct depends upon each checkout being unique
-                    # i.e. no way to get the same id when returning to a branch
-                    self.latestfnum = 1
+        # Store the file number
+        self._file_number: Optional[int] = None
+
+        # The metadata file used to track file numbers and checkout context
+        self._metadata_file = os.path.abspath(os.path.join(self.root_path, '.detaildb'))
+
+    @property
+    def file_number(self) -> int:
+        """Property to access the current log file number
+
+        Returns:
+            int
+        """
+        if not self._file_number:
+            if os.path.exists(self._metadata_file):
+                # Get file number through stored metadata
+                with open(self._metadata_file, "r") as fp:
+                    logmeta = json.load(fp)
+                    # opening an existing log
+                    if logmeta['basename'] == self.basename:
+                        self._file_number = int(logmeta['file_number'])
+                    else:
+                        # This will create a new metadata file and set the file_number to 0
+                        logger.warning("Detected checkout context change in ActivityDetailDB. Resetting log file index")
+                        self._write_metadata_file()
+            else:
+                # no metadata file, first time opening labbook
+                logger.info(f"Creating ActivityDetailDB metadata file for {self.basename}")
+                self._write_metadata_file()
+
+        return self._file_number
+
+    def _write_metadata_file(self, increment: bool=False) -> None:
+        """Helper to initialize a metadata file to track checkout changes and log file rolls
+
+        Args:
+            increment(bool): Flag indicating if the file number should be incremented
+
+        Returns:
+
+        """
+        if increment:
+            value = self._file_number + 1
         else:
-            # no logmeta file, first time open
-            with open(self.logmdfname,"w+") as fp:
-                self.latestfnum=1
-                logmeta = {'basename': self.basename, 'filenumber': 1}
-                json.dump(logmeta, fp)
+            value = 0
+
+        with open(self._metadata_file, "w+") as fp:
+            self._file_number = value
+            logmeta = {'basename': self.basename, 'file_number': value}
+            json.dump(logmeta, fp)
 
     def _generate_detail_header(self, offset: int, length: int) -> bytes:
-        """Helper function to generate a log-sequence header.  Must hold a lock when calling."""
-        return b'__g__lsn' + self.latestfnum.to_bytes(4, byteorder='little') \
-                                      + offset.to_bytes(4, byteorder='little') \
-                                      + length.to_bytes(4, byteorder='little')
+        """Helper function to generate a log-sequence header.  Must hold a lock when calling.
 
-    def _parse_detail_header(self, detail_header: bytes) -> (int, int, int):
+        Args:
+            offset(int): Number of bytes to offset into the current log file
+            length(int): Number of bytes to be written
+
+        Returns:
+            bytes
+        """
+        return b'__g__lsn' + self.file_number.to_bytes(4, byteorder='little') \
+                           + offset.to_bytes(4, byteorder='little') \
+                           + length.to_bytes(4, byteorder='little')
+
+    @staticmethod
+    def _parse_detail_header(detail_header: bytes) -> (int, int, int):
         """Helper function that returns offset and length from detail header
 
         Arguments: 
             detail_header: bytes
 
         Returns: (fnum, offset, length)
-            fnum(int): file number in the rotation for this checkout
+            file_number(int): file number in the rotation for this checkout
             offset(int): seek offset for record
             length(int): length of record
         
@@ -85,11 +127,11 @@ class NoteDetailDB():
         if detail_header[0:8] != b'__g__lsn':
             raise ValueError("Invalid log record header")
         else:
-            fnum = int.from_bytes(detail_header[8:12],'little') 
-            offset= int.from_bytes(detail_header[12:16],'little') 
-            length = int.from_bytes(detail_header[16:20],'little') 
+            file_number = int.from_bytes(detail_header[8:12], 'little')
+            offset = int.from_bytes(detail_header[12:16], 'little')
+            length = int.from_bytes(detail_header[16:20], 'little')
 
-        return (fnum, offset, length)
+        return file_number, offset, length
 
     def _generate_detail_key(self, detail_header: bytes) -> str:
         """Helper function to turn a header in to a key.  Must hold a lock when calling."""
@@ -116,15 +158,15 @@ class NoteDetailDB():
 
         Returns: file
         """
-        fp = open(os.path.abspath(os.path.join(self.dirpath, self.basename+str(self.latestfnum))), "ba" )
+        fp = open(os.path.abspath(os.path.join(self.root_path, self.basename + str(self.file_number))), "ba")
 
         # rotate file when too big.  Set this at 4 MB override by config file
         # this will write one record after the limit, i.e. it's a soft limit
         sizelimit = self.config.config["logfilesize"] if "logfilesize" in self.config.config else 4000000
         if fp.tell() > sizelimit:
-            self.latestfnum = self.latestfnum+1
+            self.file_number = self.file_number + 1
             with open(self.logmdfname,"w+") as fp2:
-                logmeta = {'basename': self.basename, 'filenumber': self.latestfnum}
+                logmeta = {'basename': self.basename, 'filenumber': self.file_number}
                 json.dump(logmeta, fp2)
             fp.close()
             # call recursively in case need to advance more than one
@@ -144,7 +186,7 @@ class NoteDetailDB():
         conn = StrictRedis()
         
         # get a lock for all write I/O
-        with redis_lock.Lock(conn, self.dirpath):
+        with redis_lock.Lock(conn, self.root_path):
             fh = self._open_for_append_and_rotate()
             try:
                 # get this file offset
@@ -166,7 +208,7 @@ class NoteDetailDB():
         print(detail_key,type(detail_key))
         return detail_key
 
-    def get(self, detail_key: bytes) -> bytes:
+    def get(self, detail_key: str) -> bytes:
         """Return a detailed note.
 
         Args:
@@ -178,7 +220,7 @@ class NoteDetailDB():
         basename, detail_header = self._parse_detail_key(detail_key)
         fnum, offset, length = self._parse_detail_header(detail_header)
      
-        with open(os.path.abspath(os.path.join(self.dirpath, basename+str(fnum))),"br") as fh:
+        with open(os.path.abspath(os.path.join(self.root_path, basename+str(fnum))), "br") as fh:
             fh.seek(offset)
             retval = fh.read(length+20)   # plus the header length
 

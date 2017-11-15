@@ -17,15 +17,15 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-import os
-import json
-import re
-from enum import Enum
 import base64
+import json
+import os
+import re
 import uuid
+from enum import Enum
 from typing import (Any, Dict, List, Union)
 
-from lmcommon.notes.note_detail import NoteDetailDB
+from lmcommon.activity.note_detail import NoteDetailDB
 
 
 class NoteLogLevel(Enum):
