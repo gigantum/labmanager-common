@@ -45,8 +45,8 @@ logger = LMLogger.get_logger()
 class LabBook(object):
     """Class representing a single LabBook"""
 
-    # If this is not defined, implicitly the version is "0.1"
-    LABBOOK_DATA_SCHEMA_VERSION = "0.1"
+    # If this is not defined, implicitly the version is "0.2"
+    LABBOOK_DATA_SCHEMA_VERSION = "0.2"
 
     def __init__(self, config_file: Optional[str] = None) -> None:
         self.labmanager_config = Configuration(config_file)
@@ -854,10 +854,10 @@ class LabBook(object):
             os.path.join('.gigantum', 'env', 'dev_env'),
             os.path.join('.gigantum', 'env', 'custom'),
             os.path.join('.gigantum', 'env', 'package_manager'),
-            os.path.join('.gigantum', 'notes'),
-            os.path.join('.gigantum', 'notes', 'log'),
-            os.path.join('.gigantum', 'notes', 'index'),
-            os.path.join('.gigantum', 'notes', 'importance'),
+            os.path.join('.gigantum', 'activity'),
+            os.path.join('.gigantum', 'activity', 'log'),
+            os.path.join('.gigantum', 'activity', 'index'),
+            os.path.join('.gigantum', 'activity', 'importance'),
         ]
 
         for d in dirs:

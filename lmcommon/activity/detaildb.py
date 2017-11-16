@@ -20,7 +20,8 @@
 import os
 import json
 import base64
-from typing import Optional
+import hashlib
+from typing import Optional, Tuple
 from lmcommon.logging import LMLogger
 
 logger = LMLogger.get_logger()
@@ -29,19 +30,23 @@ logger = LMLogger.get_logger()
 class ActivityDetailDB:
     """Git-compliant file based representation of key values used to store Activity Detail Records
     """
-    def __init__(self, root_path: str, checkout_id: str, logfile_limit: int=4000000) -> None:
+    def __init__(self, labbook_root: str, checkout_id: str, logfile_limit: int=8000000) -> None:
         """Constructor
 
         Args:
-            path(str): note detail directory
+            labbook_root(str): note detail directory
         """
         # The root directory for storing log files
-        self.root_path = root_path
+        self.root_path = os.path.join(labbook_root, '.gigantum', 'activity', 'log')
+
+        # Set checkout_id
+        self.checkout_id = checkout_id
+        hasher = hashlib.md5()
+        self.checkout_id_hashed = hasher.update(checkout_id).hexdigest()
 
         # Set base log file name
-        self.basename = f"detail_log|{checkout_id}".replace("|", "-")
-        # TODO: @randal - why the assert?
-        # assert(len(self.basename)==20)
+        self.basename = f"log_{self.checkout_id_hashed}"
+        assert(len(self.basename) == 36, "Length of base logfile name should be 36 characters")
 
         # Set max length of the logfile in bytes before rolling
         self.logfile_limit = logfile_limit
@@ -65,7 +70,7 @@ class ActivityDetailDB:
                 with open(self._metadata_file, "r") as fp:
                     logmeta = json.load(fp)
                     # opening an existing log
-                    if logmeta['basename'] == self.basename:
+                    if logmeta['checkout_id'] == self.checkout_id:
                         self._file_number = int(logmeta['file_number'])
                     else:
                         # This will create a new metadata file and set the file_number to 0
@@ -73,7 +78,6 @@ class ActivityDetailDB:
                         self._write_metadata_file()
             else:
                 # no metadata file, first time opening labbook
-                logger.info(f"Creating ActivityDetailDB metadata file for {self.basename}")
                 self._write_metadata_file()
 
         return self._file_number
@@ -87,6 +91,7 @@ class ActivityDetailDB:
         Returns:
 
         """
+        logger.info(f"Writing ActivityDetailDB metadata file for {self.checkout_id}")
         if increment:
             value = self._file_number + 1
         else:
@@ -94,7 +99,8 @@ class ActivityDetailDB:
 
         with open(self._metadata_file, "w+") as fp:
             self._file_number = value
-            logmeta = {'basename': self.basename, 'file_number': value}
+            logmeta = {'basename': self.basename, 'file_number': value,
+                       'checkout_id': self.checkout_id, 'checkout_id_hashed': self.checkout_id_hashed}
             json.dump(logmeta, fp)
 
     def _generate_detail_header(self, offset: int, length: int) -> bytes:
@@ -137,7 +143,7 @@ class ActivityDetailDB:
         """Helper function to turn a header in to a key.  Must hold a lock when calling."""
         return self.basename + base64.b64encode(detail_header).decode('utf-8')
 
-    def _parse_detail_key(self, detail_key: str) -> (str, bytes):
+    def _parse_detail_key(self, detail_key: str) -> Tuple[str, bytes]:
         """Helper function to turn a header in to a key.  Must hold a lock when calling.
 
          Arguments:
@@ -147,8 +153,8 @@ class ActivityDetailDB:
             basename(str): name of log file family that contains record
             detail_header(bytes): detail header to be parse for rotation #, offset, and length
         """
-        basename = detail_key[0:20]
-        detail_header = detail_key[20:]
+        basename = detail_key[0:36]
+        detail_header = detail_key[36:]
 
         return basename, base64.b64decode(detail_header.encode('utf-8'))
         
@@ -158,16 +164,12 @@ class ActivityDetailDB:
 
         Returns: file
         """
-        fp = open(os.path.abspath(os.path.join(self.root_path, self.basename + str(self.file_number))), "ba")
+        fp = open(os.path.abspath(os.path.join(self.root_path, self.basename + '_' + str(self.file_number))), "ba")
 
-        # rotate file when too big.  Set this at 4 MB override by config file
+        # rotate file when too big.  Set this at 8 MB override by config file
         # this will write one record after the limit, i.e. it's a soft limit
-        sizelimit = self.config.config["logfilesize"] if "logfilesize" in self.config.config else 4000000
-        if fp.tell() > sizelimit:
-            self.file_number = self.file_number + 1
-            with open(self.logmdfname,"w+") as fp2:
-                logmeta = {'basename': self.basename, 'filenumber': self.file_number}
-                json.dump(logmeta, fp2)
+        if fp.tell() > self.logfile_limit:
+            self._write_metadata_file(increment=True)
             fp.close()
             # call recursively in case need to advance more than one
             return self._open_for_append_and_rotate()
@@ -175,55 +177,49 @@ class ActivityDetailDB:
             return fp
         
     def put(self, value: bytes) -> str:
-        """Put a note into the files and return a key to access it
+        """Put a value into the log file and return a key to access it
 
         Args:
-            value(bytes): note detail objects
+            value(bytes): Activity detail object serialized to bytes
 
         Returns:
-            note_key(str): key used to access and identify the object
+            detail_key(str): key used to access and identify the object
         """
-        conn = StrictRedis()
-        
-        # get a lock for all write I/O
-        with redis_lock.Lock(conn, self.root_path):
-            fh = self._open_for_append_and_rotate()
-            try:
-                # get this file offset
-                offset = fh.tell()
-                length=len(value)
+        fh = self._open_for_append_and_rotate()
+        try:
+            # get this file offset
+            offset = fh.tell()
+            length = len(value)
 
-                detail_header = self._generate_detail_header(offset, length)
+            detail_header = self._generate_detail_header(offset, length)
 
-                # append the record to the active log
-                fh.write(detail_header)
-                fh.write(value)
+            # append the record to the active log
+            fh.write(detail_header)
+            fh.write(value)
 
-            finally:
-                fh.close()
+        finally:
+            fh.close()
 
-            detail_key = self._generate_detail_key(detail_header)
+        detail_key = self._generate_detail_key(detail_header)
 
-        # unlock
-        print(detail_key,type(detail_key))
         return detail_key
 
     def get(self, detail_key: str) -> bytes:
         """Return a detailed note.
 
         Args:
-            detail_key: json encoded array that contains file_name, offsest, length
+            detail_key: key used to lookup the file, offset, and length
 
         Returns:
-            detail_record(str): detail records stored by put
+            bytes
         """
         basename, detail_header = self._parse_detail_key(detail_key)
-        fnum, offset, length = self._parse_detail_header(detail_header)
-     
-        with open(os.path.abspath(os.path.join(self.root_path, basename+str(fnum))), "br") as fh:
-            fh.seek(offset)
-            retval = fh.read(length+20)   # plus the header length
+        file_number, offset, length = self._parse_detail_header(detail_header)
 
-        return retval
+        with open(os.path.abspath(os.path.join(self.root_path, basename + '_' + str(file_number))), "br") as fh:
+            fh.seek(offset)
+            value = fh.read(length + 20)  # plus the header length
+
+        return value
     
 
