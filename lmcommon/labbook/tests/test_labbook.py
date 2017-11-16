@@ -574,8 +574,8 @@ class TestLabBook(object):
         assert dir_walks_hidden[3]['is_dir'] is True
         assert dir_walks_hidden[7]['key'] == '.gitignore'
         assert dir_walks_hidden[7]['is_dir'] is False
-        assert dir_walks_hidden[22]['key'] == 'dog_dir/.gitkeep'
-        assert dir_walks_hidden[22]['is_dir'] is False
+        assert dir_walks_hidden[21]['key'] == 'simple/.hidden_dir/.gitkeep'
+        assert dir_walks_hidden[21]['is_dir'] is False
 
         # Since the file is in a hidden directory, it should not be found.
         dir_walks = lb.walkdir()

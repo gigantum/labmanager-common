@@ -565,6 +565,7 @@ class LabBook(object):
 
             # For more deterministic responses, sort resulting paths alphabetically.
             # Store directories then files, so pagination loads things in an intuitive order
+            dirs.sort()
             keys.extend(sorted([os.path.join(root.replace(self.root_dir, ''), d) for d in dirs]))
             keys.extend(sorted([os.path.join(root.replace(self.root_dir, ''), f) for f in files]))
 
