@@ -549,28 +549,32 @@ class LabBook(object):
         Returns:
             List[Dict[str, str]]: List of dictionaries containing file and directory metadata
         """
-
-        leafs: Set[Tuple[bool, str]] = set()
+        keys: List[str] = list()
         # base_dir is the root directory to search, to account for relative paths inside labbook.
         base_dir = os.path.join(self.root_dir, base_path or '')
         if not os.path.isdir(base_dir):
             raise ValueError(f"Labbook walkdir base_dir {base_dir} not an existing directory")
 
         for root, dirs, files in os.walk(base_dir):
-            for f in files:
-                leafs.add((False, os.path.join(root.replace(self.root_dir, ''), f)))
-            for d in dirs:
-                leafs.add((True, os.path.join(root.replace(self.root_dir, ''), d)))
+            # Remove directories we ignore so os.walk does not traverse into them during future iterations
+            if '.git' in dirs:
+                del dirs[dirs.index('.git')]
+            if '.gigantum' in dirs:
+                del dirs[dirs.index('.gigantum')]
 
-        leafs_filtered = [l for l in leafs if '.git' not in l[1] and '.gigantum' not in l[1]]
+            # For more deterministic responses, sort resulting paths alphabetically.
+            # Store directories then files, so pagination loads things in an intuitive order
+            keys.extend(sorted([os.path.join(root.replace(self.root_dir, ''), d) for d in dirs]))
+            keys.extend(sorted([os.path.join(root.replace(self.root_dir, ''), f) for f in files]))
+
+        # Create stats
         stats: List[Dict[str, Any]] = list()
-        for is_dir, f_p in [l for l in leafs_filtered if '.git' not in l]:
-            if not show_hidden and any([len(p) and p[0] == '.' for p in f_p.split('/')]):
+        for f_p in keys:
+            if not show_hidden and any([len(p) and p[0] == '.' for p in f_p.split(os.path.sep)]):
                 continue
             stats.append(self._get_file_info(f_p))
 
-        # For more deterministic responses, sort resulting paths alphabetically.
-        return sorted(stats, key=lambda a: a['key'])
+        return stats
 
     def listdir(self, base_path: Optional[str] = None, show_hidden: bool = False) -> List[Dict[str, Any]]:
         """Return a list of all files and directories in a directory. Never includes the .git or
