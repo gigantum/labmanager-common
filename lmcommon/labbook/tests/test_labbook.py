@@ -555,7 +555,10 @@ class TestLabBook(object):
         dirs = ["cat_dir", "/dog_dir", "/mouse_dir/", "mouse_dir/new_dir", "/simple/.hidden_dir"]
         for d in dirs:
             res = lb.makedir(d)
-        lb.insert_file(sample_src_file, 'simple/.hidden_dir')
+        lb.insert_file(sample_src_file, '/simple/.hidden_dir/')
+        lb.insert_file(sample_src_file, 'code/')
+        lb.insert_file(sample_src_file, 'input/')
+        lb.insert_file(sample_src_file, 'mouse_dir/new_dir/')
 
         dir_walks_hidden = lb.walkdir(show_hidden=True)
         assert any([os.path.basename(sample_src_file) in d['key'] for d in dir_walks_hidden])
@@ -563,9 +566,26 @@ class TestLabBook(object):
         assert not any(['.gigantum' in d['key'] for d in dir_walks_hidden])
         assert all([d['key'][0] != '/' for d in dir_walks_hidden])
 
+        # Spot check some entries
+        assert len(dir_walks_hidden) == 23
+        assert dir_walks_hidden[0]['key'] == 'cat_dir/'
+        assert dir_walks_hidden[0]['is_dir'] is True
+        assert dir_walks_hidden[3]['key'] == 'input/'
+        assert dir_walks_hidden[3]['is_dir'] is True
+        assert dir_walks_hidden[7]['key'] == '.gitignore'
+        assert dir_walks_hidden[7]['is_dir'] is False
+        assert dir_walks_hidden[22]['key'] == 'dog_dir/.gitkeep'
+        assert dir_walks_hidden[22]['is_dir'] is False
+
         # Since the file is in a hidden directory, it should not be found.
-        dir_walks = lb.walkdir(show_hidden=False)
-        assert not any([os.path.basename(sample_src_file) in d['key'] for d in dir_walks])
+        dir_walks = lb.walkdir()
+        # Spot check some entries
+        assert len(dir_walks) == 11
+        assert dir_walks[0]['key'] == 'cat_dir/'
+        assert dir_walks[0]['is_dir'] is True
+        assert dir_walks[3]['key'] == 'input/'
+        assert dir_walks[3]['is_dir'] is True
+        assert dir_walks[10]['is_dir'] is False
 
     def test_walkdir_relative_path(self, mock_config_file, sample_src_file):
         lb = LabBook(mock_config_file[0])
