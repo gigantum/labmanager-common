@@ -653,4 +653,53 @@ class TestLabBook(object):
         lb2 = LabBook(mock_config_file[0])
         lb2.from_key(lb1key)
 
-    # TODO: test getting favorite from file listing
+    def test_walkdir_with_favorites(self, mock_config_file, sample_src_file):
+        lb = LabBook(mock_config_file[0])
+        lb.new(owner={"username": "test"}, name="test-insert-files-1", description="validate tests.")
+        dirs = ["code/cat_dir", "code/dog_dir"]
+        for d in dirs:
+            lb.makedir(d)
+        lb.insert_file('code', sample_src_file, '')
+        lb.insert_file('code', sample_src_file, 'dog_dir')
+        lb.insert_file('code', sample_src_file, 'cat_dir')
+
+        sample_filename = os.path.basename(sample_src_file)
+
+        # Since the file is in a hidden directory, it should not be found.
+        dir_walks = lb.walkdir('code')
+        # Spot check some entries
+        assert len(dir_walks) == 5
+        assert dir_walks[0]['key'] == 'cat_dir/'
+        assert dir_walks[0]['is_dir'] is True
+        assert dir_walks[0]['is_favorite'] is False
+        assert dir_walks[1]['key'] == 'dog_dir/'
+        assert dir_walks[1]['is_dir'] is True
+        assert dir_walks[1]['is_favorite'] is False
+        assert dir_walks[2]['is_favorite'] is False
+        assert dir_walks[2]['is_dir'] is False
+        assert dir_walks[3]['is_favorite'] is False
+        assert dir_walks[3]['is_dir'] is False
+        assert dir_walks[4]['is_favorite'] is False
+        assert dir_walks[4]['is_dir'] is False
+
+        lb.create_favorite("code", sample_filename, description="Fav 1")
+        lb.create_favorite("code", f"dog_dir/{sample_filename}", description="Fav 2")
+        lb.create_favorite("code", f"cat_dir/", description="Fav 3", is_dir=True)
+
+        dir_walks = lb.walkdir('code')
+        # Spot check some entries
+        assert len(dir_walks) == 5
+        assert dir_walks[0]['key'] == 'cat_dir/'
+        assert dir_walks[0]['is_dir'] is True
+        assert dir_walks[0]['is_favorite'] is True
+        assert dir_walks[1]['key'] == 'dog_dir/'
+        assert dir_walks[1]['is_dir'] is True
+        assert dir_walks[1]['is_favorite'] is False
+        assert dir_walks[2]['is_favorite'] is True
+        assert dir_walks[2]['is_dir'] is False
+        assert dir_walks[3]['is_favorite'] is False
+        assert dir_walks[3]['is_dir'] is False
+        assert dir_walks[4]['is_favorite'] is True
+        assert dir_walks[4]['is_dir'] is False
+
+

@@ -743,6 +743,9 @@ class LabBook(object):
             with open(os.path.join(favorites_dir, f'{section}.json'), 'wt') as f_data:
                 json.dump(favorite_data, f_data)
 
+            # Remove cached favorite key data
+            self._favorite_keys = None
+
             return favorite_data[result_index]
 
     def update_favorite(self, section: str, index: int,
@@ -822,6 +825,9 @@ class LabBook(object):
             with open(favorites_file, 'wt') as f_data:
                 json.dump(favorite_data, f_data)
 
+            # Remove cached favorite key data
+            self._favorite_keys = None
+
             return favorite_data[result_index]
 
     def remove_favorite(self, section: str, position: int) -> None:
@@ -867,6 +873,9 @@ class LabBook(object):
                 json.dump(favorite_data, f_data)
 
             logger.info(f"Removed {section} favorite #{position}")
+
+            # Remove cached favorite key data
+            self._favorite_keys = None
 
             return None
 
