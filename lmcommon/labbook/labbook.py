@@ -354,7 +354,7 @@ class LabBook(object):
         """
         return ''.join(c for c in value if c not in '\<>?/;"`\'')
 
-    def _get_file_info(self, rel_file_path: str, section: str) -> Dict[str, Any]:
+    def _get_file_info(self, section: str, rel_file_path: str) -> Dict[str, Any]:
         """Method to get a file's detail information
 
         Args:
@@ -442,7 +442,7 @@ class LabBook(object):
                 'free_text': '',
                 'objects': ''
             })
-            return self._get_file_info(rel_path, section)
+            return self._get_file_info(section, rel_path)
 
     def delete_file(self, section: str, relative_path: str, directory: bool = False) -> bool:
         """Delete file (or directory) from inside lb section.
@@ -553,7 +553,7 @@ class LabBook(object):
                     'objects': ''
                 })
 
-                return self._get_file_info(dst_rel_path, section)
+                return self._get_file_info(section, dst_rel_path)
             except Exception as e:
                 logger.critical("Failed moving file in labbook. Repository may be in corrupted state.")
                 logger.exception(e)
@@ -625,7 +625,7 @@ class LabBook(object):
         for f_p in keys:
             if not show_hidden and any([len(p) and p[0] == '.' for p in f_p.split(os.path.sep)]):
                 continue
-            stats.append(self._get_file_info(f_p, section))
+            stats.append(self._get_file_info(section, f_p))
 
         return stats
 
@@ -657,7 +657,7 @@ class LabBook(object):
                 continue
 
             # Create tuple (isDir, key)
-            stats.append(self._get_file_info(os.path.join(base_path or "", item), section))
+            stats.append(self._get_file_info(section, os.path.join(base_path or "", item)))
 
         # For more deterministic responses, sort resulting paths alphabetically.
         return sorted(stats, key=lambda a: a['key'])
