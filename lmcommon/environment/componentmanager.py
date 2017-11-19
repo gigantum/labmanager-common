@@ -25,8 +25,7 @@ import glob
 
 
 from lmcommon.labbook import LabBook
-from lmcommon.environment import ComponentRepository # type: ignore
-from lmcommon.notes import NoteStore, NoteLogLevel
+from lmcommon.environment import ComponentRepository  # type: ignore
 from lmcommon.logging import LMLogger
 
 logger = LMLogger.get_logger()
@@ -145,14 +144,15 @@ exec gosu giguser "$@"
         self.labbook.git.add(package_yaml_path)
         commit = self.labbook.git.commit(short_message)
 
-        ns = NoteStore(self.labbook)
-        ns.create_note({"linked_commit": commit.hexsha,
-                        "message": short_message,
-                        "level": NoteLogLevel.USER_MAJOR,
-                        "tags": ["environment", 'package_manager', package_manager],
-                        "free_text": "",
-                        "objects": []
-                        })
+        assert True == False
+        #ns = NoteStore(self.labbook)
+        #ns.create_note({"linked_commit": commit.hexsha,
+        #                "message": short_message,
+        #                "level": NoteLogLevel.USER_MAJOR,
+        #                "tags": ["environment", 'package_manager', package_manager],
+        #                "free_text": "",
+        #                "objects": []
+        #                })
 
     def add_component(self, component_class: str, repository: str, namespace: str, component: str, version: str,
                       force: bool = False) -> None:

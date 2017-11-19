@@ -32,7 +32,6 @@ from pkg_resources import resource_filename
 from lmcommon.configuration import Configuration
 from lmcommon.gitlib import get_git_interface, GitAuthor
 from lmcommon.logging import LMLogger
-from lmcommon.notes import NoteLogLevel, NoteStore
 from lmcommon.labbook.schemas import validate_schema
 
 from redis import StrictRedis

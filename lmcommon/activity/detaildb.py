@@ -42,7 +42,8 @@ class ActivityDetailDB:
         # Set checkout_id
         self.checkout_id = checkout_id
         hasher = hashlib.md5()
-        self.checkout_id_hashed = hasher.update(checkout_id).hexdigest()
+        hasher.update(checkout_id.encode())
+        self.checkout_id_hashed = hasher.hexdigest()
 
         # Set base log file name
         self.basename = f"log_{self.checkout_id_hashed}"
@@ -220,6 +221,8 @@ class ActivityDetailDB:
             fh.seek(offset)
             value = fh.read(length + 20)  # plus the header length
 
-        return value
+        # todo: @randal - do we need to write the header into each record?
+
+        return value[20:]
     
 
