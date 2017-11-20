@@ -23,22 +23,10 @@ import os
 import re
 import uuid
 from enum import Enum
-from typing import (Any, Dict, List, Union)
+from typing import (Any, Dict, List, Union, Optional)
 
 from lmcommon.activity.detaildb import ActivityDetailDB
-
-
-class NoteLogLevel(Enum):
-    """Enumeration representing the note 'level' in the hierarchy"""
-    # User generated Notes
-    USER_NOTE = 10
-    USER_MAJOR = 11
-    USER_MINOR = 12
-
-    # Automatic "system" generated notes
-    AUTO_MAJOR = 21
-    AUTO_MINOR = 22
-    AUTO_DETAIL = 23
+from lmcommon.activity import ActivityDetailRecord, ActivityDetailType, ActivityRecord, ActivityType
 
 
 class NoteRecordEncoder(json.JSONEncoder):
@@ -60,65 +48,8 @@ class NoteRecordEncoder(json.JSONEncoder):
         return json.JSONEncoder.default(self, obj)
 
 
-class ACtiDetailObject(object):
-    """A class to represent note detail objects that can be stored in a note entry"""
-    def __init__(self, key: str, blob_type: str, value: bytes) -> None:
-        """Constructor
-
-        Args:
-            key(str): Key used to access and identify the object
-            blob_type(str): The type of object (useful for converting from byte array to actual thing)
-            value(bytes): A byte array of the object to store. Can be any binary type from file to serialized dict
-        """
-        self.key: str = key
-        self.type: str = blob_type
-        self.value: bytes = value
-
-    @staticmethod
-    def from_json(json_str: str) -> 'NoteDetailObject':
-        """Static method to create a NoteDetailObject instance from a json string
-
-        Args:
-            json_str(str): The json representation of a NoteDetailObject
-
-        Returns:
-            NoteDetailObject
-        """
-        data = json.loads(json_str)
-
-        # Decode object from base64 back to a bytes object
-        value = base64.b64decode(data["value"])
-        return NoteDetailObject(data["key"], data["type"], value)
-
-    @staticmethod
-    def from_image(image_file: str) -> None:
-        """Static method to create a NoteDetailObject instance from an image file
-
-        Args:
-            image_file(str): Absolute path to an image file that can be opened by Pillow
-
-        Returns:
-            NoteDetailObject
-        """
-        # an example of how this can be augmented with time to help devs manage objects
-        raise NotImplemented
-
-    def to_dict(self) -> Dict[str, Union[str, bytes]]:
-        """Method to dump an object to a dictionary"""
-        return {"key": self.key,
-                "type": self.type,
-                "value": self.value}
-
-    def to_json(self) -> str:
-        """Method to dump an object to a json string for storage"""
-        data = {"key": self.key,
-                "type": self.type,
-                "value": base64.b64encode(self.value).decode("UTF-8")}
-        return json.dumps(data)
-
-
-class NoteStore(object):
-    """The NoteStore class provides a centralized interface to note data stored in both the git log and levelDB.
+class ActivityStore(object):
+    """The ActivityStore class provides a centralized interface to activity data stored in both the git log and db.
 
     High-level information is stored directly in the git commit messages stored in the git log of a LabBook. For more
     detailed information and arbitrary information an embedded levelDB is used with detailed notes records stored
@@ -140,9 +71,12 @@ class NoteStore(object):
 
         self.labbook = labbook
 
-        # Note record commit messages follow a special structure
-        self.note_regex = re.compile(r"gtmNOTE_: ([\w\s\S]+)\ngtmjson_metadata_: (.*)")
+        self.detaildb = ActivityDetailDB(labbook.root, labbook.checkout_id,
+                                         logfile_limit=labbook.config.config['detaildb']['logfile_limit'])
 
+        # Note record commit messages follow a special structure
+        self.note_regex = re.compile(r"(?s)_GTM_ACTIVITY_START_.*?_GTM_ACTIVITY_END_")
+    
         # instantiate notes levelDB at _root_dir/.gigantum/notes/
         self._entries_path: str = os.path.join(labbook.root_dir, ".gigantum", "notes", "log")
 
