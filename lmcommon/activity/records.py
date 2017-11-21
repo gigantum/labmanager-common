@@ -20,6 +20,12 @@
 import json
 from enum import Enum
 from typing import (Any, List, Optional)
+import base64
+import blosc
+import copy
+import operator
+
+from lmcommon.activity.serializers import Serializer
 
 
 class ActivityType(Enum):
@@ -36,19 +42,28 @@ class ActivityType(Enum):
 class ActivityDetailType(Enum):
     """Enumeration representing the type of Activity Detail Record"""
     # User generated Notes
-    CODE_EXECUTED = 0
-    RESULT = 1
-    ENVIRONMENT = 2
-    CODE = 3
-    INPUT_DATA = 4
-    OUTPUT_DATA = 5
+    INPUT_DATA = 5
+    CODE = 4
+    CODE_EXECUTED = 3
+    RESULT = 2
+    OUTPUT_DATA = 1
+    ENVIRONMENT = 0
+
+
+class ActivityDetailRecordEncoder(json.JSONEncoder):
+    """Custom JSON encoder to encoded binary data as base64 when serializing to json"""
+    def default(self, obj):
+        if isinstance(obj, bytes):
+            return base64.b64encode(obj).decode("UTF-8")
+
+        return json.JSONEncoder.default(self, obj)
 
 
 class ActivityDetailRecord(object):
     """A class to represent an activity detail entry that can be stored in an activity entry"""
 
     def __init__(self, detail_type: ActivityDetailType, key: Optional[str] = None, show: bool = True,
-                 importance: Optional[int] = None) -> None:
+                 importance: int = 0) -> None:
         """Constructor
 
         Args:
@@ -99,7 +114,8 @@ class ActivityDetailRecord(object):
         """
         type_int, show_int, importance, key = log_str.split(',')
 
-        return ActivityDetailRecord(ActivityDetailType(type_int), show=bool(show_int), importance=importance, key=key)
+        return ActivityDetailRecord(ActivityDetailType(int(type_int)), show=bool(int(show_int)),
+                                    importance=int(importance), key=key)
 
     def add_value(self, mime_type: str, value: Any) -> None:
         """Method to add data to this record by MIME type
@@ -120,22 +136,120 @@ class ActivityDetailRecord(object):
         # Since you added data, it can be accessed now
         self.is_loaded = True
 
+    def to_dict(self, compact=False) -> dict:
+        """Method to convert to a dictionary
+
+        Args:
+            compact(bool): Flag indicating if compact values should be used (default when storing to log)
+
+        Returns:
+            dict
+        """
+        # TODO: Should we duplicate type, importance, and show if they are in the git log record?
+        if compact:
+            # Compact representation and do deep copy so binary conversions don't stick around in the object
+            return {"t": self.type.value,
+                    "i": self.importance,
+                    "s": int(self.show),
+                    "d": copy.deepcopy(self.data)
+                    }
+        else:
+            return {"type": self.type.value,
+                    "importance": self.importance,
+                    "show": self.show,
+                    "data": self.data
+                    }
+
+    def to_bytes(self, compress_details: bool=True) -> bytes:
+        """Method to serialize to bytes for storage in the activity detail db
+
+        Returns:
+            bytes
+        """
+        dict_data = self.to_dict(compact=True)
+
+        # Serialize data items
+        serializer_obj = Serializer()
+        for mime_type in dict_data['d']:
+            dict_data['d'][mime_type] = serializer_obj.serialize(mime_type, dict_data['d'][mime_type])
+
+            # Compress object data
+            if compress_details:
+                if type(dict_data['d'][mime_type]) != bytes:
+                    raise ValueError("Data must be serialized to bytes before compression")
+
+                dict_data['d'][mime_type] = blosc.compress(dict_data['d'][mime_type], typesize=8,
+                                                           cname='blosclz',
+                                                           shuffle=blosc.SHUFFLE)
+
+        # Base64 encode binary data while dumping to json string
+        return json.dumps(dict_data, cls=ActivityDetailRecordEncoder, separators=(',', ':')).encode('utf-8')
+
+    @staticmethod
+    def from_bytes(byte_array: bytes, decompress_details: bool=True) -> 'ActivityDetailRecord':
+        """Method to create ActivityDetailRecord from byte array (typically stored in the detail db)
+
+        Returns:
+            ActivityDetailRecord
+        """
+        serializer_obj = Serializer()
+
+        obj_dict = json.loads(byte_array.decode('utf-8'))
+
+        # Base64 decode detail data
+        for mime_type in obj_dict['d']:
+            obj_dict['d'][mime_type] = base64.b64decode(obj_dict['d'][mime_type])
+
+            # Optionally decompress
+            if decompress_details:
+                obj_dict['d'][mime_type] = blosc.decompress(obj_dict['d'][mime_type])
+
+            # Deserialize
+            obj_dict['d'][mime_type] = serializer_obj.deserialize(mime_type, obj_dict['d'][mime_type])
+
+        # Return new instance
+        new_instance = ActivityDetailRecord(detail_type=ActivityDetailType(obj_dict['t']),
+                                            show=bool(obj_dict["s"]),
+                                            importance=obj_dict["i"]
+                                            )
+        new_instance.data = obj_dict['d']
+        new_instance.is_loaded = True
+        return new_instance
+
+    def to_json(self) -> str:
+        """Method to convert to a single dictionary of data, that will serialize to JSON
+
+        Returns:
+            dict
+        """
+        # Get base dict
+        dict_data = self.to_dict()
+
+        # jsonify the data
+        serializer_obj = Serializer()
+        for mime_type in dict_data['data']:
+            dict_data['data'][mime_type] = serializer_obj.jsonify(mime_type, dict_data['data'][mime_type])
+
+        # At this point everything in dict_data should be ready to go for JSON serialization
+        return json.dumps(dict_data, cls=ActivityDetailRecordEncoder, separators=(',', ':'))
+
 
 class ActivityRecord(object):
     """Class representing an Activity Record"""
 
-    def __init__(self, activity_type: Optional[ActivityType] = None, show: bool = True, message: str = None,
-                 importance: Optional[int] = None, tags: Optional[List[str]] = None) -> None:
+    def __init__(self, activity_type: ActivityType, show: bool = True, message: str = None,
+                 importance: Optional[int] = None, tags: Optional[List[str]] = None,
+                 linked_commit: Optional[str]=None) -> None:
         """Constructor
 
         Args:
             key(str): Key used to access and identify the object
         """
         # Commit hash of this record in the git log
-        self.linked_commit = None
+        self.commit = None
 
         # Commit hash of the commit this references
-        self.linked_commit = None
+        self.linked_commit = linked_commit
 
         # Message summarizing the event
         self.message = message
@@ -205,8 +319,7 @@ class ActivityRecord(object):
         else:
             raise ValueError("Message required when creating an activity object")
 
-        meta = {"show": self.show, "importance": self.importance or 0,
-                "type_name": self.type, "type_id": self.type.value}
+        meta = {"show": self.show, "importance": self.importance or 0, "type": self.type.value}
         log_str = f"{log_str}metadata:{json.dumps(meta)}**\n"
 
         log_str = f"{log_str}tags:{json.dumps(self.tags)}**\n"
@@ -214,11 +327,15 @@ class ActivityRecord(object):
         log_str = f"{log_str}details:**\n"
         if self.detail_objects:
             for d in self.detail_objects:
-                log_str = f"{log_str}{d.log_str}**\n"
+                log_str = f"{log_str}{d[3].log_str}**\n"
 
         log_str = f"{log_str}_GTM_ACTIVITY_END_"
 
         return log_str
+
+    def _sort_detail_objects(self):
+        """Method to sort detail objects by show, type, then importance"""
+        self.detail_objects = sorted(self.detail_objects, key=operator.itemgetter(0, 1, 2), reverse=True)
 
     def add_detail_object(self, obj: ActivityDetailRecord) -> None:
         """Method to add a detail object
@@ -229,7 +346,8 @@ class ActivityRecord(object):
         Returns:
             None
         """
-        self.detail_objects.append((obj.type.value, obj.show, obj.importance, obj))
+        self.detail_objects.append((obj.show, obj.type.value, obj.importance, obj))
+        self._sort_detail_objects()
 
     def update_detail_object(self, obj: ActivityDetailRecord, index: int) -> None:
         """Method to update a detail object in place
@@ -244,4 +362,6 @@ class ActivityRecord(object):
         if index < 0 or index >= len(self.detail_objects):
             raise ValueError("Index out of range when updating detail object")
 
-        self.detail_objects.insert(index, (obj.type.value, obj.show, obj.importance, obj))
+        self.detail_objects.insert(index, (obj.show, obj.type.value, obj.importance, obj))
+        del self.detail_objects[index + 1]
+        self._sort_detail_objects()

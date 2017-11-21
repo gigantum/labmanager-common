@@ -28,6 +28,9 @@ git:
 # Embedded Detail Object Database config
 detaildb:
   logfile_limit: 8000000
+  options:
+    compress: true
+    compress_min_bytes: 4000
 
 # LabBook Lock Configuration
 lock:
