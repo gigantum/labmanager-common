@@ -88,7 +88,7 @@ class ActivityDetailRecord(object):
         self.importance = importance
 
         # A list of tags for the record
-        self.tags: Optional[List[str]] = None
+        self.tags: Optional[List[str]] = []
 
     @property
     def log_str(self) -> str:
@@ -135,6 +135,19 @@ class ActivityDetailRecord(object):
 
         # Since you added data, it can be accessed now
         self.is_loaded = True
+
+    @property
+    def data_size(self) -> int:
+        """A property to get the uncompressed byte count for detail objects
+
+        Returns:
+            int
+        """
+        obj_size = 0
+        for mime_type in self.data:
+            obj_size += len(self.data[mime_type])
+
+        return obj_size
 
     def to_dict(self, compact=False) -> dict:
         """Method to convert to a dictionary
@@ -186,7 +199,7 @@ class ActivityDetailRecord(object):
         return json.dumps(dict_data, cls=ActivityDetailRecordEncoder, separators=(',', ':')).encode('utf-8')
 
     @staticmethod
-    def from_bytes(byte_array: bytes, decompress_details: bool=True) -> 'ActivityDetailRecord':
+    def from_bytes(byte_array: bytes, decompress: bool=True) -> 'ActivityDetailRecord':
         """Method to create ActivityDetailRecord from byte array (typically stored in the detail db)
 
         Returns:
@@ -201,7 +214,7 @@ class ActivityDetailRecord(object):
             obj_dict['d'][mime_type] = base64.b64decode(obj_dict['d'][mime_type])
 
             # Optionally decompress
-            if decompress_details:
+            if decompress:
                 obj_dict['d'][mime_type] = blosc.decompress(obj_dict['d'][mime_type])
 
             # Deserialize
@@ -254,9 +267,6 @@ class ActivityRecord(object):
         # Message summarizing the event
         self.message = message
 
-        # String stored in the git log
-        self._log_str: Optional[str] = None
-
         # Storage for detail objects in a tuple of (type, show, importance, object)
         self.detail_objects: Optional[List[tuple]] = list()
 
@@ -273,11 +283,12 @@ class ActivityRecord(object):
         self.tags = tags
 
     @staticmethod
-    def from_log_str(log_str: str) -> 'ActivityRecord':
+    def from_log_str(log_str: str, commit: Optional[str] = None) -> 'ActivityRecord':
         """Static method to create a ActivityRecord instance from the identifying string stored in the git log
 
         Args:
             log_str(str): the identifying string stored in the git lo
+            commit(str): Optional commit hash for this activity record
 
         Returns:
             ActivityRecord
@@ -287,16 +298,18 @@ class ActivityRecord(object):
             lines = log_str.split("**\n")
             message = lines[1][4:]
             metadata = json.loads(lines[2][9:])
-            tags = json.loads(lines[3][5:])
 
             # Create record
-            activity_record = ActivityRecord(ActivityType(metadata["type_id"]), message=message,
+            activity_record = ActivityRecord(ActivityType(metadata["type"]), message=message,
                                              show=metadata["show"],
                                              importance=metadata["importance"],
-                                             tags=tags)
+                                             tags=metadata["tags"],
+                                             linked_commit=metadata['linked_commit'])
+            if commit:
+                activity_record.commit = commit
 
             # Add detail records
-            for line in lines[5:]:
+            for line in lines[4:]:
                 if line == "_GTM_ACTIVITY_END_":
                     break
 
@@ -319,11 +332,9 @@ class ActivityRecord(object):
         else:
             raise ValueError("Message required when creating an activity object")
 
-        meta = {"show": self.show, "importance": self.importance or 0, "type": self.type.value}
+        meta = {"show": self.show, "importance": self.importance or 0, "type": self.type.value,
+                'linked_commit': self.linked_commit, 'tags': self.tags}
         log_str = f"{log_str}metadata:{json.dumps(meta)}**\n"
-
-        log_str = f"{log_str}tags:{json.dumps(self.tags)}**\n"
-
         log_str = f"{log_str}details:**\n"
         if self.detail_objects:
             for d in self.detail_objects:

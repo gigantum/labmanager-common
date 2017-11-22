@@ -31,6 +31,7 @@ from lmcommon.configuration import Configuration
 from lmcommon.environment import RepositoryManager
 from lmcommon.labbook import LabBook
 from lmcommon.activity.detaildb import ActivityDetailDB
+from lmcommon.activity import ActivityStore
 
 
 def _create_temp_work_dir(override_dict: dict = None):
@@ -141,15 +142,15 @@ def mock_config_file_with_auth():
 
 
 @pytest.fixture()
-def mock_config_with_notestore():
-    """A pytest fixture that creates a notestore (and labbook) and deletes directory after test"""
+def mock_config_with_activitystore():
+    """A pytest fixture that creates a ActivityStore (and labbook) and deletes directory after test"""
     # Create a temporary working directory
     conf_file, working_dir = _create_temp_work_dir()
     lb = LabBook(conf_file)
     lb.new({"username": "default"}, "labbook1", username="default", description="my first labbook")
-    #ns = NoteStore(lb)
+    store = ActivityStore(lb)
 
-    yield 1, lb
+    yield store, lb
 
     # Remove the temp_dir
     shutil.rmtree(working_dir)

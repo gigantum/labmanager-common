@@ -50,18 +50,18 @@ class TestActivityDetailRecord(object):
         """Test the log string property"""
         adr = ActivityDetailRecord(ActivityDetailType.CODE_EXECUTED, key="my_key", show=False, importance=233)
 
-        assert adr.log_str == "0,0,233,my_key"
+        assert adr.log_str == "3,0,233,my_key"
 
         adr = ActivityDetailRecord(ActivityDetailType.OUTPUT_DATA, key="my_key", show=True, importance=25)
 
-        assert adr.log_str == "5,1,25,my_key"
+        assert adr.log_str == "1,1,25,my_key"
 
     def test_from_log_str(self):
         """Test the creating from a log string"""
-        adr = ActivityDetailRecord.from_log_str("5,1,25,my_key")
+        adr = ActivityDetailRecord.from_log_str("2,1,25,my_key")
 
         assert type(adr) == ActivityDetailRecord
-        assert adr.type == ActivityDetailType.OUTPUT_DATA
+        assert adr.type == ActivityDetailType.RESULT
         assert adr.key == "my_key"
         assert adr.show is True
         assert adr.importance == 25
@@ -82,6 +82,18 @@ class TestActivityDetailRecord(object):
         with pytest.raises(ValueError):
             adr.add_value("text/html", "<p>this is some data<\p>")
 
+    def test_data_size(self):
+        """Test getting the size of details stored"""
+        adr = ActivityDetailRecord(ActivityDetailType.CODE_EXECUTED, key="my_key2")
+
+        assert adr.data_size == 0
+
+        adr.add_value("text/plain", "0000000000")
+        assert adr.data_size == 10
+
+        adr.add_value("text/html", "0000000000")
+        assert adr.data_size == 20
+
     def test_to_dict(self):
         """Test converting to a dictionary"""
         adr = ActivityDetailRecord(ActivityDetailType.CODE_EXECUTED, key="my_key2", show=True, importance=25)
@@ -90,7 +102,7 @@ class TestActivityDetailRecord(object):
 
         dict_obj = adr.to_dict()
         assert type(dict_obj) == dict
-        assert dict_obj['type'] == 0
+        assert dict_obj['type'] == 3
         assert dict_obj['importance'] == 25
         assert dict_obj['show'] == 1
         assert dict_obj['data'] == {"text/plain": "this is some data",
@@ -141,7 +153,7 @@ class TestActivityDetailRecord(object):
 
     def test_to_json(self):
         """Test converting to json"""
-        adr = ActivityDetailRecord(ActivityDetailType.CODE_EXECUTED, key="my_key3", show=True, importance=225)
+        adr = ActivityDetailRecord(ActivityDetailType.ENVIRONMENT, key="my_key3", show=True, importance=225)
         adr.add_value("text/plain", "this is some data")
 
         adr_in_json = adr.to_json()

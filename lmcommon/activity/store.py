@@ -51,8 +51,8 @@ class ActivityStore(object):
 
         self.labbook = labbook
 
-        self.detaildb = ActivityDetailDB(labbook.root, labbook.checkout_id,
-                                         logfile_limit=labbook.config.config['detaildb']['logfile_limit'])
+        self.detaildb = ActivityDetailDB(labbook.root_dir, labbook.checkout_id,
+                                         logfile_limit=labbook.labmanager_config.config['detaildb']['logfile_limit'])
 
         # Note record commit messages follow a special structure
         self.note_regex = re.compile(r"(?s)_GTM_ACTIVITY_START_.*?_GTM_ACTIVITY_END_")
@@ -124,11 +124,11 @@ class ActivityStore(object):
         for entry in self.labbook.git.log(path_info=path_info, **kwargs):
             m = self.note_regex.match(entry['message'])
             if m:
-                log_entries.append(m.group(1))
+                log_entries.append([entry['commit'], m.group(0)])
 
         return log_entries
 
-    def put_activity_record(self, record: ActivityRecord) -> ActivityRecord:
+    def create_activity_record(self, record: ActivityRecord) -> ActivityRecord:
         """Method to write an activity record and its details to the git log and detaildb
 
         Args:
@@ -137,9 +137,6 @@ class ActivityStore(object):
         Returns:
             ActivityRecord
         """
-        # Verify log level is valid
-        # NoteLogLevel(note_data['level'])
-
         # If there isn't a linked commit, generate a UUID to uniquely ID the data in levelDB that will never
         # collide with the actual git hash space by making it 32 char vs. 40 for git
         if not record.linked_commit:
@@ -147,14 +144,16 @@ class ActivityStore(object):
 
         # Write all ActivityDetailObjects to the datastore
         for idx, detail in enumerate(record.detail_objects):
-            updated_detail = self.put_detail_record(detail)
+            updated_detail = self.put_detail_record(detail[3])
             record.update_detail_object(updated_detail, idx)
 
         # Add everything in the LabBook activity/log directory
-        self.labbook.git.add_all(os.path.expanduser(os.path.join(".gigantum", "activity", "log")))
+        self.labbook.git.add_all(os.path.expanduser(os.path.join(self.labbook.root_dir,
+                                                                 ".gigantum", "activity", "log")))
 
         # Commit changes and update record
-        record.commit = self.labbook.git.commit(record.log_str)
+        commit = self.labbook.git.commit(record.log_str)
+        record.commit = commit.hexsha
 
         return record
 
@@ -170,8 +169,8 @@ class ActivityStore(object):
         entry = self.labbook.git.log_entry(commit)
         m = self.note_regex.match(entry["message"])
         if m:
-            log_str = m.group(1)
-            return ActivityRecord.from_log_str(log_str)
+            ar = ActivityRecord.from_log_str(m.group(0), commit)
+            return ar
         else:
             raise ValueError("Activity data not found in commit {}".format(commit))
 
@@ -186,24 +185,26 @@ class ActivityStore(object):
         Returns:
             List[ActivityRecord]
         """
+        max_count = None
         if first:
             # We typically have 2 commits per activity, 1 for the actual user changes and 1 for our changes.
-            # To page properly, load up to 2x the number requested plus 10 to be safe
-            first = (first * 2) + 10
+            # To page properly, load up to 2x the number requested plus 5 to be safe
+            max_count = (first * 2) + 5
 
         # Get data from the git log
-        log_data = self._get_log_records(after=after, first=first)
+        log_data = self._get_log_records(after=after, first=max_count)
 
         # If extra stuff came back due to extra padding on git log op, prune
-        if len(log_data) > first:
-            log_data = log_data[:first]
+        if first:
+            if len(log_data) > first:
+                log_data = log_data[:first]
 
         if log_data:
-            return [ActivityRecord.from_log_str(x) for x in log_data]
+            return [ActivityRecord.from_log_str(x[1], x[0]) for x in log_data]
         else:
             return []
 
-    def _encode_write_options(self) -> bytes:
+    def _encode_write_options(self, compress: Optional[bool] = None) -> bytes:
         """Method to encode any options for writing details to a byte
 
         bit option
@@ -219,7 +220,12 @@ class ActivityStore(object):
         Returns:
             bytes
         """
-        return self.compress_details.to_bytes(1, byteorder='little')
+        if compress is None:
+            result = self.compress_details.to_bytes(1, byteorder='little')
+        else:
+            result = compress.to_bytes(1, byteorder='little')
+
+        return result
 
     @staticmethod
     def _decode_write_options(option_byte: bytes) -> dict:
@@ -242,8 +248,15 @@ class ActivityStore(object):
         Returns:
             ActivityDetailRecord: the detail record updated with the key
         """
+        # Set compression option based on config and objects size
+        compress = False
+        if self.compress_details:
+            if detail_obj.data_size >= self.compress_min_bytes:
+                compress = True
+
         # Write record and store key
-        detail_obj.key = self.detaildb.put(self._encode_write_options() + detail_obj.to_bytes(self.compress_details))
+        detail_obj.key = self.detaildb.put(self._encode_write_options(compress=compress) +
+                                           detail_obj.to_bytes(compress))
 
         return detail_obj
 
@@ -260,168 +273,11 @@ class ActivityStore(object):
         detail_bytes = self.detaildb.get(detail_key)
 
         # Remove header
-        options = self._decode_write_options(bytes(detail_bytes[0]))
+        options = self._decode_write_options(detail_bytes[:1])
 
         # Create object
-        record = ActivityDetailRecord.from_bytes(detail_bytes[2:], decompress_details=options['compress'])
+        record = ActivityDetailRecord.from_bytes(detail_bytes[1:], decompress=options['compress'])
         record.key = detail_key
 
         return record
 
-
-
-
-
-
-
-
-
-
-
-
-
-    # def create_note(self, note_data: Dict[str, Any]) -> str:
-    #     """Create a new note record in the LabBook
-    #
-    #         note_data Fields:
-    #             note_detail_key(str): can be undefined. will be set by creation.
-    #             linked_commit(str): Commit hash to the git commit the note is describing
-    #             message(str): Short summary message, limited to 256 characters
-    #             level(NoteLogLevel): The level in the note hierarchy
-    #             tags(list): A list of strings for structured tagging and search
-    #             free_text(str): A large free-text blob that is stored in levelDB
-    #             objects(list): A list of NoteDetailObjects
-    #
-    #     Args:
-    #         note_data(dict): Dictionary of note field data
-    #
-    #     Returns:
-    #         str: The commit hash of the newly created note record
-    #     """
-    #     # Verify log level is valid
-    #     NoteLogLevel(note_data['level'])
-    #
-    #     # If there isn't a linked commit, generate a UUID to uniquely ID the data in levelDB that will never
-    #     # collide with the actual git hash space by making it 32 char vs. 40 for git
-    #     if not note_data['linked_commit']:
-    #         linked_commit_hash = uuid.uuid4().hex
-    #     else:
-    #         linked_commit_hash = str(note_data['linked_commit'])
-    #
-    #     # Create record using the linked_commit hash as the reference
-    #     note_detail_key = self.put_detail_record(linked_commit_hash,
-    #                            note_data['free_text'],
-    #                            note_data['objects'])
-    #
-    #     note_data['note_detail_key'] = note_detail_key
-    #
-    #     # Add everything in the LabBook notes/log directory in case it is new or a new log file has been created
-    #     self.labbook.git.add_all(os.path.expanduser(os.path.join(".gigantum", "notes", "log")))
-    #
-    #     # Prep log message
-    #     note_metadata = {'level': note_data['level'],
-    #                      'note_detail_key': note_detail_key,
-    #                      'linked_commit': note_data['linked_commit'],
-    #                      'tags': self._validate_tags(note_data['tags'])}
-    #
-    #     # format note metadata into message
-    #     message = "gtmNOTE_: {}\ngtmjson_metadata_: {}".format(note_data['message'], json.dumps(note_metadata,
-    #                                                                                             cls=NoteRecordEncoder))
-    #
-    #     # Commit the changes as you've updated the notes DB
-    #     return self.labbook.git.commit(message)
-    #
-    # def summary_to_note(self, note: Dict[str, Any]) -> Dict[str, Any]:
-    #     """Method to convert a single note summary into a full note
-    #
-    #     Args:
-    #         note(dict): An existing not summary
-    #
-    #     Returns:
-    #         dict: A dictionary of note data
-    #     """
-    #     # Merge detail record into dict
-    #     note.update(self.get_detail_record(note["note_detail_key"]))
-    #     return note
-    #
-    # def get_note(self, commit: str) -> Dict[str, Any]:
-    #     """Method to get a single note record in dictionary form
-    #
-    #     Args:
-    #         commit(str): The commit hash of the note record
-    #
-    #     Returns:
-    #         dict: A dictionary of note data for the provided commit
-    #     """
-    #     # Get note summary
-    #     note = self.get_note_summary(commit)
-    #     return self.summary_to_note(note)
-    #
-    # def get_note_summary(self, commit) -> Dict[str, Any]:
-    #     """Method to get a single note summary in dictionary form
-    #
-    #     Args:
-    #         commit(str): The commit hash of the note record
-    #
-    #     Returns:
-    #         dict: A dictionary of note data for the provided commit
-    #     """
-    #     entry = self.labbook.git.log_entry(commit)
-    #     m = self.note_regex.match(entry["message"])
-    #     if m:
-    #         # summary data from git log
-    #         message = m.group(1)
-    #         note_metadata = json.loads(m.group(2))
-    #
-    #         # Sort tags if there are any
-    #         if note_metadata['tags']:
-    #             tags = sorted(note_metadata["tags"])
-    #         else:
-    #             tags = []
-    #
-    #         return {"note_commit": entry["commit"],
-    #                 "linked_commit": note_metadata["linked_commit"],
-    #                 "message": message,
-    #                 "level": NoteLogLevel(note_metadata["level"]),
-    #                 "note_detail_key": note_metadata['note_detail_key'],
-    #                 "timestamp": entry["committed_on"],
-    #                 "tags": tags,
-    #                 "author": entry["author"]
-    #                 }
-    #     else:
-    #         raise ValueError("Note commit {} not found".format(commit))
-    #
-    # def get_all_note_summaries(self) -> List[Dict[str, Any]]:
-    #     """Naive implementation that gets a list of note summary dictionaries for all note entries
-    #
-    #         Note Summary Dictionary Fields:
-    #             note_detail_key: key to look up the note detail
-    #             note_commit(str): Commit hash of this note entry
-    #             linked_commit(str): Commit hash to the git commit the note is describing
-    #             message(str): Short summary message, limited to 256 characters
-    #             level(NoteLogLevel): The level in the note hierarchy
-    #             timestamp(datetime): The datetime of the commit
-    #             tags(list): A list of strings for structured tagging and search
-    #
-    #     Returns:
-    #         list: List of all note dictionaries without detail information
-    #     """
-    #     note_summaries = []
-    #     for entry in self.labbook.git.log():
-    #         m = self.note_regex.match(entry['message'])
-    #         if m:
-    #             # summary data from git log
-    #             message = m.group(1)
-    #             note_metadata = json.loads(m.group(2))
-    #             note_summaries.append({"note_commit": entry["commit"],
-    #                                    "linked_commit": note_metadata["linked_commit"],
-    #                                    "message": message,
-    #                                    "level": NoteLogLevel(note_metadata["level"]),
-    #                                    "note_detail_key": note_metadata['note_detail_key'],
-    #                                    "timestamp": entry["committed_on"],
-    #                                    "tags": sorted(note_metadata["tags"]),
-    #                                    "author": entry["author"]
-    #                                    })
-    #     return note_summaries
-    #
-    #
