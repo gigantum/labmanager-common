@@ -21,8 +21,8 @@ from typing import (Any, Dict)
 
 from lmcommon.logging import LMLogger
 
-from lmcommon.activity.processors.processor import ActivityNote, ActivityProcessor, StopProcessingException
-from lmcommon.notes import NoteLogLevel
+from lmcommon.activity.processors.processor import ActivityProcessor, StopProcessingException
+from lmcommon.activity import ActivityRecord, ActivityType
 
 
 logger = LMLogger.get_logger()
@@ -31,8 +31,8 @@ logger = LMLogger.get_logger()
 class BasicJupyterLabProcessor(ActivityProcessor):
     """Class to perform baseline processing for JupyterLab activity"""
 
-    def process(self, result_obj: ActivityNote, code: Dict[str, Any], result: Dict[str, Any],
-                metadata: Dict[str, Any]) -> ActivityNote:
+    def process(self, result_obj: ActivityRecord, code: Dict[str, Any], result: Dict[str, Any], status: Dict[str, any],
+                metadata: Dict[str, Any]) -> ActivityRecord:
         """Method to update a result object based on code and result data
 
         Args:
@@ -56,12 +56,12 @@ class BasicJupyterLabProcessor(ActivityProcessor):
                     else:
                         result_obj.free_text = result['data']["text/plain"][:512] + " ...\n\n <result truncated>"
 
-                    if len(result['data']["text/plain"]) > 0:
-                        result_obj.log_level = NoteLogLevel.AUTO_MAJOR
-                    else:
-                        result_obj.log_level = NoteLogLevel.AUTO_MINOR
-                else:
-                    result_obj.log_level = NoteLogLevel.AUTO_MINOR
+                #    if len(result['data']["text/plain"]) > 0:
+                #        result_obj.log_level = NoteLogLevel.AUTO_MAJOR
+                #    else:
+                #        result_obj.log_level = NoteLogLevel.AUTO_MINOR
+                #else:
+                #    result_obj.log_level = NoteLogLevel.AUTO_MINOR
 
                 return result_obj
             else:

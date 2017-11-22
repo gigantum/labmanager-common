@@ -20,7 +20,7 @@
 import abc
 from typing import (Any, Dict, List)
 
-from lmcommon.notes.note_store import NoteLogLevel, NoteDetailObject
+from lmcommon.activity import ActivityRecord
 
 
 class StopProcessingException(Exception):
@@ -28,31 +28,19 @@ class StopProcessingException(Exception):
     pass
 
 
-class ActivityNote(object):
-    """Class to store an activity note data"""
-
-    def __init__(self, message: str = None, log_level: NoteLogLevel = None, tags: List[str] = None,
-                 free_text: str = None, objects: List[NoteDetailObject] = None) -> None:
-        # Set attributes
-        self.message = message
-        self.log_level = log_level
-        self.tags = tags
-        self.free_text = free_text
-        self.objects = objects
-
-
 class ActivityProcessor(metaclass=abc.ABCMeta):
     """Class to process activity and return content for a notes record"""
 
-    def process(self, result_obj: ActivityNote, code: Dict[str, Any], result: Dict[str, Any],
-                metadata: Dict[str, Any]) -> ActivityNote:
+    def process(self, result_obj: ActivityRecord, code: Dict[str, Any], result: Dict[str, Any],
+                status: Dict[str, any], metadata: Dict[str, Any]) -> ActivityRecord:
         """Method to update a result object based on code and result data
 
         Args:
             result_obj(ActivityNote): An object containing the note
             code(dict): A dict containing data specific to the dev env containing code that was executed
             result(dict): A dict containing data specific to the dev env containing the result of code execution
-            metadata(str): A dictionary containing Dev Env specific or other developer defined data
+            status(dict): A dictionary containing the git status
+            metadata(dict): A dictionary containing Dev Env specific or other developer defined data
 
         Returns:
             ActivityNote

@@ -173,7 +173,7 @@ class ActivityDetailRecord(object):
                     "data": self.data
                     }
 
-    def to_bytes(self, compress_details: bool=True) -> bytes:
+    def to_bytes(self, compress: bool=True) -> bytes:
         """Method to serialize to bytes for storage in the activity detail db
 
         Returns:
@@ -187,7 +187,7 @@ class ActivityDetailRecord(object):
             dict_data['d'][mime_type] = serializer_obj.serialize(mime_type, dict_data['d'][mime_type])
 
             # Compress object data
-            if compress_details:
+            if compress:
                 if type(dict_data['d'][mime_type]) != bytes:
                     raise ValueError("Data must be serialized to bytes before compression")
 
@@ -334,7 +334,7 @@ class ActivityRecord(object):
 
         meta = {"show": self.show, "importance": self.importance or 0, "type": self.type.value,
                 'linked_commit': self.linked_commit, 'tags': self.tags}
-        log_str = f"{log_str}metadata:{json.dumps(meta)}**\n"
+        log_str = f"{log_str}metadata:{json.dumps(meta, separators=(',', ':'))}**\n"
         log_str = f"{log_str}details:**\n"
         if self.detail_objects:
             for d in self.detail_objects:

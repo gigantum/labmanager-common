@@ -33,7 +33,7 @@ class TestActivityDetailRecord(object):
         assert adr.key is None
         assert adr.show is True
         assert adr.importance == 0
-        assert adr.tags is None
+        assert adr.tags == []
         assert adr.data == {}
 
         adr = ActivityDetailRecord(ActivityDetailType.CODE, key="my_key", show=False, importance=23)
@@ -43,7 +43,7 @@ class TestActivityDetailRecord(object):
         assert adr.key == "my_key"
         assert adr.show is False
         assert adr.importance == 23
-        assert adr.tags is None
+        assert adr.tags == []
         assert adr.data == {}
 
     def test_log_str_prop(self):
@@ -65,7 +65,7 @@ class TestActivityDetailRecord(object):
         assert adr.key == "my_key"
         assert adr.show is True
         assert adr.importance == 25
-        assert adr.tags is None
+        assert adr.tags == []
         assert adr.data == {}
 
     def test_add_value(self):
@@ -113,17 +113,17 @@ class TestActivityDetailRecord(object):
         adr = ActivityDetailRecord(ActivityDetailType.CODE_EXECUTED, key="my_key3", show=True, importance=225)
         adr.add_value("text/plain", "this is some data")
 
-        byte_array_no_compression = adr.to_bytes(compress_details=False)
+        byte_array_no_compression = adr.to_bytes(compress=False)
         assert type(byte_array_no_compression) == bytes
 
-        adr2 = ActivityDetailRecord.from_bytes(byte_array_no_compression, decompress_details=False)
+        adr2 = ActivityDetailRecord.from_bytes(byte_array_no_compression, decompress=False)
 
         assert type(adr2) == ActivityDetailRecord
         assert adr2.type == ActivityDetailType.CODE_EXECUTED
         assert adr2.key is None
         assert adr2.show is True
         assert adr2.importance == 225
-        assert adr2.tags is None
+        assert adr2.tags == []
         assert adr2.data == {"text/plain": "this is some data"}
 
     def test_compression(self):
@@ -131,24 +131,24 @@ class TestActivityDetailRecord(object):
         adr = ActivityDetailRecord(ActivityDetailType.INPUT_DATA, key="my_ke3", show=True, importance=125)
         adr.add_value("text/plain", "this is some data00000000000000000000000000000000000" * 1000)
 
-        byte_array_no_compression = adr.to_bytes(compress_details=False)
+        byte_array_no_compression = adr.to_bytes(compress=False)
         assert type(byte_array_no_compression) == bytes
 
         adr2 = ActivityDetailRecord(ActivityDetailType.INPUT_DATA, key="my_ke3", show=True, importance=125)
         adr2.add_value("text/plain", "this is some data00000000000000000000000000000000000" * 1000)
-        byte_array_compression = adr2.to_bytes(compress_details=True)
+        byte_array_compression = adr2.to_bytes(compress=True)
         assert type(byte_array_compression) == bytes
 
         assert len(byte_array_compression) < len(byte_array_no_compression)
 
-        adr3 = ActivityDetailRecord.from_bytes(byte_array_compression, decompress_details=True)
+        adr3 = ActivityDetailRecord.from_bytes(byte_array_compression, decompress=True)
 
         assert type(adr3) == ActivityDetailRecord
         assert adr3.type == ActivityDetailType.INPUT_DATA
         assert adr3.key is None
         assert adr3.show is True
         assert adr3.importance == 125
-        assert adr3.tags is None
+        assert adr3.tags == []
         assert adr3.data == adr.data
 
     def test_to_json(self):

@@ -31,6 +31,7 @@ from lmcommon.activity.monitors.devenv import DevEnvMonitor
 from lmcommon.activity.monitors.activity import ActivityMonitor
 from lmcommon.activity.processors.processor import StopProcessingException
 from lmcommon.activity.processors.jupyterlab import BasicJupyterLabProcessor
+from lmcommon.activity import ActivityType
 from lmcommon.dispatcher import Dispatcher, jobs
 from lmcommon.logging import LMLogger
 
@@ -175,14 +176,15 @@ class JupyterLabNotebookMonitor(ActivityMonitor):
 
                 try:
                     # Process activity data to generate a note record
-                    note_object = self.process(self.code, self.result, {"path": metadata["path"]})
+                    activity_record = self.process(ActivityType.CODE,
+                                                   self.code, self.result, {"path": metadata["path"]})
 
                     # Commit changes to the related Notebook file
                     # commit = self.commit_file(metadata["path"])
                     commit = self.commit_labbook()
 
                     # Create note record
-                    note_commit = self.create_note(commit, note_object)
+                    note_commit = self.create_activity_record(commit, activity_record)
 
                     # Successfully committed changes. Clear out state
                     self.result = {}

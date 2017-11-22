@@ -167,8 +167,7 @@ class TestActivityRecord(object):
 
         assert ar.log_str == """_GTM_ACTIVITY_START_**
 msg:added some code**
-metadata:{"show": true, "importance": 50, "type": 2}**
-tags:null**
+metadata:{"show":true,"importance":50,"type":2,"linked_commit":"aaaaaaaa","tags":null}**
 details:**
 4,1,0,my_fake_detail_key**
 _GTM_ACTIVITY_END_"""
@@ -182,7 +181,7 @@ _GTM_ACTIVITY_END_"""
         assert ar.key == "my_key"
         assert ar.show is True
         assert ar.importance == 25
-        assert ar.tags is None
+        assert ar.tags == []
         assert ar.data == {}
 
     def test_update_detail_object(self):
