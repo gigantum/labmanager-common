@@ -33,6 +33,7 @@ from lmcommon.configuration import Configuration
 from lmcommon.gitlib import get_git_interface, GitAuthor
 from lmcommon.logging import LMLogger
 from lmcommon.labbook.schemas import validate_schema
+from lmcommon.activity import ActivityStore, ActivityType, ActivityRecord, ActivityDetailType, ActivityDetailRecord
 
 from redis import StrictRedis
 import redis_lock
@@ -312,6 +313,34 @@ class LabBook(object):
         """
         return ''.join(c for c in value if c not in '\<>?/;"`\'')
 
+    @staticmethod
+    def infer_section_from_relative_path(relative_path: str) -> Tuple[ActivityType, ActivityDetailType, str]:
+        """Method to try to infer the "section" from a relative file path
+
+        Args:
+            relative_path(str): a relative file path
+
+        Returns:
+            tuple
+        """
+        possible_section, _ = relative_path.split('/', 1)
+        if possible_section == 'code':
+            activity_detail_type = ActivityDetailType.CODE
+            activity_type = ActivityType.CODE
+            section = "Code"
+        elif possible_section == 'input':
+            activity_detail_type = ActivityDetailType.INPUT_DATA
+            activity_type = ActivityType.INPUT_DATA
+            section = "Input Data"
+        elif possible_section == 'output':
+            activity_detail_type = ActivityDetailType.OUTPUT_DATA
+            activity_type = ActivityType.OUTPUT_DATA
+            section = "Output Data"
+        else:
+            raise ValueError(f"Failed to infer LabBook section from relative path '{relative_path}'")
+
+        return activity_type, activity_detail_type, section
+
     def _get_file_info(self, rel_file_path: str) -> Dict[str, Any]:
         """Method to get a file's detail information
 
@@ -382,17 +411,27 @@ class LabBook(object):
             self.git.add(dst_path)
             commit = self.git.commit(commit_msg)
 
-            # Create Activity record
+            # Create Activity record and detail
             _, ext = os.path.splitext(rel_path) or 'file'
-            ns = NoteStore(self)
-            ns.create_note({
-                'linked_commit': commit.hexsha,
-                'message': commit_msg,
-                'level': NoteLogLevel.USER_MAJOR,
-                'tags': [ext],
-                'free_text': '',
-                'objects': ''
-            })
+
+            # Get LabBook section
+            activity_type, activity_detail_type, section = self.infer_section_from_relative_path(rel_path)
+
+            # Create detail record
+            adr = ActivityDetailRecord(activity_detail_type)
+            adr.add_value('text/plain', commit_msg)
+
+            # Create activity record
+            ar = ActivityRecord(activity_type,
+                                message=f"Added {section} File",
+                                linked_commit=commit.hexsha,
+                                tags=[ext])
+            ar.add_detail_object(adr)
+
+            # Store
+            ars = ActivityStore(self)
+            ars.create_activity_record(ar)
+
             return self._get_file_info(rel_path)
 
     def delete_file(self, relative_path: str, directory: bool = False) -> bool:
@@ -439,15 +478,25 @@ class LabBook(object):
                     _, ext = os.path.splitext(target_path)
                 else:
                     ext = 'directory'
-                ns = NoteStore(self)
-                ns.create_note({
-                    'linked_commit': commit.hexsha,
-                    'message': commit_msg,
-                    'level': NoteLogLevel.USER_MAJOR,
-                    'tags': ['remove', ext],
-                    'free_text': '',
-                    'objects': ''
-                })
+
+                # Get LabBook section
+                activity_type, activity_detail_type, section = self.infer_section_from_relative_path(relative_path)
+
+                # Create detail record
+                adr = ActivityDetailRecord(activity_detail_type)
+                adr.add_value('text/plain', commit_msg)
+
+                # Create activity record
+                ar = ActivityRecord(activity_type,
+                                    message=f"Deleted {section} File",
+                                    linked_commit=commit.hexsha,
+                                    tags=[ext])
+                ar.add_detail_object(adr)
+
+                # Store
+                ars = ActivityStore(self)
+                ars.create_activity_record(ar)
+
                 return True
 
     def move_file(self, src_rel_path: str, dst_rel_path: str) -> Dict[str, Any]:
@@ -490,15 +539,24 @@ class LabBook(object):
                     self.git.add(dst_abs_path)
 
                 commit = self.git.commit(commit_msg)
-                ns = NoteStore(self)
-                ns.create_note({
-                    'linked_commit': commit.hexsha,
-                    'message': commit_msg,
-                    'level': NoteLogLevel.USER_MAJOR,
-                    'tags': ['file-move'],
-                    'free_text': '',
-                    'objects': ''
-                })
+
+                # Get LabBook section
+                activity_type, activity_detail_type, section = self.infer_section_from_relative_path(dst_rel_path)
+
+                # Create detail record
+                adr = ActivityDetailRecord(activity_detail_type)
+                adr.add_value('text/plain', commit_msg)
+
+                # Create activity record
+                ar = ActivityRecord(activity_type,
+                                    message=f"Moved {section} File",
+                                    linked_commit=commit.hexsha,
+                                    tags=['file-move'])
+                ar.add_detail_object(adr)
+
+                # Store
+                ars = ActivityStore(self)
+                ars.create_activity_record(ar)
 
                 return self._get_file_info(dst_rel_path)
             except Exception as e:
