@@ -158,7 +158,7 @@ def mock_config_with_activitystore():
 
 @pytest.fixture()
 def mock_config_with_detaildb():
-    """A pytest fixture that creates a notestore (and labbook) and deletes directory after test"""
+    """A pytest fixture that creates a detail db (and labbook) and deletes directory after test"""
     # Create a temporary working directory
     conf_file, working_dir = _create_temp_work_dir()
     lb = LabBook(conf_file)

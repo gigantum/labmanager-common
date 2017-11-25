@@ -27,6 +27,7 @@ import glob
 from lmcommon.labbook import LabBook
 from lmcommon.environment import ComponentRepository  # type: ignore
 from lmcommon.logging import LMLogger
+from lmcommon.activity import ActivityStore, ActivityType, ActivityRecord, ActivityDetailType, ActivityDetailRecord
 
 logger = LMLogger.get_logger()
 
@@ -144,15 +145,20 @@ exec gosu giguser "$@"
         self.labbook.git.add(package_yaml_path)
         commit = self.labbook.git.commit(short_message)
 
-        assert True == False
-        #ns = NoteStore(self.labbook)
-        #ns.create_note({"linked_commit": commit.hexsha,
-        #                "message": short_message,
-        #                "level": NoteLogLevel.USER_MAJOR,
-        #                "tags": ["environment", 'package_manager', package_manager],
-        #                "free_text": "",
-        #                "objects": []
-        #                })
+        # Create detail record
+        adr = ActivityDetailRecord(ActivityDetailType.ENVIRONMENT)
+        adr.add_value('text/plain', short_message)
+
+        # Create activity record
+        ar = ActivityRecord(ActivityType.ENVIRONMENT,
+                            message=f"Renamed LabBook",
+                            linked_commit=commit.hexsha,
+                            tags=["environment", 'package_manager', package_manager])
+        ar.add_detail_object(adr)
+
+        # Store
+        ars = ActivityStore(self)
+        ars.create_activity_record(ar)
 
     def add_component(self, component_class: str, repository: str, namespace: str, component: str, version: str,
                       force: bool = False) -> None:
@@ -218,14 +224,20 @@ exec gosu giguser "$@"
         long_message = "{}  - component: {}\n".format(long_message, component)
         long_message = "{}  - version: {}\n".format(long_message, version)
 
-        ns = NoteStore(self.labbook)
-        ns.create_note({"linked_commit": commit.hexsha,
-                        "message": short_message,
-                        "level": NoteLogLevel.USER_MAJOR,
-                        "tags": ["environment", component_class],
-                        "free_text": long_message,
-                        "objects": []
-                        })
+        # Create detail record
+        adr = ActivityDetailRecord(ActivityDetailType.ENVIRONMENT)
+        adr.add_value('text/plain', long_message)
+
+        # Create activity record
+        ar = ActivityRecord(ActivityType.ENVIRONMENT,
+                            message=short_message,
+                            linked_commit=commit.hexsha,
+                            tags=["environment", component_class])
+        ar.add_detail_object(adr)
+
+        # Store
+        ars = ActivityStore(self)
+        ars.create_activity_record(ar)
 
     def get_component_list(self, component_class: str) -> List[Dict[str, Any]]:
         """Method to get the YAML contents for a given component class

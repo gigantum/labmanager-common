@@ -37,11 +37,13 @@ class ActivityType(Enum):
     OUTPUT_DATA = 4
     MILESTONE = 5
     BRANCH = 6
+    LABBOOK = 7
 
 
 class ActivityDetailType(Enum):
     """Enumeration representing the type of Activity Detail Record"""
     # User generated Notes
+    LABBOOK = 6
     INPUT_DATA = 5
     CODE = 4
     CODE_EXECUTED = 3

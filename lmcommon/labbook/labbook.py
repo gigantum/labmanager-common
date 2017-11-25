@@ -984,16 +984,19 @@ class LabBook(object):
             self.git.add(os.path.join(self.root_dir, ".gigantum", "labbook.yaml"))
             commit = self.git.commit(f"Renamed LabBook '{old_name}' to '{new_name}'")
 
-            # Add Activity record
-            ns = NoteStore(self)
-            ns.create_note({
-                'linked_commit': commit.hexsha,
-                'message': f"Renamed LabBook '{old_name}' to '{new_name}'",
-                'level': NoteLogLevel.USER_MAJOR,
-                'tags': ['rename'],
-                'free_text': '',
-                'objects': ''
-            })
+            # Create detail record
+            adr = ActivityDetailRecord(ActivityDetailType.LABBOOK)
+            adr.add_value('text/plain', f"Renamed LabBook '{old_name}' to '{new_name}'")
+
+            # Create activity record
+            ar = ActivityRecord(ActivityType.LABBOOK,
+                                message=f"Renamed LabBook",
+                                linked_commit=commit.hexsha)
+            ar.add_detail_object(adr)
+
+            # Store
+            ars = ActivityStore(self)
+            ars.create_activity_record(ar)
 
     def from_directory(self, root_dir: str) -> None:
         """Method to populate a LabBook instance from a directory
