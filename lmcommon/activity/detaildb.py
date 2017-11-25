@@ -47,13 +47,14 @@ class ActivityDetailDB:
 
         # Set base log file name
         self.basename = f"log_{self.checkout_id_hashed}"
-        assert(len(self.basename) == 36, "Length of base logfile name should be 36 characters")
+        if len(self.basename) != 36:
+            raise ValueError("Length of base logfile name should be 36 characters")
 
         # Set max length of the logfile in bytes before rolling
         self.logfile_limit = logfile_limit
 
         # Store the file number
-        self._file_number: Optional[int] = None
+        self._file_number: int = 0
 
         # The metadata file used to track file numbers and checkout context
         self._metadata_file = os.path.abspath(os.path.join(self.root_path, '.detaildb'))
@@ -65,21 +66,20 @@ class ActivityDetailDB:
         Returns:
             int
         """
-        if not self._file_number:
-            if os.path.exists(self._metadata_file):
-                # Get file number through stored metadata
-                with open(self._metadata_file, "r") as fp:
-                    logmeta = json.load(fp)
-                    # opening an existing log
-                    if logmeta['checkout_id'] == self.checkout_id:
-                        self._file_number = int(logmeta['file_number'])
-                    else:
-                        # This will create a new metadata file and set the file_number to 0
-                        logger.warning("Detected checkout context change in ActivityDetailDB. Resetting log file index")
-                        self._write_metadata_file()
-            else:
-                # no metadata file, first time opening labbook
-                self._write_metadata_file()
+        if os.path.exists(self._metadata_file):
+            # Get file number through stored metadata
+            with open(self._metadata_file, "r") as fp:
+                logmeta = json.load(fp)
+                # opening an existing log
+                if logmeta['checkout_id'] == self.checkout_id:
+                    self._file_number = int(logmeta['file_number'])
+                else:
+                    # This will create a new metadata file and set the file_number to 0
+                    logger.warning("Detected checkout context change in ActivityDetailDB. Resetting log file index")
+                    self._write_metadata_file()
+        else:
+            # no metadata file, first time opening labbook
+            self._write_metadata_file()
 
         return self._file_number
 
@@ -119,7 +119,7 @@ class ActivityDetailDB:
                            + length.to_bytes(4, byteorder='little')
 
     @staticmethod
-    def _parse_detail_header(detail_header: bytes) -> (int, int, int):
+    def _parse_detail_header(detail_header: bytes) -> Tuple[int, int, int]:
         """Helper function that returns offset and length from detail header
 
         Arguments: 

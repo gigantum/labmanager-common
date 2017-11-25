@@ -17,15 +17,13 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-import base64
-import json
 import os
 import re
 import uuid
-from typing import (Any, Dict, List, Union, Optional)
+from typing import (Any, Dict, List, Tuple, Optional)
 
 from lmcommon.activity.detaildb import ActivityDetailDB
-from lmcommon.activity import ActivityDetailRecord, ActivityDetailType, ActivityRecord, ActivityType
+from lmcommon.activity.records import ActivityDetailRecord, ActivityRecord
 
 
 class ActivityStore(object):
@@ -98,13 +96,13 @@ class ActivityStore(object):
         return [tag.strip().translate({ord(c): None for c in '\`;'}) for tag in tags]
 
     def _get_log_records(self, after: Optional[str]=None, before: Optional[str]=None,
-                         first: Optional[int]=None, last: Optional[int]=None) -> List[str]:
+                         first: Optional[int]=None, last: Optional[int]=None) -> List[Tuple[str, str]]:
         """Method to get ACTIVITY records from the git log
 
         Returns:
             list: List of log entries
         """
-        log_entries = []
+        log_entries: List[Tuple[str, str]] = []
         kwargs = dict()
 
         # TODO: Add support for reverse paging
@@ -116,15 +114,14 @@ class ActivityStore(object):
         if first:
             kwargs['max_count'] = first
 
+        path_info: Optional[str] = None
         if after:
             path_info = after
-        else:
-            path_info = None
 
         for entry in self.labbook.git.log(path_info=path_info, **kwargs):
             m = self.note_regex.match(entry['message'])
             if m:
-                log_entries.append([entry['commit'], m.group(0)])
+                log_entries.append((entry['commit'], m.group(0)))
 
         return log_entries
 

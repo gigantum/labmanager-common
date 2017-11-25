@@ -91,7 +91,7 @@ class ActivityMonitor(metaclass=abc.ABCMeta):
         commit = self.labbook.git.commit("Auto-commit from activity monitoring")
         return commit.hexsha
 
-    def create_activity_record(self, linked_commit: str, activity_record: ActivityRecord) -> str:
+    def create_activity_record(self, linked_commit: str, activity_record: ActivityRecord) -> Optional[str]:
         """Method to commit changes to a file
 
         Args:

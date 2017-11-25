@@ -32,7 +32,7 @@ class ActivityProcessor(metaclass=abc.ABCMeta):
     """Class to process activity and return content for a notes record"""
 
     def process(self, result_obj: ActivityRecord, code: Dict[str, Any], result: Dict[str, Any],
-                status: Dict[str, any], metadata: Dict[str, Any]) -> ActivityRecord:
+                status: Dict[str, Any], metadata: Dict[str, Any]) -> ActivityRecord:
         """Method to update a result object based on code and result data
 
         Args:

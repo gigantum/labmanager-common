@@ -22,7 +22,7 @@ from typing import (Any, Dict)
 from lmcommon.logging import LMLogger
 
 from lmcommon.activity.processors.processor import ActivityProcessor, StopProcessingException
-from lmcommon.activity import ActivityRecord, ActivityType
+from lmcommon.activity import ActivityRecord, ActivityType, ActivityDetailType, ActivityDetailRecord
 
 
 logger = LMLogger.get_logger()
@@ -31,7 +31,7 @@ logger = LMLogger.get_logger()
 class BasicJupyterLabProcessor(ActivityProcessor):
     """Class to perform baseline processing for JupyterLab activity"""
 
-    def process(self, result_obj: ActivityRecord, code: Dict[str, Any], result: Dict[str, Any], status: Dict[str, any],
+    def process(self, result_obj: ActivityRecord, code: Dict[str, Any], result: Dict[str, Any], status: Dict[str, Any],
                 metadata: Dict[str, Any]) -> ActivityRecord:
         """Method to update a result object based on code and result data
 
@@ -39,6 +39,7 @@ class BasicJupyterLabProcessor(ActivityProcessor):
             result_obj(ActivityNote): An object containing the note
             code(dict): A dict containing data specific to the dev env containing code that was executed
             result(dict): A dict containing data specific to the dev env containing the result of code execution
+            status(dict): A dict containing the result of git status from gitlib
             metadata(str): A dictionary containing Dev Env specific or other developer defined data
 
         Returns:

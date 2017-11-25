@@ -261,7 +261,7 @@ class ActivityRecord(object):
             key(str): Key used to access and identify the object
         """
         # Commit hash of this record in the git log
-        self.commit = None
+        self.commit: Optional[str] = None
 
         # Commit hash of the commit this references
         self.linked_commit = linked_commit
@@ -270,7 +270,7 @@ class ActivityRecord(object):
         self.message = message
 
         # Storage for detail objects in a tuple of (type, show, importance, object)
-        self.detail_objects: Optional[List[tuple]] = list()
+        self.detail_objects: List[tuple] = list()
 
         # Type indicating the category of detail
         self.type = activity_type
