@@ -323,6 +323,14 @@ class LabBook(object):
         Returns:
             tuple
         """
+        # If leading slash, remove it first
+        if relative_path[0] == os.path.sep:
+            relative_path = relative_path[1:]
+
+        # if no trailing slash add it. simple parsing below assumes no trailing and a leading slash to work.
+        if relative_path[-1] != os.path.sep:
+            relative_path = relative_path + os.path.sep
+
         possible_section, _ = relative_path.split('/', 1)
         if possible_section == 'code':
             activity_detail_type = ActivityDetailType.CODE
@@ -480,7 +488,8 @@ class LabBook(object):
                     ext = 'directory'
 
                 # Get LabBook section
-                activity_type, activity_detail_type, section = self.infer_section_from_relative_path(relative_path)
+                target_relative = target_path.replace(self.root_dir, "")
+                activity_type, activity_detail_type, section = self.infer_section_from_relative_path(target_relative)
 
                 # Create detail record
                 adr = ActivityDetailRecord(activity_detail_type)

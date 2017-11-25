@@ -151,13 +151,13 @@ exec gosu giguser "$@"
 
         # Create activity record
         ar = ActivityRecord(ActivityType.ENVIRONMENT,
-                            message=f"Renamed LabBook",
+                            message="Added new software package",
                             linked_commit=commit.hexsha,
                             tags=["environment", 'package_manager', package_manager])
         ar.add_detail_object(adr)
 
         # Store
-        ars = ActivityStore(self)
+        ars = ActivityStore(self.labbook)
         ars.create_activity_record(ar)
 
     def add_component(self, component_class: str, repository: str, namespace: str, component: str, version: str,
@@ -236,7 +236,7 @@ exec gosu giguser "$@"
         ar.add_detail_object(adr)
 
         # Store
-        ars = ActivityStore(self)
+        ars = ActivityStore(self.labbook)
         ars.create_activity_record(ar)
 
     def get_component_list(self, component_class: str) -> List[Dict[str, Any]]:

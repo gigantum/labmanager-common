@@ -269,7 +269,7 @@ class ImageBuilder(object):
             ar.add_detail_object(adr)
 
             # Store
-            ars = ActivityStore(self)
+            ars = ActivityStore(lb)
             ars.create_activity_record(ar)
 
         else:
