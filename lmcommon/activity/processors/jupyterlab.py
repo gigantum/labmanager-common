@@ -54,6 +54,7 @@ class BasicJupyterLabProcessor(ActivityProcessor):
 
                 # TODO: Use kernel info to get the language and provide a text/html type that is styled
                 adr_code.add_value('text/plain', code['code'])
+                adr_code.add_value('text/markdown', f"```{code['code']}```")
                 result_obj.add_detail_object(adr_code)
 
                 # There shouldn't be anything staged yet so log a warning if that happens
@@ -62,7 +63,7 @@ class BasicJupyterLabProcessor(ActivityProcessor):
 
                 # Create detail records for file changes
                 cnt = 0
-                for filename, change in status['untracked']:
+                for filename in status['untracked']:
                     activity_type, activity_detail_type, section = LabBook.infer_section_from_relative_path(filename)
                     if activity_type == ActivityType.INPUT_DATA or activity_type == ActivityType.OUTPUT_DATA:
                         show = True
@@ -70,6 +71,7 @@ class BasicJupyterLabProcessor(ActivityProcessor):
                         show = False
                     adr = ActivityDetailRecord(activity_detail_type, show=show, importance=min(100+cnt, 255))
                     adr.add_value('text/plain', f"Created new {section} file {filename}")
+                    adr.add_value('text/markdown', f"Created new {section} file `{filename}`")
                     result_obj.add_detail_object(adr)
                     cnt += 1
 
@@ -81,7 +83,8 @@ class BasicJupyterLabProcessor(ActivityProcessor):
                     else:
                         show = False
                     adr = ActivityDetailRecord(activity_detail_type, show=show, importance=min(cnt, 255))
-                    adr.add_value('text/plain', f"Modified {section} file {filename}")
+                    adr.add_value('text/plain', f"{change[0].upper() + change[1:]} {section} file {filename}")
+                    adr.add_value('text/markdown', f"{change[0].upper() + change[1:]} {section} file `{filename}`")
                     result_obj.add_detail_object(adr)
                     cnt += 1
 
@@ -97,6 +100,8 @@ class BasicJupyterLabProcessor(ActivityProcessor):
                         else:
                             adr.add_value("text/plain",
                                           result['data']["text/plain"][:truncate_at] + " ...\n\n <result truncated>")
+
+                        result_obj.add_detail_object(adr)
 
                 # Set Activity Record Message
                 result_obj.message = "Executed cell in notebook {}".format(metadata['path'])

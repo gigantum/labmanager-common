@@ -36,3 +36,19 @@ class PlainSerializer(MimeSerializer):
         # Decode the bytes to a string object
         return data.decode('utf-8')
 
+
+class MarkdownSerializer(MimeSerializer):
+    """Class for serializing markdown text"""
+
+    def jsonify(self, data: str) -> str:
+        # Just return the text when jsonifying since it will serialize properly
+        return data
+
+    def serialize(self, data: Any) -> bytes:
+        # Byte encode the string
+        return data.encode('utf-8')
+
+    def deserialize(self, data: bytes) -> str:
+        # Decode the bytes to a string object
+        return data.decode('utf-8')
+

@@ -31,6 +31,7 @@ from lmcommon.activity.monitors.devenv import DevEnvMonitor
 from lmcommon.activity.monitors.activity import ActivityMonitor
 from lmcommon.activity.processors.processor import StopProcessingException
 from lmcommon.activity.processors.jupyterlab import BasicJupyterLabProcessor
+from lmcommon.activity.processors.core import ActivityShowBasicProcessor
 from lmcommon.activity import ActivityType
 from lmcommon.dispatcher import Dispatcher, jobs
 from lmcommon.logging import LMLogger
@@ -158,6 +159,7 @@ class JupyterLabNotebookMonitor(ActivityMonitor):
             None
         """
         self.add_processor(BasicJupyterLabProcessor())
+        self.add_processor(ActivityShowBasicProcessor())
 
     def handle_message(self, msg: Dict[str, Dict], metadata: Dict[str, str]) -> None:
         """Method to handle processing an IOPub Message from a JupyterLab kernel

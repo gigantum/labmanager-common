@@ -28,7 +28,8 @@ class Serializer(object):
     def __init__(self) -> None:
         """ Load the database for the specified labbook
         """
-        self.serializers = {"text/plain": text.PlainSerializer()}
+        self.serializers = {"text/plain": text.PlainSerializer(),
+                            "text/markdown": text.MarkdownSerializer()}
 
     def jsonify(self, mime_type: str, data: Any) -> Any:
         """Method to jsonify an arbitrary data object

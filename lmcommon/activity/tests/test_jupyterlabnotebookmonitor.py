@@ -23,6 +23,8 @@ import uuid
 import os
 
 from lmcommon.activity.monitors.monitor_jupyterlab import JupyterLabNotebookMonitor, BasicJupyterLabProcessor
+from lmcommon.activity.processors.core import ActivityShowBasicProcessor
+from lmcommon.activity import ActivityStore, ActivityType, ActivityDetailType
 
 
 class TestJupyterLabNotebookMonitor(object):
@@ -43,12 +45,13 @@ class TestJupyterLabNotebookMonitor(object):
         monitor = JupyterLabNotebookMonitor("test", "test", mock_labbook[2].name,
                                             monitor_key, config_file=mock_labbook[0])
 
-        assert len(monitor.processors) == 1
+        assert len(monitor.processors) == 2
         assert type(monitor.processors[0]) == BasicJupyterLabProcessor
+        assert type(monitor.processors[1]) == ActivityShowBasicProcessor
 
     def test_start(self, redis_client, mock_labbook, mock_kernel):
         """Test processing notebook activity"""
-        dummy_file = os.path.join(mock_labbook[2].root_dir, 'Test.ipynb')
+        dummy_file = os.path.join(mock_labbook[2].root_dir, 'code', 'Test.ipynb')
         with open(dummy_file, 'wt') as tf:
             tf.write("Dummy file")
 
@@ -65,7 +68,7 @@ class TestJupyterLabNotebookMonitor(object):
         metadata = {"kernel_id": "XXXX",
                     "kernel_name": 'python',
                     "kernel_type": 'notebook',
-                    "path": 'Test.ipynb'}
+                    "path": 'code/Test.ipynb'}
 
         # Perform an action
         mock_kernel[0].execute("print('Hello, World')")
@@ -73,7 +76,7 @@ class TestJupyterLabNotebookMonitor(object):
         # Check lab book repo state
         status = mock_labbook[2].git.status()
         assert len(status["untracked"]) == 1
-        assert status["untracked"][0] == 'Test.ipynb'
+        assert status["untracked"][0] == 'code/Test.ipynb'
 
         # Process messages
         msg1 = mock_kernel[0].get_iopub_msg()
@@ -97,7 +100,7 @@ class TestJupyterLabNotebookMonitor(object):
         # Check lab book repo state
         status = mock_labbook[2].git.status()
         assert len(status["untracked"]) == 1
-        assert status["untracked"][0] == 'Test.ipynb'
+        assert status["untracked"][0] == 'code/Test.ipynb'
 
         # Process final state change message
         monitor.handle_message(msg4, metadata)
@@ -109,7 +112,319 @@ class TestJupyterLabNotebookMonitor(object):
         assert len(status["staged"]) == 0
         assert len(status["unstaged"]) == 0
 
-        # Check note entry
+        # Check activity entry
         log = mock_labbook[2].git.log()
         assert len(log) == 3
-        assert 'Test.ipynb' in log[0]['message']
+        assert 'code/Test.ipynb' in log[0]['message']
+
+        a_store = ActivityStore(mock_labbook[2])
+        record = a_store.get_activity_record(log[0]['commit'])
+        assert record.type == ActivityType.CODE
+        assert record.show is True
+        assert record.importance == 0
+        assert record.tags is None
+        assert record.message == 'Executed cell in notebook code/Test.ipynb'
+        assert len(record.detail_objects) == 3
+        assert record.detail_objects[0][0] is True
+        assert record.detail_objects[0][1] == ActivityDetailType.CODE_EXECUTED.value
+        assert record.detail_objects[0][2] == 128
+        assert record.detail_objects[1][0] is True
+        assert record.detail_objects[1][1] == ActivityDetailType.RESULT.value
+        assert record.detail_objects[1][2] == 200
+        assert record.detail_objects[2][0] is False
+        assert record.detail_objects[2][1] == ActivityDetailType.CODE.value
+        assert record.detail_objects[2][2] == 100
+
+    def test_start_modify(self, redis_client, mock_labbook, mock_kernel):
+        """Test processing notebook activity and have it modify an existing file & create some files"""
+        dummy_file = os.path.join(mock_labbook[2].root_dir, 'code', 'Test.ipynb')
+        dummy_output = os.path.join(mock_labbook[2].root_dir, 'output', 'result.bin')
+        with open(dummy_file, 'wt') as tf:
+            tf.write("Dummy file")
+
+        monitor_key = "dev_env_monitor:{}:{}:{}:{}:activity_monitor:{}".format('test',
+                                                                               'test',
+                                                                               'labbook1',
+                                                                               'jupyterlab-ubuntu1604',
+                                                                               uuid.uuid4())
+
+        monitor = JupyterLabNotebookMonitor("test", "test", mock_labbook[2].name,
+                                            monitor_key, config_file=mock_labbook[0])
+
+        # Setup monitoring metadata
+        metadata = {"kernel_id": "XXXX",
+                    "kernel_name": 'python',
+                    "kernel_type": 'notebook',
+                    "path": 'code/Test.ipynb'}
+
+        # Perform an action
+        mock_kernel[0].execute("print('Hello, World')")
+
+        # Check lab book repo state
+        status = mock_labbook[2].git.status()
+        assert len(status["untracked"]) == 1
+        assert status["untracked"][0] == 'code/Test.ipynb'
+
+        # Process messages
+        msg1 = mock_kernel[0].get_iopub_msg()
+        msg2 = mock_kernel[0].get_iopub_msg()
+        msg3 = mock_kernel[0].get_iopub_msg()
+        msg4 = mock_kernel[0].get_iopub_msg()
+
+        # Process first state change message
+        assert monitor.kernel_status == 'idle'
+        monitor.handle_message(msg1, metadata)
+        assert monitor.kernel_status == 'busy'
+
+        # Process input message
+        monitor.handle_message(msg2, metadata)
+        assert len(monitor.code) > 0
+
+        # Process output message
+        monitor.handle_message(msg3, metadata)
+        assert len(monitor.result) > 0
+
+        # Check lab book repo state
+        status = mock_labbook[2].git.status()
+        assert len(status["untracked"]) == 1
+        assert status["untracked"][0] == 'code/Test.ipynb'
+
+        # Process final state change message
+        monitor.handle_message(msg4, metadata)
+        assert monitor.kernel_status == 'idle'
+
+        # Check lab book repo state
+        status = mock_labbook[2].git.status()
+        assert len(status["untracked"]) == 0
+        assert len(status["staged"]) == 0
+        assert len(status["unstaged"]) == 0
+
+        # Check activity entry
+        log = mock_labbook[2].git.log()
+        assert len(log) == 3
+        assert 'code/Test.ipynb' in log[0]['message']
+
+        # Mock Performing an action AGAIN, faking editing the file and generating some output files
+        mock_kernel[0].execute("a=100\nprint('Hello, World 2')")
+        with open(dummy_file, 'wt') as tf:
+            tf.write("change the fake notebook")
+
+        with open(dummy_output, 'wt') as tf:
+            tf.write("some result data")
+        # Process messages
+        msg1 = mock_kernel[0].get_iopub_msg()
+        msg2 = mock_kernel[0].get_iopub_msg()
+        msg3 = mock_kernel[0].get_iopub_msg()
+        msg4 = mock_kernel[0].get_iopub_msg()
+
+        # Process first state change message
+        assert monitor.kernel_status == 'idle'
+        monitor.handle_message(msg1, metadata)
+        assert monitor.kernel_status == 'busy'
+
+        # Process input message
+        monitor.handle_message(msg2, metadata)
+        assert len(monitor.code) > 0
+
+        # Process output message
+        monitor.handle_message(msg3, metadata)
+        assert len(monitor.result) > 0
+
+        # Check lab book repo state
+        status = mock_labbook[2].git.status()
+        assert len(status["staged"]) == 0
+        assert len(status["untracked"]) == 1
+        assert len(status["unstaged"]) == 1
+        assert status["unstaged"][0][0] == 'code/Test.ipynb'
+        assert status["unstaged"][0][1] == 'modified'
+
+        # Process final state change message
+        monitor.handle_message(msg4, metadata)
+        assert monitor.kernel_status == 'idle'
+
+        # Check lab book repo state
+        status = mock_labbook[2].git.status()
+        assert len(status["untracked"]) == 0
+        assert len(status["staged"]) == 0
+        assert len(status["unstaged"]) == 0
+
+        # Check activity entry
+        log = mock_labbook[2].git.log()
+        assert len(log) == 5
+        assert 'code/Test.ipynb' in log[0]['message']
+
+        a_store = ActivityStore(mock_labbook[2])
+        record = a_store.get_activity_record(log[0]['commit'])
+        assert record.type == ActivityType.CODE
+        assert record.show is True
+        assert record.importance == 0
+        assert record.tags is None
+        assert record.message == 'Executed cell in notebook code/Test.ipynb'
+        assert len(record.detail_objects) == 4
+        assert record.detail_objects[0][0] is True
+        assert record.detail_objects[0][1] == ActivityDetailType.CODE_EXECUTED.value
+        assert record.detail_objects[0][2] == 128
+        assert record.detail_objects[1][0] is True
+        assert record.detail_objects[1][1] == ActivityDetailType.RESULT.value
+        assert record.detail_objects[1][2] == 200
+        assert record.detail_objects[2][0] is True
+        assert record.detail_objects[2][1] == ActivityDetailType.OUTPUT_DATA.value
+        assert record.detail_objects[2][2] == 100
+        assert record.detail_objects[3][0] is False
+        assert record.detail_objects[3][1] == ActivityDetailType.CODE.value
+        assert record.detail_objects[3][2] == 0
+
+        detail = a_store.get_detail_record(record.detail_objects[2][3].key)
+        assert len(detail.data) == 2
+        assert detail.data['text/plain'] == 'Created new Output Data file output/result.bin'
+
+        detail = a_store.get_detail_record(record.detail_objects[3][3].key)
+        assert len(detail.data) == 2
+        assert detail.data['text/plain'] == 'Modified Code file code/Test.ipynb'
+
+    def test_no_show(self, redis_client, mock_labbook, mock_kernel):
+        """Test processing notebook activity that doesn't have any important detail items"""
+        monitor_key = "dev_env_monitor:{}:{}:{}:{}:activity_monitor:{}".format('test',
+                                                                               'test',
+                                                                               'labbook1',
+                                                                               'jupyterlab-ubuntu1604',
+                                                                               uuid.uuid4())
+
+        monitor = JupyterLabNotebookMonitor("test", "test", mock_labbook[2].name,
+                                            monitor_key, config_file=mock_labbook[0])
+
+        # Setup monitoring metadata
+        metadata = {"kernel_id": "XXXX",
+                    "kernel_name": 'python',
+                    "kernel_type": 'notebook',
+                    "path": 'code/Test.ipynb'}
+
+        # Perform an action
+        mock_kernel[0].execute("a=1")
+
+        # Check lab book repo state
+        status = mock_labbook[2].git.status()
+        assert len(status["untracked"]) == 0
+
+        # Process messages
+        msg1 = mock_kernel[0].get_iopub_msg()
+        msg2 = mock_kernel[0].get_iopub_msg()
+        msg3 = mock_kernel[0].get_iopub_msg()
+
+        # Process first state change message
+        assert monitor.kernel_status == 'idle'
+        monitor.handle_message(msg1, metadata)
+        assert monitor.kernel_status == 'busy'
+
+        # Process input message
+        monitor.handle_message(msg2, metadata)
+        assert len(monitor.code) > 0
+
+        # Process output message
+        monitor.handle_message(msg3, metadata)
+
+        # Check activity entry
+        log = mock_labbook[2].git.log()
+        assert len(log) == 3
+        assert 'code/Test.ipynb' in log[0]['message']
+
+        a_store = ActivityStore(mock_labbook[2])
+        record = a_store.get_activity_record(log[0]['commit'])
+        assert record.type == ActivityType.CODE
+        assert record.show is False
+        assert record.importance == 0
+        assert record.tags is None
+        assert record.message == 'Executed cell in notebook code/Test.ipynb'
+        assert len(record.detail_objects) == 1
+        assert record.detail_objects[0][0] is True
+        assert record.detail_objects[0][1] == ActivityDetailType.CODE_EXECUTED.value
+        assert record.detail_objects[0][2] == 128
+
+    def test_add_many_files(self, redis_client, mock_labbook, mock_kernel):
+        """Test processing notebook activity when lots of output files have been created"""
+        for file_number in range(0, 200):
+            with open(os.path.join(mock_labbook[2].root_dir, 'output', f"{file_number}.dat"), 'wt') as tf:
+                tf.write("blah")
+
+        monitor_key = "dev_env_monitor:{}:{}:{}:{}:activity_monitor:{}".format('test',
+                                                                               'test',
+                                                                               'labbook1',
+                                                                               'jupyterlab-ubuntu1604',
+                                                                               uuid.uuid4())
+
+        monitor = JupyterLabNotebookMonitor("test", "test", mock_labbook[2].name,
+                                            monitor_key, config_file=mock_labbook[0])
+
+        # Setup monitoring metadata
+        metadata = {"kernel_id": "XXXX",
+                    "kernel_name": 'python',
+                    "kernel_type": 'notebook',
+                    "path": 'code/Test.ipynb'}
+
+        # Perform an action
+        mock_kernel[0].execute("print('Generated 200 output files')")
+
+        # Check lab book repo state
+        status = mock_labbook[2].git.status()
+        assert len(status["untracked"]) == 200
+
+        # Process messages
+        msg1 = mock_kernel[0].get_iopub_msg()
+        msg2 = mock_kernel[0].get_iopub_msg()
+        msg3 = mock_kernel[0].get_iopub_msg()
+        msg4 = mock_kernel[0].get_iopub_msg()
+
+        # Process first state change message
+        assert monitor.kernel_status == 'idle'
+        monitor.handle_message(msg1, metadata)
+        assert monitor.kernel_status == 'busy'
+
+        # Process input message
+        monitor.handle_message(msg2, metadata)
+        assert len(monitor.code) > 0
+
+        # Process output message
+        monitor.handle_message(msg3, metadata)
+        assert len(monitor.result) > 0
+
+        # Process final state change message
+        monitor.handle_message(msg4, metadata)
+        assert monitor.kernel_status == 'idle'
+
+        # Check lab book repo state
+        status = mock_labbook[2].git.status()
+        assert len(status["untracked"]) == 0
+        assert len(status["staged"]) == 0
+        assert len(status["unstaged"]) == 0
+
+        # Check activity entry
+        log = mock_labbook[2].git.log()
+        assert len(log) == 3
+        assert 'code/Test.ipynb' in log[0]['message']
+
+        a_store = ActivityStore(mock_labbook[2])
+        record = a_store.get_activity_record(log[0]['commit'])
+        assert record.type == ActivityType.CODE
+        assert record.show is True
+        assert record.importance == 0
+        assert record.tags is None
+        assert record.message == 'Executed cell in notebook code/Test.ipynb'
+        assert len(record.detail_objects) == 202
+        assert record.detail_objects[0][0] is True
+        assert record.detail_objects[0][1] == ActivityDetailType.CODE_EXECUTED.value
+        assert record.detail_objects[0][2] == 128
+        assert record.detail_objects[1][0] is True
+        assert record.detail_objects[1][1] == ActivityDetailType.RESULT.value
+        assert record.detail_objects[1][2] == 200
+        assert record.detail_objects[2][0] is True
+        assert record.detail_objects[2][1] == ActivityDetailType.OUTPUT_DATA.value
+        assert record.detail_objects[2][2] == 255
+        assert record.detail_objects[3][0] is True
+        assert record.detail_objects[3][1] == ActivityDetailType.OUTPUT_DATA.value
+        assert record.detail_objects[3][2] == 255
+        assert record.detail_objects[47][0] is True
+        assert record.detail_objects[47][1] == ActivityDetailType.OUTPUT_DATA.value
+        assert record.detail_objects[47][2] == 254
+        assert record.detail_objects[201][0] is True
+        assert record.detail_objects[201][1] == ActivityDetailType.OUTPUT_DATA.value
+        assert record.detail_objects[201][2] == 100
