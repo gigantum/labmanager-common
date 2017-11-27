@@ -43,6 +43,10 @@ GIT_IGNORE_DEFAULT = """.DS_Store"""
 logger = LMLogger.get_logger()
 
 
+class LabbookException(Exception):
+    pass
+
+
 class LabBook(object):
     """Class representing a single LabBook"""
 
@@ -183,6 +187,10 @@ class LabBook(object):
 
         dir_elements = self.root_dir.split(os.sep)
         return "|".join([dir_elements[-4], dir_elements[-3], dir_elements[-1]])
+
+    @property
+    def active_branch(self) -> str:
+        return self.git.get_current_branch_name()
 
     @property
     def description(self) -> str:
@@ -341,6 +349,147 @@ class LabBook(object):
                   'size': file_info.st_size,
                   'modified_at': file_info.st_mtime
                }
+
+    @property
+    def is_repo_clean(self) -> bool:
+        """Return true if the Git repo is ready to be push, pulled, or merged. I.e., no uncommitted changes
+        or un-tracked files. """
+
+        result_status = self.git.status()
+        for status_key in result_status.keys():
+            n = result_status.get(status_key)
+            if n:
+                return False
+        return True
+
+    def checkout_branch(self, branch_name: str, new: bool = False) -> None:
+        """
+        Checkout a Git branch. Create a new branch locally.
+
+        Args:
+            pass
+
+        Return:
+            pass
+        """
+        if not self.is_repo_clean:
+            raise LabbookException(f"Cannot checkout {branch_name}: Untracked and/or uncommitted changes")
+
+        try:
+            self.git.fetch()
+            if new:
+                logger.info(f"Creating a new branch {branch_name}...")
+                self.git.create_branch(branch_name)
+            logger.info(f"Checking out branch {branch_name}...")
+            self.git.checkout(branch_name=branch_name)
+        except ValueError as e:
+            logger.error(f"Cannot checkout branch {branch_name}: {e}")
+            raise LabbookException(e)
+
+    def get_commits_behind_remote(self, remote_name: str = "origin") -> Tuple[str, int]:
+        """Return the number of commits local branch is behind remote. Note, only works with
+        currently checked-out branch.
+
+        Args:
+            remote_name: Name of remote, e.g., "origin"
+
+        Returns:
+            tuple containing branch name, and number of commits behind (zero implies up-to-date)
+        """
+        try:
+            if remote_name in [n['name'] for n in self.git.list_remotes()]:
+                self.git.fetch(remote=remote_name)
+            result_str = self.git.repo.git.status().replace('\n', ' ')
+        except Exception as e:
+            logger.exception(e)
+            raise LabbookException(e)
+
+        logger.info(f"Checking state of branch {self.active_branch}: {result_str}")
+
+        if 'branch is up-to-date' in result_str:
+            return self.active_branch, 0
+        elif 'branch is behind' in result_str:
+            m = re.search(' by ([\d]+) commit', result_str)
+            if m:
+                assert int(m.groups()[0]) > 0
+                return self.active_branch, int(m.groups()[0])
+            else:
+                logger.error("Could not find count in: {result_str}")
+                raise LabbookException("Unable to determine commit behind-count")
+        else:
+            # This branch is local-only
+            return self.active_branch, 0
+
+    def add_remote(self, remote_name: str, url: str):
+        """Add a new git remote
+
+        Args:
+            remote_name: Name of remote, e.g., "origin"
+            url: Path to remote Git repository.
+        """
+
+        try:
+            logger.info(f"Adding new remote {remote_name} at {url}")
+            self.git.add_remote(remote_name, url)
+        except Exception as e:
+            # Unsure what specific exception add_remote creates, so make a catchall.
+            logger.exception(e)
+            raise LabbookException(e)
+
+    def get_branches(self) -> Dict[str, List[str]]:
+        """Return all branches a Dict of Lists. Dict contains two keys "local" and "remote".
+
+        Args:
+            None
+
+        Returns:
+            Dictionary of lists for "remote" and "local" branches.
+        """
+
+        try:
+            logger.debug(f"Getting branches for {str(self)}")
+            self.git.fetch()
+            return self.git.list_branches()
+        except Exception as e:
+            # Unsure what specific exception add_remote creates, so make a catchall.
+            logger.exception(e)
+            raise LabbookException(e)
+
+    def pull(self, remote: str = "origin"):
+        """Pull and update from a remote git repository
+
+        Args:
+            remote(str): Remote Git repository to pull from. Default is "origin"
+
+        Returns:
+            None
+        """
+
+        try:
+            logger.info(f"{str(self)} pulling from remote {remote}")
+            self.git.pull(remote=remote)
+        except Exception as e:
+            logger.exception(e)
+            raise LabbookException(e)
+
+    def push(self, remote: str = "origin"):
+        """Push commits to a remote git repository. Assume current working branch."""
+
+        try:
+            logger.info(f"Fetching from remote {remote}")
+            self.git.fetch(remote=remote)
+
+            if not self.active_branch in self.get_branches()['remote']:
+                logger.info(f"Pushing and setting upstream branch {self.active_branch}")
+                self.git.repo.git.push("--set-upstream", remote, self.active_branch)
+            else:
+                logger.info(f"Pushing to {remote}")
+                self.git.publish_branch(branch_name=self.active_branch, remote_name=remote)
+
+        except Exception as e:
+            # Unsure what specific exception add_remote creates, so make a catchall.
+            logger.exception(e)
+            raise LabbookException(e)
 
     def insert_file(self, src_file: str, dst_dir: str, base_filename: Optional[str] = None) -> Dict[str, Any]:
         """Copy the file at `src_file` into the `dst_dir`. Filename removes upload ID if present.
@@ -955,8 +1104,9 @@ class LabBook(object):
 
         # Load LabBook data file
         self._load_labbook_data()
+        self._validate_labbook_data()
 
-    def from_name(self, username: str, owner:str, labbook_name:str):
+    def from_name(self, username: str, owner: str, labbook_name: str):
         """Method to populate a LabBook instance based on the user and name of the labbook
 
         Args:
@@ -992,6 +1142,51 @@ class LabBook(object):
 
         # Load LabBook data file
         self._load_labbook_data()
+
+        # Make sure name matches directory name.
+        dname = [t for t in self.root_dir.split(os.sep) if t][-1]
+        if self.name != dname:
+            raise ValueError(f"Labbook name {self.name} does not match directory name {dname}")
+
+    def from_remote(self, remote_url: str, username: str, owner: str, labbook_name: str):
+        """Clone a labbook from a remote Git repository.
+
+        Args:
+            remote_url(str): URL or path of remote repo
+            username(str): Username of logged in user
+            owner(str): Owner/namespace of labbook
+            labbook_name(str): Name of labbook
+
+        Returns:
+            None
+        """
+
+        if not remote_url:
+            raise ValueError("remote_url cannot be None or empty")
+
+        if not username:
+            raise ValueError("username cannot be None or empty")
+
+        if not owner:
+            raise ValueError("owner cannot be None or empty")
+
+        if not labbook_name:
+            raise ValueError("labbook_name cannot be None or empty")
+
+        starting_dir = os.path.expanduser(self.labmanager_config.config["git"]["working_directory"])
+
+        # Expected full path of the newly imported labbook.
+        est_root_dir = os.path.join(starting_dir, username, owner, 'labbooks', labbook_name)
+        if os.path.exists(est_root_dir):
+            errmsg = f"Cannot clone labbook, path already exists at `{est_root_dir}`"
+            logger.error(errmsg)
+            raise ValueError(errmsg)
+
+        logger.info(f"Cloning labbook from remote origin `{remote_url}` into `{est_root_dir}...")
+        self.git.clone(remote_url, directory=est_root_dir)
+
+        # Once the git repo is cloned, the problem just becomes a regular import from file system.
+        self.from_directory(est_root_dir)
 
     def list_local_labbooks(self, username: str = None) -> Optional[Dict[Optional[str], List[Dict[str, str]]]]:
         """Method to list available LabBooks

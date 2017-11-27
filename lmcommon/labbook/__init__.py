@@ -1,1 +1,1 @@
-from .labbook import LabBook
+from .labbook import LabBook, LabbookException
