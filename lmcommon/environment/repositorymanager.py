@@ -22,6 +22,8 @@ import glob
 from collections import OrderedDict
 import pickle
 import operator
+import requests
+from lmcommon.logging import LMLogger
 
 import os
 import yaml
@@ -29,6 +31,8 @@ import yaml
 from typing import (Any, List, Dict)
 
 from lmcommon.configuration import Configuration
+
+logger = LMLogger.get_logger()
 
 
 def repo_url_to_name(url: str) -> str:
@@ -78,6 +82,21 @@ class RepositoryManager(object):
 
         # Clone the repo
         self.git.clone(url)
+
+    @staticmethod
+    def _internet_is_available() -> bool:
+        """Private method to check if the user can get to GitHub, since that is where the component repos are
+
+        Returns:
+            None
+        """
+        # Create the directory to clone into
+        try:
+            requests.get("http://github.com")
+        except requests.exceptions.ConnectionError:
+            return False
+
+        return True
 
     def _update_repo(self, location: str) -> None:
         """Private method to update a repository
