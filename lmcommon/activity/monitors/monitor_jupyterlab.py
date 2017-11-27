@@ -184,13 +184,13 @@ class JupyterLabNotebookMonitor(ActivityMonitor):
                     commit = self.commit_labbook()
 
                     # Create note record
-                    note_commit = self.create_activity_record(commit, activity_record)
+                    actvity_commit = self.create_activity_record(commit, activity_record)
 
                     # Successfully committed changes. Clear out state
                     self.result = {}
                     self.code = {}
 
-                    logger.info("Created auto-generated note based on kernel activity: {}".format(note_commit))
+                    logger.info("Created auto-generated note based on kernel activity: {}".format(actvity_commit))
 
                 except StopProcessingException:
                     # Don't want to save changes. Move along.

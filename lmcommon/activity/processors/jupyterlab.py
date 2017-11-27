@@ -23,6 +23,7 @@ from lmcommon.logging import LMLogger
 
 from lmcommon.activity.processors.processor import ActivityProcessor, StopProcessingException
 from lmcommon.activity import ActivityRecord, ActivityType, ActivityDetailType, ActivityDetailRecord
+from lmcommon.labbook import LabBook
 
 
 logger = LMLogger.get_logger()
@@ -48,21 +49,57 @@ class BasicJupyterLabProcessor(ActivityProcessor):
         # If there was some code, assume a cell was executed
         if code:
             if code["code"]:
-                result_obj.message = "Executed cell in notebook {}".format(metadata['path'])
+                # Create detail record to capture executed code
+                adr_code = ActivityDetailRecord(ActivityDetailType.CODE_EXECUTED, show=True, importance=128)
 
-                # Lets just capture the first 512 characters of the output for now...smarter stuff coming in the future
-                if result:
-                    if len(result['data']["text/plain"]) <= 512:
-                        result_obj.free_text = result['data']["text/plain"]
+                # TODO: Use kernel info to get the language and provide a text/html type that is styled
+                adr_code.add_value('text/plain', code['code'])
+                result_obj.add_detail_object(adr_code)
+
+                # There shouldn't be anything staged yet so log a warning if that happens
+                if len(status['staged']) > 0:
+                    logger.warning("{} staged items found while processing activity. Nothing should be staged yet!")
+
+                # Create detail records for file changes
+                cnt = 0
+                for filename, change in status['untracked']:
+                    activity_type, activity_detail_type, section = LabBook.infer_section_from_relative_path(filename)
+                    if activity_type == ActivityType.INPUT_DATA or activity_type == ActivityType.OUTPUT_DATA:
+                        show = True
                     else:
-                        result_obj.free_text = result['data']["text/plain"][:512] + " ...\n\n <result truncated>"
+                        show = False
+                    adr = ActivityDetailRecord(activity_detail_type, show=show, importance=min(100+cnt, 255))
+                    adr.add_value('text/plain', f"Created new {section} file {filename}")
+                    result_obj.add_detail_object(adr)
+                    cnt += 1
 
-                #    if len(result['data']["text/plain"]) > 0:
-                #        result_obj.log_level = NoteLogLevel.AUTO_MAJOR
-                #    else:
-                #        result_obj.log_level = NoteLogLevel.AUTO_MINOR
-                #else:
-                #    result_obj.log_level = NoteLogLevel.AUTO_MINOR
+                cnt = 0
+                for filename, change in status['unstaged']:
+                    activity_type, activity_detail_type, section = LabBook.infer_section_from_relative_path(filename)
+                    if activity_type == ActivityType.INPUT_DATA or activity_type == ActivityType.OUTPUT_DATA:
+                        show = True
+                    else:
+                        show = False
+                    adr = ActivityDetailRecord(activity_detail_type, show=show, importance=min(cnt, 255))
+                    adr.add_value('text/plain', f"Modified {section} file {filename}")
+                    result_obj.add_detail_object(adr)
+                    cnt += 1
+
+                # Create detail record for any printed/plain text result
+                if result:
+                    # Only store up to 4MB of result data (if the user printed a TON don't save it all)
+                    truncate_at = 1000 * 4000
+                    if len(result['data']["text/plain"]) > 0:
+                        adr = ActivityDetailRecord(ActivityDetailType.RESULT, show=True, importance=200)
+
+                        if len(result['data']["text/plain"]) <= truncate_at:
+                            adr.add_value("text/plain", result['data']["text/plain"])
+                        else:
+                            adr.add_value("text/plain",
+                                          result['data']["text/plain"][:truncate_at] + " ...\n\n <result truncated>")
+
+                # Set Activity Record Message
+                result_obj.message = "Executed cell in notebook {}".format(metadata['path'])
 
                 return result_obj
             else:
