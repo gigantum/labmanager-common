@@ -154,7 +154,7 @@ class TestLabBook(object):
         remote_lb.from_directory(remote_labbook_repo)
         remote_lb.checkout_branch("testing-branch")
         assert remote_lb.active_branch == 'testing-branch'
-        remote_lb.delete_file("code/codefile.c")
+        remote_lb.delete_file("code", "codefile.c")
 
         assert os.path.isfile(os.path.join(lb.root_dir, "code", "codefile.c"))
 
@@ -177,7 +177,7 @@ class TestLabBook(object):
         remote_lb = LabBook(mock_config_file[0])
         remote_lb.from_directory(remote_labbook_repo)
         remote_lb.checkout_branch("testing-branch")
-        remote_lb.delete_file("code/codefile.c")
+        remote_lb.delete_file("code", "codefile.c")
 
         r = lb.get_commits_behind_remote("origin")
         assert r[0] == 'testing-branch'
