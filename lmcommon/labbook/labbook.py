@@ -533,13 +533,14 @@ class LabBook(object):
             logger.exception(e)
             raise LabbookException(e)
 
-    def insert_file(self, src_file: str, dst_dir: str, base_filename: Optional[str] = None) -> Dict[str, Any]:
+    def insert_file(self, section: str, src_file: str, dst_dir: str,
+                    base_filename: Optional[str] = None) -> Dict[str, Any]:
         """Copy the file at `src_file` into the `dst_dir`. Filename removes upload ID if present.
 
         Args:
+            section(str): Section name (code, input, output)
             src_file(str): Full path of file to insert into
             dst_dir(str): Relative path within labbook where `src_file` should be copied to
-            section(str): Section name (code, input, output)
             base_filename(str): The desired basename for the file, without an upload ID prepended
 
         Returns:
