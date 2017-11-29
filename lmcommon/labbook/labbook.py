@@ -70,6 +70,9 @@ class LabBook(object):
         # Redis instance for the LabBook lock
         self._lock_redis_client: Optional[StrictRedis] = None
 
+        # Persisted Favorites data for more efficient file listing operations
+        self._favorite_keys: Optional[Dict[str, Any]] = None
+
     def __str__(self):
         if self._root_dir:
             return f'<LabBook at `{self._root_dir}`>'
@@ -250,6 +253,31 @@ class LabBook(object):
                 logger.info(f"Created new checkout context ID {self._checkout_id}")
             return self._checkout_id
 
+    @property
+    def favorite_keys(self) -> Dict[str, List[Optional[str]]]:
+        """Property that provides cached favorite data for file listing operations
+
+        Returns:
+            dict
+        """
+        if not self._favorite_keys:
+            data: Dict[str, List[Optional[Any]]] = dict()
+            # Try to load favorite data from disk
+            favorites_dir = os.path.join(self.root_dir, '.gigantum', 'favorites')
+            for section in ['code', 'input', 'output']:
+                favorite_file = os.path.join(favorites_dir, f'{section}.json')
+                data[section] = list()
+                if os.path.exists(favorite_file):
+                    with open(favorite_file, 'rt') as f_data:
+                        favorite_data = json.load(f_data)
+
+                    # Save just the keys in a list
+                    data[section].extend([f['key'] for f in favorite_data])
+
+            self._favorite_keys = data
+
+        return self._favorite_keys
+
     def _set_root_dir(self, new_root_dir: str) -> None:
         """Update the root directory and also reconfigure the git instance
 
@@ -310,6 +338,18 @@ class LabBook(object):
             else:
                 logger.info("Skipping schema check on old LabBook")
 
+    def _validate_section(self, section: str) -> None:
+        """Simple method to validate a user provided section name
+
+        Args:
+            section(str): Name of a LabBook section
+
+        Returns:
+            None
+        """
+        if section not in ['code', 'input', 'output']:
+            raise ValueError("section (code, input, output) must be provided.")
+
     # TODO: Get feedback on better way to sanitize
     def _santize_input(self, value: str) -> str:
         """Simple method to sanitize a user provided value with characters that can be bad
@@ -322,19 +362,20 @@ class LabBook(object):
         """
         return ''.join(c for c in value if c not in '\<>?/;"`\'')
 
-    def _get_file_info(self, rel_file_path: str) -> Dict[str, Any]:
+    def get_file_info(self, section: str, rel_file_path: str) -> Dict[str, Any]:
         """Method to get a file's detail information
 
         Args:
             rel_file_path(str): The relative file path to generate info from
+            section(str): The section name (code, input, output)
 
         Returns:
             dict
         """
         # remove leading separators if one exists.
         rel_file_path = rel_file_path[1:] if rel_file_path[0] == os.path.sep else rel_file_path
+        full_path = os.path.join(self.root_dir, section, rel_file_path)
 
-        full_path = os.path.join(self.root_dir, rel_file_path)
         file_info = os.stat(full_path)
         is_dir = os.path.isdir(full_path)
 
@@ -347,7 +388,8 @@ class LabBook(object):
                   'key': rel_file_path,
                   'is_dir': is_dir,
                   'size': file_info.st_size,
-                  'modified_at': file_info.st_mtime
+                  'modified_at': file_info.st_mtime,
+                  'is_favorite': rel_file_path in self.favorite_keys[section]
                }
 
     @property
@@ -491,10 +533,12 @@ class LabBook(object):
             logger.exception(e)
             raise LabbookException(e)
 
-    def insert_file(self, src_file: str, dst_dir: str, base_filename: Optional[str] = None) -> Dict[str, Any]:
+    def insert_file(self, section: str, src_file: str, dst_dir: str,
+                    base_filename: Optional[str] = None) -> Dict[str, Any]:
         """Copy the file at `src_file` into the `dst_dir`. Filename removes upload ID if present.
 
         Args:
+            section(str): Section name (code, input, output)
             src_file(str): Full path of file to insert into
             dst_dir(str): Relative path within labbook where `src_file` should be copied to
             base_filename(str): The desired basename for the file, without an upload ID prepended
@@ -502,6 +546,8 @@ class LabBook(object):
         Returns:
             dict: The inserted file's info
         """
+        self._validate_section(section)
+
         if not os.path.abspath(src_file):
             raise ValueError(f"Source file `{src_file}` is not an absolute path")
 
@@ -510,7 +556,7 @@ class LabBook(object):
 
         with self.lock_labbook():
             # Remove any leading "/" -- without doing so os.path.join will break.
-            dst_dir = LabBook._make_path_relative(dst_dir)
+            dst_dir = LabBook._make_path_relative(os.path.join(section, dst_dir))
 
             # Check if this file contains an upload_id (which means it came from a chunked upload)
             if base_filename:
@@ -528,8 +574,8 @@ class LabBook(object):
             shutil.copyfile(src_file, dst_path)
 
             # Create commit
-            rel_path = dst_path.replace(self.root_dir, '')
-            commit_msg = f"Added new file {rel_path}"
+            rel_path = dst_path.replace(os.path.join(self.root_dir, section), '')
+            commit_msg = f"Added new {section} file {rel_path}"
             self.git.add(dst_path)
             commit = self.git.commit(commit_msg)
 
@@ -544,10 +590,10 @@ class LabBook(object):
                 'free_text': '',
                 'objects': ''
             })
-            return self._get_file_info(rel_path)
+            return self.get_file_info(section, rel_path)
 
-    def delete_file(self, relative_path: str, directory: bool = False) -> bool:
-        """Delete file (or directory) from inside lb directory.
+    def delete_file(self, section: str, relative_path: str, directory: bool = False) -> bool:
+        """Delete file (or directory) from inside lb section.
 
         Part of the intention is to mirror the unix "rm" command. Thus, there
         needs to be some extra arguments in order to delete a directory, especially
@@ -555,15 +601,17 @@ class LabBook(object):
         to delete a directory at the given path.
 
         Args:
+            section(str): Section name (code, input, output)
             relative_path(str): Relative path from labbook root to target
             directory(bool): True if relative_path is a directory
 
         Returns:
             None
         """
+        self._validate_section(section)
         with self.lock_labbook():
             relative_path = LabBook._make_path_relative(relative_path)
-            target_path = os.path.join(self.root_dir, relative_path)
+            target_path = os.path.join(self.root_dir, section, relative_path)
             if not os.path.exists(target_path):
                 raise ValueError(f"Attempted to delete non-existent path at `{target_path}`")
             else:
@@ -601,14 +649,16 @@ class LabBook(object):
                 })
                 return True
 
-    def move_file(self, src_rel_path: str, dst_rel_path: str) -> Dict[str, Any]:
+    def move_file(self, section: str, src_rel_path: str, dst_rel_path: str) -> Dict[str, Any]:
         """Move a file or directory within a labbook, but not outside of it. Wraps
         underlying "mv" call.
 
         Args:
+            section(str): Section name (code, input, output)
             src_rel_path(str): Source file or directory
             dst_rel_path(str): Target file name and/or directory
         """
+        self._validate_section(section)
         # Start with Validations
         if not src_rel_path:
             raise ValueError("src_rel_path cannot be None or empty")
@@ -620,8 +670,8 @@ class LabBook(object):
             src_rel_path = LabBook._make_path_relative(src_rel_path)
             dst_rel_path = LabBook._make_path_relative(dst_rel_path)
 
-            src_abs_path = os.path.join(self.root_dir, src_rel_path.replace('..', ''))
-            dst_abs_path = os.path.join(self.root_dir, dst_rel_path.replace('..', ''))
+            src_abs_path = os.path.join(self.root_dir, section, src_rel_path.replace('..', ''))
+            dst_abs_path = os.path.join(self.root_dir, section, dst_rel_path.replace('..', ''))
 
             if not os.path.exists(src_abs_path):
                 raise ValueError(f"No src file exists at `{src_abs_path}`")
@@ -651,13 +701,13 @@ class LabBook(object):
                     'objects': ''
                 })
 
-                return self._get_file_info(dst_rel_path)
+                return self.get_file_info(section, dst_rel_path)
             except Exception as e:
                 logger.critical("Failed moving file in labbook. Repository may be in corrupted state.")
                 logger.exception(e)
                 raise
 
-    def makedir(self, relative_path: str, make_parents: bool = True) -> Dict[str, Any]:
+    def makedir(self, relative_path: str, make_parents: bool = True) -> None:
         """Make a new directory inside the labbook directory.
 
         Args:
@@ -665,7 +715,7 @@ class LabBook(object):
             make_parents(bool): If true, create intermediary directories
 
         Returns:
-            dict: Absolute path of new directory
+            str: Absolute path of new directory
         """
         if not relative_path:
             raise ValueError("relative_path argument cannot be None or empty")
@@ -686,22 +736,22 @@ class LabBook(object):
                         gitkeep.write("This file is necessary to keep this directory tracked by Git"
                                       " and archivable by compression tools. Do not delete or modify!")
 
-                return self._get_file_info(relative_path)
-
-    def walkdir(self, base_path: Optional[str] = None, show_hidden: bool = False) -> List[Dict[str, Any]]:
-        """Return a list of all files and directories in the labbook. Never includes the .git or
+    def walkdir(self, section: str, show_hidden: bool = False) -> List[Dict[str, Any]]:
+        """Return a list of all files and directories in a section of the labbook. Never includes the .git or
          .gigantum directory.
 
         Args:
-            base_path(str): Relative base path, if not listing from labbook's root.
+            section(str): The labbook section (code, input, output) to walk
             show_hidden(bool): If True, include hidden directories (EXCLUDING .git and .gigantum)
 
         Returns:
             List[Dict[str, str]]: List of dictionaries containing file and directory metadata
         """
+        self._validate_section(section)
+
         keys: List[str] = list()
         # base_dir is the root directory to search, to account for relative paths inside labbook.
-        base_dir = os.path.join(self.root_dir, base_path or '')
+        base_dir = os.path.join(self.root_dir, section)
         if not os.path.isdir(base_dir):
             raise ValueError(f"Labbook walkdir base_dir {base_dir} not an existing directory")
 
@@ -714,31 +764,34 @@ class LabBook(object):
 
             # For more deterministic responses, sort resulting paths alphabetically.
             # Store directories then files, so pagination loads things in an intuitive order
-            keys.extend(sorted([os.path.join(root.replace(self.root_dir, ''), d) for d in dirs]))
-            keys.extend(sorted([os.path.join(root.replace(self.root_dir, ''), f) for f in files]))
+            dirs.sort()
+            keys.extend(sorted([os.path.join(root.replace(base_dir, ''), d) for d in dirs]))
+            keys.extend(sorted([os.path.join(root.replace(base_dir, ''), f) for f in files]))
 
         # Create stats
         stats: List[Dict[str, Any]] = list()
         for f_p in keys:
             if not show_hidden and any([len(p) and p[0] == '.' for p in f_p.split(os.path.sep)]):
                 continue
-            stats.append(self._get_file_info(f_p))
+            stats.append(self.get_file_info(section, f_p))
 
         return stats
 
-    def listdir(self, base_path: Optional[str] = None, show_hidden: bool = False) -> List[Dict[str, Any]]:
+    def listdir(self, section: str, base_path: Optional[str] = None, show_hidden: bool = False) -> List[Dict[str, Any]]:
         """Return a list of all files and directories in a directory. Never includes the .git or
          .gigantum directory.
 
         Args:
+            section(str): the labbook section to start from
             base_path(str): Relative base path, if not listing from labbook's root.
             show_hidden(bool): If True, include hidden directories (EXCLUDING .git and .gigantum)
 
         Returns:
             List[Dict[str, str]]: List of dictionaries containing file and directory metadata
         """
+        self._validate_section(section)
         # base_dir is the root directory to search, to account for relative paths inside labbook.
-        base_dir = os.path.join(self.root_dir, base_path or '')
+        base_dir = os.path.join(self.root_dir, section, base_path or '')
         if not os.path.isdir(base_dir):
             raise ValueError(f"Labbook listdir base_dir {base_dir} not an existing directory")
 
@@ -752,18 +805,18 @@ class LabBook(object):
                 continue
 
             # Create tuple (isDir, key)
-            stats.append(self._get_file_info(os.path.join(base_path or "", item)))
+            stats.append(self.get_file_info(section, os.path.join(base_path or "", item)))
 
         # For more deterministic responses, sort resulting paths alphabetically.
         return sorted(stats, key=lambda a: a['key'])
 
-    def create_favorite(self, target_sub_dir: str, relative_path: str,
+    def create_favorite(self, section: str, relative_path: str,
                         description: Optional[str] = None, position: Optional[int] = None,
                         is_dir: bool = False) -> Dict[str, Any]:
         """Mark an existing file as a Favorite
 
         Args:
-            target_sub_dir(str): lab book subdir where file exists (code, input, output)
+            section(str): lab book subdir where file exists (code, input, output)
             relative_path(str): Relative path within the root_dir to the file to favorite
             description(str): A short string containing information about the favorite
             position(int): The position to insert the favorite. If omitted, will append.
@@ -772,12 +825,12 @@ class LabBook(object):
         Returns:
             dict
         """
-        if target_sub_dir not in ['code', 'input', 'output']:
+        if section not in ['code', 'input', 'output']:
             raise ValueError("Favorites only supported in `code`, `input`, and `output` Lab Book directories")
 
         with self.lock_labbook():
             # Generate desired absolute path
-            target_path_rel = os.path.join(target_sub_dir, relative_path)
+            target_path_rel = os.path.join(section, relative_path)
 
             # Remove any leading "/" -- without doing so os.path.join will break.
             target_path_rel = LabBook._make_path_relative(target_path_rel)
@@ -798,18 +851,17 @@ class LabBook(object):
                 os.makedirs(favorites_dir)
 
             favorite_data: List[Dict[str, Any]] = []
-            if os.path.exists(os.path.join(favorites_dir, f'{target_sub_dir}.json')):
+            if os.path.exists(os.path.join(favorites_dir, f'{section}.json')):
                 # Read existing data
-                with open(os.path.join(favorites_dir, f'{target_sub_dir}.json'), 'rt') as f_data:
+                with open(os.path.join(favorites_dir, f'{section}.json'), 'rt') as f_data:
                     favorite_data = json.load(f_data)
 
             # Ensure the key has a trailing slash if a directory to meet convention
-            key = os.path.join(target_sub_dir, relative_path)
             if is_dir:
-                if key[-1] != os.path.sep:
-                    key = key + os.path.sep
+                if relative_path[-1] != os.path.sep:
+                    relative_path = relative_path + os.path.sep
 
-            favorite_record = {"key": key,
+            favorite_record = {"key": relative_path,
                                "description": description,
                                "is_dir": is_dir}
 
@@ -836,22 +888,107 @@ class LabBook(object):
                                                                                         range(len(favorite_data)))]
 
             # Write favorites to lab book
-            with open(os.path.join(favorites_dir, f'{target_sub_dir}.json'), 'wt') as f_data:
+            with open(os.path.join(favorites_dir, f'{section}.json'), 'wt') as f_data:
                 json.dump(favorite_data, f_data)
+
+            # Remove cached favorite key data
+            self._favorite_keys = None
 
             return favorite_data[result_index]
 
-    def remove_favorite(self, target_sub_dir: str, position: int) -> None:
+    def update_favorite(self, section: str, index: int,
+                        new_description: Optional[str] = None,
+                        new_index: Optional[int] = None,
+                        new_key: Optional[str] = None) -> Dict[str, Any]:
         """Mark an existing file as a Favorite
 
         Args:
-            target_sub_dir(str): lab book subdir where file exists (code, input, output)
+            section(str): lab book subdir where file exists (code, input, output)
+            index(int): The position of the favorite to edit
+            new_description(str): A short string containing information about the favorite
+            new_index(int): The position to move the favorite
+            new_key(int): An updated key for the favorite
+
+        Returns:
+            dict
+        """
+        if section not in ['code', 'input', 'output']:
+            raise ValueError("Favorites only supported in `code`, `input`, and `output` Lab Book directories")
+
+        with self.lock_labbook():
+            # Open existing Favorites json
+            favorites_file = os.path.join(self.root_dir, '.gigantum', 'favorites', f'{section}.json')
+            if not os.path.exists(favorites_file):
+                # No favorites have been created
+                raise ValueError(f"No favorites exist in '{section}'. Create a favorite before trying to update")
+
+            # Read existing data
+            with open(favorites_file, 'rt') as f_data:
+                favorite_data = json.load(f_data)
+
+            # Ensure the index is valid
+            if index < 0 or index >= len(favorite_data):
+                raise ValueError(f"Invalid favorite index {index}")
+
+            # Update description if needed
+            if new_description:
+                logger.info(f"Updating description for {favorite_data[index]['key']} favorite")
+                favorite_data[index]['description'] = new_description
+
+            # Update key if needed
+            if new_key:
+                # Remove any leading "/" -- without doing so os.path.join will break.
+                target_path_rel = LabBook._make_path_relative(os.path.join(section, new_key))
+                target_path = os.path.join(self.root_dir, target_path_rel.replace('..', ''))
+
+                if not os.path.exists(target_path):
+                    raise ValueError(f"Target file/dir `{target_path}` does not exist")
+
+                logger.info(f"Updating key for {favorite_data[index]['key']} favorite")
+                favorite_data[index]['key'] = new_key
+
+            if new_index and new_index != index:
+                if new_index < 0 or new_index >= len(favorite_data):
+                    raise ValueError("Invalid index to insert favorite")
+
+                updated_record = favorite_data[index]
+                if new_index > index:
+                    # Insert then delete
+                    favorite_data.insert(new_index + 1, updated_record)
+                    del favorite_data[index]
+                else:
+                    # delete then insert
+                    del favorite_data[index]
+                    favorite_data.insert(new_index, updated_record)
+
+                result_index = new_index
+            else:
+                result_index = index
+
+            # Add index values
+            favorite_data = [dict(fav_data, index=idx_val) for fav_data, idx_val in zip(favorite_data,
+                                                                                        range(len(favorite_data)))]
+
+            # Write favorites to lab book
+            with open(favorites_file, 'wt') as f_data:
+                json.dump(favorite_data, f_data)
+
+            # Remove cached favorite key data
+            self._favorite_keys = None
+
+            return favorite_data[result_index]
+
+    def remove_favorite(self, section: str, position: int) -> None:
+        """Mark an existing file as a Favorite
+
+        Args:
+            section(str): lab book subdir where file exists (code, input, output)
             position(int): The position to insert the favorite. If omitted, will append.
 
         Returns:
             None
         """
-        if target_sub_dir not in ['code', 'input', 'output']:
+        if section not in ['code', 'input', 'output']:
             raise ValueError("Favorites only supported in `code`, `input`, and `output` Lab Book directories")
 
         with self.lock_labbook():
@@ -862,9 +999,9 @@ class LabBook(object):
                 raise ValueError(f"No favorites have been created yet. Cannot remove item {position}!")
 
             favorite_data: List[Dict[str, Any]] = []
-            if os.path.exists(os.path.join(favorites_dir, f'{target_sub_dir}.json')):
+            if os.path.exists(os.path.join(favorites_dir, f'{section}.json')):
                 # Read existing data
-                with open(os.path.join(favorites_dir, f'{target_sub_dir}.json'), 'rt') as f_data:
+                with open(os.path.join(favorites_dir, f'{section}.json'), 'rt') as f_data:
                     favorite_data = json.load(f_data)
 
             if position >= len(favorite_data):
@@ -880,30 +1017,33 @@ class LabBook(object):
                                                                                         range(len(favorite_data)))]
 
             # Write favorites to back lab book
-            with open(os.path.join(favorites_dir, f'{target_sub_dir}.json'), 'wt') as f_data:
+            with open(os.path.join(favorites_dir, f'{section}.json'), 'wt') as f_data:
                 json.dump(favorite_data, f_data)
 
-            logger.info(f"Removed {target_sub_dir} favorite #{position}")
+            logger.info(f"Removed {section} favorite #{position}")
+
+            # Remove cached favorite key data
+            self._favorite_keys = None
 
             return None
 
-    def get_favorites(self, target_sub_dir: str) -> List[Optional[Dict[str, Any]]]:
+    def get_favorites(self, section: str) -> List[Optional[Dict[str, Any]]]:
         """Get Favorite data
 
         Args:
-            target_sub_dir(str): lab book subdir where file exists (code, input, output)
+            section(str): lab book subdir where file exists (code, input, output)
 
         Returns:
             None
         """
-        if target_sub_dir not in ['code', 'input', 'output']:
+        if section not in ['code', 'input', 'output']:
             raise ValueError("Favorites only supported in `code`, `input`, and `output` Lab Book directories")
 
         favorite_data: List[Optional[Dict[str, Any]]] = []
         favorites_dir = os.path.join(self.root_dir, '.gigantum', 'favorites')
-        if os.path.exists(os.path.join(favorites_dir, f'{target_sub_dir}.json')):
+        if os.path.exists(os.path.join(favorites_dir, f'{section}.json')):
             # Read existing data
-            with open(os.path.join(favorites_dir, f'{target_sub_dir}.json'), 'rt') as f_data:
+            with open(os.path.join(favorites_dir, f'{section}.json'), 'rt') as f_data:
                 favorite_data = json.load(f_data)
 
         return favorite_data

@@ -178,7 +178,7 @@ def remote_labbook_repo():
         with open(os.path.join(tmpdirname, 'codefile.c'), 'wb') as codef:
             codef.write(b'// Cody McCodeface ...')
 
-        lb.insert_file(codef.name, "code")
+        lb.insert_file("code", codef.name, "")
 
     lb.checkout_branch("master")
 
