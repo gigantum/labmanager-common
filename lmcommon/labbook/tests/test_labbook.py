@@ -21,10 +21,13 @@
 import pytest
 import tempfile
 import os
+import shutil
 import yaml
 
-from lmcommon.labbook import LabBook
-from lmcommon.fixtures import mock_config_file
+import git
+
+from lmcommon.labbook import LabBook, LabbookException
+from lmcommon.fixtures import mock_config_file, mock_labbook, remote_labbook_repo
 
 
 @pytest.fixture()
@@ -34,6 +37,7 @@ def sample_src_file():
         sample_f.write("n4%nm4%M435A EF87kn*C" * 40)
         sample_f.seek(0)
         yield sample_f.name
+
 
 
 class TestLabBook(object):
@@ -223,12 +227,13 @@ class TestLabBook(object):
 
     def test_list_labbooks(self, mock_config_file):
         """Test listing labbooks for all users"""
-        lb = LabBook(mock_config_file[0])
+        lb1, lb2, lb3, lb4 = LabBook(mock_config_file[0]), LabBook(mock_config_file[0]),\
+                             LabBook(mock_config_file[0]), LabBook(mock_config_file[0])
 
-        labbook_dir1 = lb.new(owner={"username": "user1"}, name="labbook1", description="my first labbook")
-        labbook_dir2 = lb.new(owner={"username": "user1"}, name="labbook2", description="my second labbook")
-        labbook_dir3 = lb.new(owner={"username": "user2"}, name="labbook3", description="my other labbook")
-        labbook_dir4 = lb.new(owner={"username": "user2"}, username="user1", name="labbook4",
+        labbook_dir1 = lb1.new(owner={"username": "user1"}, name="labbook1", description="my first labbook")
+        labbook_dir2 = lb2.new(owner={"username": "user1"}, name="labbook2", description="my second labbook")
+        labbook_dir3 = lb3.new(owner={"username": "user2"}, name="labbook3", description="my other labbook")
+        labbook_dir4 = lb4.new(owner={"username": "user2"}, username="user1", name="labbook4",
                               description="another users labbook")
 
         assert labbook_dir1 == os.path.join(mock_config_file[1], "user1", "user1", "labbooks", "labbook1")
@@ -236,7 +241,7 @@ class TestLabBook(object):
         assert labbook_dir3 == os.path.join(mock_config_file[1], "user2", "user2", "labbooks", "labbook3")
         assert labbook_dir4 == os.path.join(mock_config_file[1], "user1", "user2", "labbooks", "labbook4")
 
-        labbooks = lb.list_local_labbooks()
+        labbooks = lb1.list_local_labbooks()
 
         assert len(labbooks) == 2
         assert "user1" in labbooks
@@ -250,17 +255,17 @@ class TestLabBook(object):
 
     def test_list_labbooks_for_user(self, mock_config_file):
         """Test list only a single user's labbooks"""
-        lb = LabBook(mock_config_file[0])
+        lb1, lb2, lb3 = LabBook(mock_config_file[0]), LabBook(mock_config_file[0]), LabBook(mock_config_file[0])
 
-        labbook_dir1 = lb.new(owner={"username": "user1"}, name="labbook1", description="my first labbook")
-        labbook_dir2 = lb.new(owner={"username": "user1"}, name="labbook2", description="my second labbook")
-        labbook_dir3 = lb.new(owner={"username": "user2"}, name="labbook3", description="my other labbook")
+        labbook_dir1 = lb1.new(owner={"username": "user1"}, name="labbook1", description="my first labbook")
+        labbook_dir2 = lb2.new(owner={"username": "user1"}, name="labbook2", description="my second labbook")
+        labbook_dir3 = lb3.new(owner={"username": "user2"}, name="labbook3", description="my other labbook")
 
         assert labbook_dir1 == os.path.join(mock_config_file[1], "user1", "user1", "labbooks", "labbook1")
         assert labbook_dir2 == os.path.join(mock_config_file[1], "user1", "user1", "labbooks", "labbook2")
         assert labbook_dir3 == os.path.join(mock_config_file[1], "user2", "user2", "labbooks", "labbook3")
 
-        labbooks = lb.list_local_labbooks(username="user1")
+        labbooks = lb1.list_local_labbooks(username="user1")
 
         assert len(labbooks) == 1
         assert "user1" in labbooks

@@ -20,6 +20,7 @@
 
 import abc
 import importlib
+from typing import Dict, List, Optional
 
 # Dictionary of supported implementations.
 # Key is the value to put in the config_dict["backend"].
@@ -187,7 +188,7 @@ class GitRepoInterface(metaclass=abc.ABCMeta):
         raise NotImplemented
 
     @abc.abstractmethod
-    def clone(self, source):
+    def clone(self, source, directory: Optional[str] = None):
         """Clone a repo
 
         Args:
@@ -437,7 +438,7 @@ class GitRepoInterface(metaclass=abc.ABCMeta):
         raise NotImplemented
 
     @abc.abstractmethod
-    def list_branches(self):
+    def list_branches(self) -> Dict[str, List[str]]:
         """Method to list branches. Should return a dictionary of the format:
 
             {
@@ -480,7 +481,7 @@ class GitRepoInterface(metaclass=abc.ABCMeta):
         raise NotImplemented
 
     @abc.abstractmethod
-    def checkout(self, branch_name):
+    def checkout(self, branch_name: str):
         """Method to switch to a different branch
 
         Args:
