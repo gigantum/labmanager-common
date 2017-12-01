@@ -22,7 +22,6 @@ from pkg_resources import resource_filename
 import os
 import requests
 from lmcommon.fixtures import mock_labbook, mock_config_with_detaildb
-
 from lmcommon.activity.detaildb import ActivityDetailDB
 
 
@@ -38,36 +37,33 @@ class TestDetailDB(object):
 
     def test_file_number(self, mock_config_with_detaildb):
         """Test the file_number property"""
-        assert mock_config_with_detaildb[0]._file_number is None
-
         assert mock_config_with_detaildb[0].file_number == 0
         assert mock_config_with_detaildb[0].file_number == 0
 
     def test_file_number_reload(self, mock_config_with_detaildb):
         """Test the file_number property"""
-        assert mock_config_with_detaildb[0]._file_number is None
-
         assert mock_config_with_detaildb[0].file_number == 0
+        mock_config_with_detaildb[0]._write_metadata_file(increment=True)
+        assert mock_config_with_detaildb[0].file_number == 1
 
         # reset locally stored file_number
-        mock_config_with_detaildb[0]._file_number = None
-        assert mock_config_with_detaildb[0].file_number == 0
+        new_detail_db_instance = ActivityDetailDB(mock_config_with_detaildb[1].root_dir,
+                                                  mock_config_with_detaildb[1].checkout_id)
+
+        assert new_detail_db_instance.file_number == 1
 
     def test_file_number_new_checkout_context(self, mock_config_with_detaildb):
         """Test the file_number property if a new branch has been created"""
-        assert mock_config_with_detaildb[0]._file_number is None
-
         assert mock_config_with_detaildb[0].file_number == 0
+        mock_config_with_detaildb[0]._write_metadata_file(increment=True)
+        assert mock_config_with_detaildb[0].file_number == 1
 
-        # reset locally stored file_number
-        mock_config_with_detaildb[0]._file_number = None
+        # reset locally stored file_number by changing the checkout ID
         mock_config_with_detaildb[0].checkout_id = "adsl;jkadksflj;"
         assert mock_config_with_detaildb[0].file_number == 0
 
     def test_increment_metadata(self, mock_config_with_detaildb):
         """Test the file_number property if a new branch has been created"""
-        assert mock_config_with_detaildb[0]._file_number is None
-
         assert mock_config_with_detaildb[0].file_number == 0
 
         mock_config_with_detaildb[0]._write_metadata_file(increment=False)
@@ -81,7 +77,10 @@ class TestDetailDB(object):
         assert mock_config_with_detaildb[0]._generate_detail_header(10, 20) == \
                b'__g__lsn\x00\x00\x00\x00\n\x00\x00\x00\x14\x00\x00\x00'
 
-        mock_config_with_detaildb[0]._file_number = 49
+        # Increment the file number a bunch
+        for _ in range(49):
+            mock_config_with_detaildb[0]._write_metadata_file(increment=True)
+
         assert mock_config_with_detaildb[0]._generate_detail_header(511564, 6455412) == \
                b'__g__lsn1\x00\x00\x00L\xce\x07\x00t\x80b\x00'
 

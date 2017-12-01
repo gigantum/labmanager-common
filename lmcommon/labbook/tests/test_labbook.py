@@ -586,32 +586,18 @@ class TestLabBook(object):
         # Since the file is in a hidden directory, it should not be found.
         dir_walks = lb.walkdir('code')
         # Spot check some entries
-        assert len(dir_walks) == 8
-        assert dir_walks_hidden[0]['key'] == 'code/'
-        assert dir_walks_hidden[0]['is_dir'] is True
-        assert dir_walks_hidden[1]['key'] == 'input/'
-        assert dir_walks_hidden[1]['is_dir'] is True
-        assert dir_walks_hidden[2]['key'] == 'output/'
-        assert dir_walks_hidden[2]['is_dir'] is True
-        assert dir_walks[5]['is_dir'] is False
+        assert len(dir_walks) == 7
+        assert dir_walks[0]['key'] == 'cat_dir/'
+        assert dir_walks[0]['is_dir'] is True
+        assert dir_walks[1]['key'] == 'dog_dir/'
+        assert dir_walks[1]['is_dir'] is True
+        assert dir_walks[2]['key'] == 'mouse_dir/'
+        assert dir_walks[2]['is_dir'] is True
+        assert dir_walks[3]['is_dir'] is False
+        assert dir_walks[4]['is_dir'] is False
+        assert dir_walks[5]['is_dir'] is True
+        assert dir_walks[5]['key'] == 'mouse_dir/new_dir/'
         assert dir_walks[6]['is_dir'] is False
-        assert dir_walks[7]['is_dir'] is False
-
-    def test_walkdir_relative_path(self, mock_config_file, sample_src_file):
-        lb = LabBook(mock_config_file[0])
-        lb.new(owner={"username": "test"}, name="test-insert-files-1", description="validate tests.")
-        dirs = ["input/new_dir", "input/new_dir2", "/input/new_dir/.hidden_dir"]
-        for d in dirs:
-            res = lb.makedir(d)
-        lb.insert_file(sample_src_file, 'input/new_dir/.hidden_dir')
-        lb.insert_file(sample_src_file, 'input/new_dir')
-
-        dir_walks = lb.walkdir(base_path='input/new_dir', show_hidden=True)
-        assert len(dir_walks) == 5
-        assert all(["input/new_dir" in d['key'] for d in dir_walks]) is True
-
-        with pytest.raises(ValueError):
-            lb.walkdir(base_path='input/not_existing', show_hidden=True)
 
     def test_listdir(self, mock_config_file, sample_src_file):
         def write_test_file(base, name):

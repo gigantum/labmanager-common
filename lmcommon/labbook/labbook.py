@@ -362,11 +362,38 @@ class LabBook(object):
         return ''.join(c for c in value if c not in '\<>?/;"`\'')
 
     @staticmethod
+    def get_activity_type_from_section(section_name: str) -> Tuple[ActivityType, ActivityDetailType, str]:
+        """Method to get activity and detail types from the section name
+
+        Args:
+            section_name(str): section subdirectory/identifier (code, input, output)
+
+        Returns:
+            tuple
+        """
+        if section_name == 'code':
+            activity_detail_type = ActivityDetailType.CODE
+            activity_type = ActivityType.CODE
+            section = "Code"
+        elif section_name == 'input':
+            activity_detail_type = ActivityDetailType.INPUT_DATA
+            activity_type = ActivityType.INPUT_DATA
+            section = "Input Data"
+        elif section_name == 'output':
+            activity_detail_type = ActivityDetailType.OUTPUT_DATA
+            activity_type = ActivityType.OUTPUT_DATA
+            section = "Output Data"
+        else:
+            raise ValueError(f"Unsupported LabBook section: '{section_name}'")
+
+        return activity_type, activity_detail_type, section
+
+    @staticmethod
     def infer_section_from_relative_path(relative_path: str) -> Tuple[ActivityType, ActivityDetailType, str]:
         """Method to try to infer the "section" from a relative file path
 
         Args:
-            relative_path(str): a relative file path
+            relative_path(str): a relative file path within a LabBook section (code, input, output)
 
         Returns:
             tuple
@@ -380,22 +407,7 @@ class LabBook(object):
             relative_path = relative_path + os.path.sep
 
         possible_section, _ = relative_path.split('/', 1)
-        if possible_section == 'code':
-            activity_detail_type = ActivityDetailType.CODE
-            activity_type = ActivityType.CODE
-            section = "Code"
-        elif possible_section == 'input':
-            activity_detail_type = ActivityDetailType.INPUT_DATA
-            activity_type = ActivityType.INPUT_DATA
-            section = "Input Data"
-        elif possible_section == 'output':
-            activity_detail_type = ActivityDetailType.OUTPUT_DATA
-            activity_type = ActivityType.OUTPUT_DATA
-            section = "Output Data"
-        else:
-            raise ValueError(f"Failed to infer LabBook section from relative path '{relative_path}'")
-
-        return activity_type, activity_detail_type, section
+        return LabBook.get_activity_type_from_section(possible_section)
 
     def get_file_info(self, section: str, rel_file_path: str) -> Dict[str, Any]:
         """Method to get a file's detail information
@@ -608,17 +620,17 @@ class LabBook(object):
             logger.info(f"Inserting new file for {str(self)} from `{src_file}` to `{dst_path}")
             shutil.copyfile(src_file, dst_path)
 
+            # Get LabBook section info
+            activity_type, activity_detail_type, section_str = self.get_activity_type_from_section(section)
+
             # Create commit
             rel_path = dst_path.replace(os.path.join(self.root_dir, section), '')
-            commit_msg = f"Added new {section} file {rel_path}"
+            commit_msg = f"Added new {section_str} file {rel_path}"
             self.git.add(dst_path)
             commit = self.git.commit(commit_msg)
 
             # Create Activity record and detail
             _, ext = os.path.splitext(rel_path) or 'file'
-
-            # Get LabBook section
-            activity_type, activity_detail_type, section = self.infer_section_from_relative_path(rel_path)
 
             # Create detail record
             adr = ActivityDetailRecord(activity_detail_type)
@@ -626,7 +638,7 @@ class LabBook(object):
 
             # Create activity record
             ar = ActivityRecord(activity_type,
-                                message=f"Added {section} File",
+                                message=f"Added {section_str} File",
                                 linked_commit=commit.hexsha,
                                 tags=[ext])
             ar.add_detail_object(adr)
@@ -635,7 +647,7 @@ class LabBook(object):
             ars = ActivityStore(self)
             ars.create_activity_record(ar)
 
-            return self._get_file_info(rel_path)
+            return self.get_file_info(section, rel_path)
 
     def delete_file(self, section: str, relative_path: str, directory: bool = False) -> bool:
         """Delete file (or directory) from inside lb section.
@@ -685,8 +697,7 @@ class LabBook(object):
                     ext = 'directory'
 
                 # Get LabBook section
-                target_relative = target_path.replace(self.root_dir, "")
-                activity_type, activity_detail_type, section = self.infer_section_from_relative_path(target_relative)
+                activity_type, activity_detail_type, section_str = self.get_activity_type_from_section(section)
 
                 # Create detail record
                 adr = ActivityDetailRecord(activity_detail_type)
@@ -694,7 +705,7 @@ class LabBook(object):
 
                 # Create activity record
                 ar = ActivityRecord(activity_type,
-                                    message=f"Deleted {section} File",
+                                    message=f"Deleted {section_str} File",
                                     linked_commit=commit.hexsha,
                                     tags=[ext])
                 ar.add_detail_object(adr)
@@ -749,7 +760,7 @@ class LabBook(object):
                 commit = self.git.commit(commit_msg)
 
                 # Get LabBook section
-                activity_type, activity_detail_type, section = self.infer_section_from_relative_path(dst_rel_path)
+                activity_type, activity_detail_type, section_str = self.get_activity_type_from_section(section)
 
                 # Create detail record
                 adr = ActivityDetailRecord(activity_detail_type)
@@ -757,7 +768,7 @@ class LabBook(object):
 
                 # Create activity record
                 ar = ActivityRecord(activity_type,
-                                    message=f"Moved {section} File",
+                                    message=f"Moved {section_str} File",
                                     linked_commit=commit.hexsha,
                                     tags=['file-move'])
                 ar.add_detail_object(adr)
