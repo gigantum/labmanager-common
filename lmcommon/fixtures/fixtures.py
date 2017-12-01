@@ -168,6 +168,26 @@ def mock_labbook():
 
 
 @pytest.fixture()
+def remote_labbook_repo():
+    conf_file, working_dir = _create_temp_work_dir()
+    lb = LabBook(conf_file)
+    labbook_dir = lb.new(username="test", name="sample-repo-lb", description="my first labbook",
+                             owner={"username": "test"})
+    lb.checkout_branch("testing-branch", new=True)
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        with open(os.path.join(tmpdirname, 'codefile.c'), 'wb') as codef:
+            codef.write(b'// Cody McCodeface ...')
+
+        lb.insert_file("code", codef.name, "")
+
+    lb.checkout_branch("master")
+
+    # Location of the repo to push/pull from
+    yield lb.root_dir
+    shutil.rmtree(working_dir)
+
+
+@pytest.fixture()
 def labbook_dir_tree():
     with tempfile.TemporaryDirectory() as tempdir:
 
