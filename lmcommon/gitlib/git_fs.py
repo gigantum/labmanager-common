@@ -23,6 +23,7 @@ from git import InvalidGitRepositoryError, BadName
 import os
 import re
 import shutil
+from typing import Dict, List, Optional
 
 from lmcommon.logging import LMLogger
 
@@ -142,11 +143,12 @@ class GitFilesystem(GitRepoInterface):
         logger.info("Initializing Git repository in {}".format(self.working_directory))
         self.repo = Repo.init(self.working_directory, bare=bare)
 
-    def clone(self, source):
+    def clone(self, source, directory: Optional[str] = None):
         """Clone a repo
 
         Args:
             source (str): Git ssh or https string to clone
+            directory(str): Directory to clone into (optional argument)
 
         Returns:
             None
@@ -154,8 +156,8 @@ class GitFilesystem(GitRepoInterface):
         if self.repo:
             raise ValueError("Cannot init an existing git repository. Choose a different working directory")
 
-        logger.info("Cloning Git repository from {} into {}".format(source, self.working_directory))
-        self.repo = Repo.clone_from(source, self.working_directory)
+        logger.info("Cloning Git repository from {} into {}".format(source, directory or self.working_directory))
+        self.repo = Repo.clone_from(source, directory or self.working_directory)
 
     # LOCAL CHANGE METHODS
     def status(self):
@@ -552,6 +554,11 @@ class GitFilesystem(GitRepoInterface):
         Returns:
             None
         """
+        branch_info_dict = self.list_branches()
+        for key in branch_info_dict.keys():
+            for n in branch_info_dict[key]:
+                if name == n:
+                    raise ValueError(f"Existing {key} branch `{n}` already exists")
         self.repo.create_head(name)
 
     def publish_branch(self, branch_name, remote_name="origin"):
@@ -575,7 +582,7 @@ class GitFilesystem(GitRepoInterface):
         self.repo.heads[branch_name].checkout()
         remote.push(branch_name)
 
-    def list_branches(self):
+    def list_branches(self) -> Dict[str, List[str]]:
         """Method to list branches. Should return a dictionary of the format:
 
             {
@@ -648,12 +655,12 @@ class GitFilesystem(GitRepoInterface):
 
         self.repo.heads[old_name].rename(new_name)
 
-    def checkout(self, branch_name, remote="origin"):
+    def checkout(self, branch_name: str, remote: str = "origin"):
         """Method to switch to a different branch
 
         Args:
             branch_name(str): Name of the branch to switch to
-
+            remote(str): Remote to pull from
         Returns:
             None
         """
