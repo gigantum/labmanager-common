@@ -166,3 +166,15 @@ class TestActivityDetailRecord(object):
         assert json_dict['show'] is True
         assert json_dict['data'] == {'text/plain': "this is some data"}
 
+    def test_jsonify_data(self):
+        """Test converting to json"""
+        adr = ActivityDetailRecord(ActivityDetailType.ENVIRONMENT, key="my_key3fgjg", show=True, importance=45)
+        adr.add_value("text/plain", "this is some data to jsonify")
+        adr.add_value("text/markdown", "this is some data to `jsonify`")
+
+        data = adr.jsonify_data()
+        assert type(data) == dict
+
+        assert len(data.keys()) == 2
+        assert data['text/plain'] == "this is some data to jsonify"
+        assert data['text/markdown'] == "this is some data to `jsonify`"

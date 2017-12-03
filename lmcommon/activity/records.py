@@ -19,7 +19,7 @@
 # SOFTWARE.
 import json
 from enum import Enum
-from typing import (Any, List, Optional)
+from typing import (Any, List, Optional, Dict)
 import base64
 import blosc
 import copy
@@ -247,6 +247,22 @@ class ActivityDetailRecord(object):
 
         # At this point everything in dict_data should be ready to go for JSON serialization
         return json.dumps(dict_data, cls=ActivityDetailRecordEncoder, separators=(',', ':'))
+
+    def jsonify_data(self) -> Dict[str, Any]:
+        """Method to convert just the data to JSON safe dictionary
+
+        Returns:
+            dict
+        """
+        dict_data: dict = dict()
+
+        # jsonify the data
+        serializer_obj = Serializer()
+        for mime_type in self.data:
+            dict_data[mime_type] = serializer_obj.jsonify(mime_type, self.data[mime_type])
+
+        # At this point everything in dict_data should be ready to go for JSON serialization
+        return dict_data
 
 
 class ActivityRecord(object):
