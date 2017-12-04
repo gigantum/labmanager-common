@@ -415,7 +415,13 @@ class LabBook(object):
             pass
         """
         if not self.is_repo_clean:
-            raise LabbookException(f"Cannot checkout {branch_name}: Untracked and/or uncommitted changes")
+            # TODO - This must be removed once LevelDB is replaced for the notes system.
+            logger.warning(f"Labbook {str(self)}: Committing untracked/uncommitted changes "
+                           f"before branching to {branch_name}")
+            self.git.add_all()
+            self.git.commit(f"Cleanup of uncommitted changes before making branch {branch_name}.")
+            # After the above TODO is done, the above code must be replaced with the following:
+            #raise LabbookException(f"Cannot checkout {branch_name}: Untracked and/or uncommitted changes")
 
         try:
             self.git.fetch()
