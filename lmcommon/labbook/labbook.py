@@ -707,12 +707,13 @@ class LabBook(object):
                 logger.exception(e)
                 raise
 
-    def makedir(self, relative_path: str, make_parents: bool = True) -> None:
+    def makedir(self, relative_path: str, make_parents: bool = True, create_note: bool = False) -> None:
         """Make a new directory inside the labbook directory.
 
         Args:
             relative_path(str): Path within the labbook to make directory
             make_parents(bool): If true, create intermediary directories
+            create_note(bool): If true, create commit and note record
 
         Returns:
             str: Absolute path of new directory
@@ -735,6 +736,21 @@ class LabBook(object):
                     with open(os.path.join(full_new_dir, '.gitkeep'), 'w') as gitkeep:
                         gitkeep.write("This file is necessary to keep this directory tracked by Git"
                                       " and archivable by compression tools. Do not delete or modify!")
+
+                if create_note:
+                    self.git.add_all(new_directory_path)
+
+                    msg = f"Created new directory `{relative_path}`"
+                    commit = self.git.commit(msg)
+                    ns = NoteStore(self)
+                    ns.create_note({
+                        'linked_commit': commit.hexsha,
+                        'message': msg,
+                        'level': NoteLogLevel.USER_MAJOR,
+                        'tags': ['directory-create'],
+                        'free_text': '',
+                        'objects': ''
+                    })
 
     def walkdir(self, section: str, show_hidden: bool = False) -> List[Dict[str, Any]]:
         """Return a list of all files and directories in a section of the labbook. Never includes the .git or
