@@ -555,6 +555,22 @@ class TestLabBook(object):
         # Ensure that count of .gitkeep files equals the number of subdirs, excluding the code dir.
         assert score == len(LabBook._make_path_relative(long_dir).split(os.sep)) - 1
 
+    def test_makedir_record(self, mock_config_file):
+        # Note that "score" refers to the count of .gitkeep files.
+        lb = LabBook(mock_config_file[0])
+        lb.new(owner={"username": "test"}, name="test-mkdir-1", description="validate tests.")
+
+        assert os.path.exists(os.path.join(lb.root_dir, 'code', 'test')) is False
+
+        lb.makedir("code/test", create_note=True)
+
+        assert os.path.exists(os.path.join(lb.root_dir, 'code', 'test')) is True
+        assert lb.is_repo_clean is True
+
+        lb.makedir("code/test2", create_note=False)
+        assert os.path.exists(os.path.join(lb.root_dir, 'code', 'test2')) is True
+        assert lb.is_repo_clean is False
+
     def test_walkdir(self, mock_config_file, sample_src_file):
         lb = LabBook(mock_config_file[0])
         lb.new(owner={"username": "test"}, name="test-insert-files-1", description="validate tests.")
