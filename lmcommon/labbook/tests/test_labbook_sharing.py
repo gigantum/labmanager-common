@@ -79,19 +79,28 @@ class TestLabBook(object):
 
     def test_checkout_not_allowed_when_there_are_uncomitted_changes(self, mock_config_file, mock_labbook):
         lb = mock_labbook[2]
+
         # Make a new file in the input directory, but do not add/commit it.
         with open(os.path.join(lb.root_dir, 'input', 'catfile'), 'wb') as f:
             f.write(b"data.")
-        with pytest.raises(LabbookException):
-            # We should not be allowed to switch branches when there are uncommitted changes
-            lb.checkout_branch("branchy", new=True)
-        assert lb.active_branch == "master"
 
-        # Now, make sure that new file is added and tracked, and then try making the new branch again.
-        lb.git.add(os.path.join(lb.root_dir, 'input', 'catfile'))
-        lb.git.commit("Added file")
-        lb.checkout_branch("branchy", new=True)
-        assert lb.active_branch == "branchy"
+        import datetime
+        if datetime.datetime.now() >= datetime.datetime(2017, 12, 12):
+            with pytest.raises(LabbookException):
+                # We should not be allowed to switch branches when there are uncommitted changes
+                lb.checkout_branch("branchy", new=True)
+            assert lb.active_branch == "master"
+            # Now, make sure that new file is added and tracked, and then try making the new branch again.
+            lb.git.add(os.path.join(lb.root_dir, 'input', 'catfile'))
+            lb.git.commit("Added file")
+            lb.checkout_branch("branchy", new=True)
+            assert lb.active_branch == "branchy"
+            assert False, "This must be fixed: Remove the timestamp check now that LevelDB is integrated."
+        else:
+            lb.checkout_branch("branchy", new=True)
+            assert lb.is_repo_clean is True, "The checkout should temporarily commit any lingering changes."
+            assert lb.active_branch == "branchy"
+
 
     def test_checkout_just_double_check_that_files_from_other_branches_go_away(self, mock_config_file, mock_labbook):
         lb = mock_labbook[2]
