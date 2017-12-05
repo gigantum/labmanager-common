@@ -1318,6 +1318,10 @@ class LabBook(object):
             # Rename labbook directory to new directory and update YAML file
             self.name = new_name
 
+            # Remove the .checkout file, as you should create a new checkout context due to the labbook renaming
+            if os.path.exists(os.path.join(self.root_dir, ".gigantum", ".checkout")):
+                os.remove(os.path.join(self.root_dir, ".gigantum", ".checkout"))
+
             # Commit Change
             self.git.add(os.path.join(self.root_dir, ".gigantum", "labbook.yaml"))
             commit = self.git.commit(f"Renamed LabBook '{old_name}' to '{new_name}'")
