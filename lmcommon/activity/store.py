@@ -191,6 +191,11 @@ class ActivityStore(object):
         # Get data from the git log
         log_data = self._get_log_records(after=after, first=max_count)
 
+        if after:
+            # If some data came back, the "after" record is included. Remove it due to standards on how paging works.
+            if log_data:
+                log_data = log_data[1:]
+
         # If extra stuff came back due to extra padding on git log op, prune
         if first:
             if len(log_data) > first:
