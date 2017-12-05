@@ -770,7 +770,7 @@ class LabBook(object):
 
                 # Create detail record
                 adr = ActivityDetailRecord(activity_detail_type)
-                adr.add_value('text/plain', commit_msg)
+                adr.add_value('text/markdown', commit_msg)
 
                 # Create activity record
                 ar = ActivityRecord(activity_type,
@@ -822,17 +822,24 @@ class LabBook(object):
                 if create_note:
                     self.git.add_all(new_directory_path)
 
-                    msg = f"Created new directory `{relative_path}`"
+                    # Create detail record
+                    activity_type, activity_detail_type, section_str = self.infer_section_from_relative_path(relative_path)
+                    adr = ActivityDetailRecord(activity_detail_type)
+
+                    msg = f"Created new {section_str} directory `{relative_path}`"
                     commit = self.git.commit(msg)
-                    ns = NoteStore(self)
-                    ns.create_note({
-                        'linked_commit': commit.hexsha,
-                        'message': msg,
-                        'level': NoteLogLevel.USER_MAJOR,
-                        'tags': ['directory-create'],
-                        'free_text': '',
-                        'objects': ''
-                    })
+                    adr.add_value('text/markdown', msg)
+
+                    # Create activity record
+                    ar = ActivityRecord(activity_type,
+                                        message=f"Created directory in {section_str}",
+                                        linked_commit=commit.hexsha,
+                                        tags=['directory-create'])
+                    ar.add_detail_object(adr)
+
+                    # Store
+                    ars = ActivityStore(self)
+                    ars.create_activity_record(ar)
 
     def walkdir(self, section: str, show_hidden: bool = False) -> List[Dict[str, Any]]:
         """Return a list of all files and directories in a section of the labbook. Never includes the .git or
