@@ -22,6 +22,8 @@ import glob
 from collections import OrderedDict
 import pickle
 import operator
+import requests
+from lmcommon.logging import LMLogger
 
 import os
 import yaml
@@ -29,6 +31,8 @@ import yaml
 from typing import (Any, List, Dict)
 
 from lmcommon.configuration import Configuration
+
+logger = LMLogger.get_logger()
 
 
 def repo_url_to_name(url: str) -> str:
@@ -79,6 +83,21 @@ class RepositoryManager(object):
         # Clone the repo
         self.git.clone(url)
 
+    @staticmethod
+    def _internet_is_available() -> bool:
+        """Private method to check if the user can get to GitHub, since that is where the component repos are
+
+        Returns:
+            None
+        """
+        # Create the directory to clone into
+        try:
+            requests.head('https://github.com', timeout=5)
+        except requests.exceptions.ConnectionError:
+            return False
+
+        return True
+
     def _update_repo(self, location: str) -> None:
         """Private method to update a repository
 
@@ -95,29 +114,33 @@ class RepositoryManager(object):
         self.git.fetch()
         self.git.pull()
 
-    def update_repositories(self) -> None:
+    def update_repositories(self) -> bool:
         """Method to update all repositories in the LabManager configuration file
 
         If the repositories do not exist, they are cloned
 
         Returns:
-            None
+            bool: flag indicting if repos updated successfully
         """
-        # Get repo Urls
-        repo_urls = self.config.config["environment"]["repo_url"]
+        if self._internet_is_available():
+            # Get repo Urls
+            repo_urls = self.config.config["environment"]["repo_url"]
 
-        for repo_url in repo_urls:
-            repo_dir_name = repo_url_to_name(repo_url)
-            repo_dir = os.path.join(self.local_repo_directory, repo_dir_name)
+            for repo_url in repo_urls:
+                repo_dir_name = repo_url_to_name(repo_url)
+                repo_dir = os.path.join(self.local_repo_directory, repo_dir_name)
 
-            # Check if repo exists locally
-            if not os.path.exists(repo_dir):
-                # Need to clone
-                self._clone_repo(repo_url, repo_dir)
+                # Check if repo exists locally
+                if not os.path.exists(repo_dir):
+                    # Need to clone
+                    self._clone_repo(repo_url, repo_dir)
 
-            else:
-                # Need to update
-                self._update_repo(repo_dir)
+                else:
+                    # Need to update
+                    self._update_repo(repo_dir)
+            return True
+        else:
+            return False
 
     def index_component_repository(self, repo_name: str, component: str) -> OrderedDict:
         """Method to 'index' a base_image directory in a single environment component repository
