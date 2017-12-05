@@ -92,7 +92,7 @@ class RepositoryManager(object):
         """
         # Create the directory to clone into
         try:
-            requests.head('https://github.com', timeout=1)
+            requests.head('https://github.com', timeout=5)
         except requests.exceptions.ConnectionError:
             return False
 
