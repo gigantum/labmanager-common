@@ -392,7 +392,7 @@ class TestActivityStore:
         assert activity_records[0].linked_commit == record1.linked_commit
         assert activity_records[0].message == record1.message
 
-        activity_records = mock_config_with_activitystore[0].get_activity_records(after=record1.commit, first=1)
+        activity_records = mock_config_with_activitystore[0].get_activity_records(after=record3.commit, first=1)
         assert len(activity_records) == 1
         assert activity_records[0].commit == record2.commit
         assert activity_records[0].linked_commit == record2.linked_commit
