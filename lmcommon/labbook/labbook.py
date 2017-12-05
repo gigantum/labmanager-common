@@ -463,12 +463,12 @@ class LabBook(object):
         """
         if not self.is_repo_clean:
             # TODO - This must be removed once LevelDB is replaced for the notes system.
-            logger.warning(f"Labbook {str(self)}: Committing untracked/uncommitted changes "
-                           f"before branching to {branch_name}")
-            self.git.add_all()
-            self.git.commit(f"Cleanup of uncommitted changes before making branch {branch_name}.")
-            # After the above TODO is done, the above code must be replaced with the following:
-            #raise LabbookException(f"Cannot checkout {branch_name}: Untracked and/or uncommitted changes")
+            # logger.warning(f"Labbook {str(self)}: Committing untracked/uncommitted changes "
+            #                f"before branching to {branch_name}")
+            # self.git.add_all()
+            # self.git.commit(f"Cleanup of uncommitted changes before making branch {branch_name}.")
+            # TODO After it is confirmed that the above code is no longer needed it can be removed
+            raise LabbookException(f"Cannot checkout {branch_name}: Untracked and/or uncommitted changes")
 
         try:
             self.git.fetch()
@@ -789,13 +789,13 @@ class LabBook(object):
                 logger.exception(e)
                 raise
 
-    def makedir(self, relative_path: str, make_parents: bool = True, create_note: bool = False) -> None:
+    def makedir(self, relative_path: str, make_parents: bool = True, create_activity_record: bool = False) -> None:
         """Make a new directory inside the labbook directory.
 
         Args:
             relative_path(str): Path within the labbook to make directory
             make_parents(bool): If true, create intermediary directories
-            create_note(bool): If true, create commit and note record
+            create_activity_record(bool): If true, create commit and activity record
 
         Returns:
             str: Absolute path of new directory
@@ -819,7 +819,7 @@ class LabBook(object):
                         gitkeep.write("This file is necessary to keep this directory tracked by Git"
                                       " and archivable by compression tools. Do not delete or modify!")
 
-                if create_note:
+                if create_activity_record:
                     self.git.add_all(new_directory_path)
 
                     # Create detail record
@@ -1162,9 +1162,10 @@ class LabBook(object):
             /output
             /.gigantum
                 labbook.yaml
+                .checkout
                 /env
                     Dockerfile
-                /notes
+                /activity
                     /log
                     /index
             /.git

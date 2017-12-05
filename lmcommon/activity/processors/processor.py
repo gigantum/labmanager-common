@@ -29,14 +29,14 @@ class StopProcessingException(Exception):
 
 
 class ActivityProcessor(metaclass=abc.ABCMeta):
-    """Class to process activity and return content for a notes record"""
+    """Class to process activity and return content for an ActivityRecord"""
 
     def process(self, result_obj: ActivityRecord, code: Dict[str, Any], result: Dict[str, Any],
                 status: Dict[str, Any], metadata: Dict[str, Any]) -> ActivityRecord:
         """Method to update a result object based on code and result data
 
         Args:
-            result_obj(ActivityNote): An object containing the note
+            result_obj(ActivityNote): An object containing the ActivityRecord
             code(dict): A dict containing data specific to the dev env containing code that was executed
             result(dict): A dict containing data specific to the dev env containing the result of code execution
             status(dict): A dictionary containing the git status

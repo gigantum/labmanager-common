@@ -336,7 +336,7 @@ class TestActivityStore:
             _ = mock_config_with_activitystore[0]._get_log_records(before=record2.commit)
 
     def test_get_activity_records(self, mock_config_with_activitystore):
-        """Method to test creating and getting a bunch of note summaries and converting them to notes"""
+        """Method to test creating and getting a bunch of activity records"""
 
         linked_commit = helper_create_labbook_change(mock_config_with_activitystore[1], 1)
 

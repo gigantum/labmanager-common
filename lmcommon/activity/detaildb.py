@@ -34,7 +34,9 @@ class ActivityDetailDB:
         """Constructor
 
         Args:
-            labbook_root(str): note detail directory
+            labbook_root(str): LabBook root directory
+            checkout_id(str): The current checkout ID for the LabBook
+            logfile_limit(int): Max number of bytes to write before rolling the database log file
         """
         # The root directory for storing log files
         self.root_path = os.path.join(labbook_root, '.gigantum', 'activity', 'log')
@@ -206,7 +208,7 @@ class ActivityDetailDB:
         return detail_key
 
     def get(self, detail_key: str) -> bytes:
-        """Return a detailed note.
+        """Return the detail record data.
 
         Args:
             detail_key: key used to lookup the file, offset, and length
@@ -220,8 +222,6 @@ class ActivityDetailDB:
         with open(os.path.abspath(os.path.join(self.root_path, basename + '_' + str(file_number))), "br") as fh:
             fh.seek(offset)
             value = fh.read(length + 20)  # plus the header length
-
-        # todo: @randal - do we need to write the header into each record?
 
         return value[20:]
     

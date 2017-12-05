@@ -95,7 +95,7 @@ class ActivityMonitor(metaclass=abc.ABCMeta):
         """Method to commit changes to a file
 
         Args:
-            linked_commit(str): Git commit this note is related to
+            linked_commit(str): Git commit this ActivityRecord is related to
             activity_record(ActivityNote): The populated ActivityNote object returned by the processing pipeline
 
         Returns:
@@ -103,7 +103,7 @@ class ActivityMonitor(metaclass=abc.ABCMeta):
         """
         activity_record.linked_commit = linked_commit
 
-        # Create a note record
+        # Create a activity record
         record = self.activity_store.create_activity_record(activity_record)
 
         return record.commit

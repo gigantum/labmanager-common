@@ -562,12 +562,12 @@ class TestLabBook(object):
 
         assert os.path.exists(os.path.join(lb.root_dir, 'code', 'test')) is False
 
-        lb.makedir("code/test", create_note=True)
+        lb.makedir("code/test", create_activity_record=True)
 
         assert os.path.exists(os.path.join(lb.root_dir, 'code', 'test')) is True
         assert lb.is_repo_clean is True
 
-        lb.makedir("code/test2", create_note=False)
+        lb.makedir("code/test2", create_activity_record=False)
         assert os.path.exists(os.path.join(lb.root_dir, 'code', 'test2')) is True
         assert lb.is_repo_clean is False
 

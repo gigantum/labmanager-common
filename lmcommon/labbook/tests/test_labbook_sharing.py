@@ -180,7 +180,7 @@ class TestLabBook(object):
 
         r = lb.get_commits_behind_remote("origin")
         assert r[0] == 'testing-branch'
-        # This is 2, in order to account for the notes entry.
+        # This is 2, in order to account for the activity entry.
         assert r[1] == 0
 
         remote_lb = LabBook(mock_config_file[0])

@@ -30,11 +30,10 @@ class ActivityStore(object):
     """The ActivityStore class provides a centralized interface to activity data stored in both the git log and db.
 
     High-level information is stored directly in the git commit messages stored in the git log of a LabBook. For more
-    detailed information and arbitrary information an embedded levelDB is used with detailed notes records stored
-    through a key/value interface.
+    detailed information and arbitrary information a custom checkout-aware file based key-value store is used.
 
-    Detailed notes records are stored and accessed by the LINKED COMMIT hash (str) and are encoded as JSON objects.
-    The linked commit is the commit hash of the original commit that contained the changes made to the repository.
+    The ActivityStore class stores ActivityRecords in the git log and ActivityDetailRecords in the database after
+    proper serialization. The linked commit indiciate which git record the ActivityRecord is annotating
     """
 
     def __init__(self, labbook) -> None:
@@ -54,9 +53,6 @@ class ActivityStore(object):
 
         # Note record commit messages follow a special structure
         self.note_regex = re.compile(r"(?s)_GTM_ACTIVITY_START_.*?_GTM_ACTIVITY_END_")
-    
-        # instantiate notes levelDB at _root_dir/.gigantum/notes/
-        self._entries_path: str = os.path.join(labbook.root_dir, ".gigantum", "notes", "log")
 
         # Params used during detail object serialization
         if self.labbook.labmanager_config.config['detaildb']['options']['compress']:
@@ -84,8 +80,8 @@ class ActivityStore(object):
 
         # Check total number of tags
         if len(tags) > self.max_num_tags:
-            raise ValueError("{} tags provided, but a single Note can only have {} tags.".format(len(tags),
-                                                                                                 self.max_num_tags))
+            raise ValueError("{} tags provided, but a single Activity Record can only have {} tags.".format(len(tags),
+                             self.max_num_tags))
         # Check tag length
         for tag in tags:
             if len(tag) > self.max_tag_length:
@@ -145,8 +141,7 @@ class ActivityStore(object):
             record.update_detail_object(updated_detail, idx)
 
         # Add everything in the LabBook activity/log directory
-        self.labbook.git.add_all(os.path.expanduser(os.path.join(self.labbook.root_dir,
-                                                                 ".gigantum", "activity", "log")))
+        self.labbook.git.add_all(self.detaildb.root_path)
 
         # Commit changes and update record
         commit = self.labbook.git.commit(record.log_str)

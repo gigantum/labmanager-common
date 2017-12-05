@@ -216,7 +216,7 @@ exec gosu giguser "$@"
         self.labbook.git.add(component_file)
         commit = self.labbook.git.commit(short_message)
 
-        # Create a Note record
+        # Create a ActivityRecord
         long_message = "Added a `{}` class environment component {}\n".format(component_class, component)
         long_message = "{}\n{}\n\n".format(long_message, component_data['info']['description'])
         long_message = "{}  - repository: {}\n".format(long_message, repository)

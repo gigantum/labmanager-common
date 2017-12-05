@@ -30,13 +30,21 @@ from lmcommon.activity.serializers import Serializer
 
 class ActivityType(Enum):
     """Enumeration representing the type of Activity Record"""
+    # User generated Notes
     NOTE = 0
+    # For any changes to the environment config
     ENVIRONMENT = 1
+    # Anything related to files in the code directory or execution
     CODE = 2
+    # Anything related to files in the input directory
     INPUT_DATA = 3
+    # Anything related to files in the output directory
     OUTPUT_DATA = 4
+    # A milestone record
     MILESTONE = 5
+    # A branch record
     BRANCH = 6
+    # A record for any high-level labbook ops
     LABBOOK = 7
 
 
@@ -44,12 +52,19 @@ class ActivityDetailType(Enum):
     """Enumeration representing the type of Activity Detail Record"""
     # User generated Notes
     NOTE = 7
+    # Any labbook level changes (e.g. create, rename)
     LABBOOK = 6
+    # Anything related to files in the input directory
     INPUT_DATA = 5
+    # Anything related to files in the code directory
     CODE = 4
+    # For storing the executed block of code
     CODE_EXECUTED = 3
+    # For storing results from running code
     RESULT = 2
+    # Anything related to files in the input directory
     OUTPUT_DATA = 1
+    # For any changes to the environment config
     ENVIRONMENT = 0
 
 

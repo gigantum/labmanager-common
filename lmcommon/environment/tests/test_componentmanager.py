@@ -89,7 +89,7 @@ class TestComponentManager(object):
                 for required_field in 'package_manager', 'name', 'version':
                     assert required_field in fields_dict.keys()
 
-        # Verify git/notes
+        # Verify git/activity
         log = lb.git.log()
         assert len(log) == 10
         assert "_GTM_ACTIVITY_START_" in log[0]["message"]
@@ -131,7 +131,7 @@ class TestComponentManager(object):
         assert data['info']['version_minor'] == 4
         assert data['###namespace###'] == 'gigantum'
 
-        # Verify git/notes
+        # Verify git/activity
         log = lb.git.log()
         assert len(log) == 4
         assert "_GTM_ACTIVITY_START_" in log[0]["message"]
