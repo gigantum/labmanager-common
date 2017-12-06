@@ -18,15 +18,11 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 import pytest
-import tempfile
 import os
-import uuid
-import shutil
 import random
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 from lmcommon.labbook import LabBook
-from lmcommon.activity.detaildb import ActivityDetailDB
 from lmcommon.activity.records import ActivityType, ActivityRecord, ActivityDetailRecord, ActivityDetailType
 from lmcommon.activity import ActivityStore
 from lmcommon.fixtures import mock_config_with_activitystore
@@ -320,8 +316,13 @@ class TestActivityStore:
         log_records = mock_config_with_activitystore[0]._get_log_records()
         assert len(log_records) == 3
         assert type(log_records[0][0]) == str
-        assert len(log_records[0][0]) == 40
         assert type(log_records[0][1]) == str
+        assert len(log_records[0][1]) == 40
+        assert type(log_records[0][2]) == datetime
+        assert type(log_records[1][0]) == str
+        assert type(log_records[1][1]) == str
+        assert len(log_records[1][1]) == 40
+        assert type(log_records[1][2]) == datetime
 
         log_records = mock_config_with_activitystore[0]._get_log_records(first=1)
         assert len(log_records) == 1
@@ -379,6 +380,11 @@ class TestActivityStore:
         assert activity_records[2].commit == record1.commit
         assert activity_records[2].linked_commit == record1.linked_commit
         assert activity_records[2].message == record1.message
+
+        # Verify the timestamp is getting set properly
+        assert type(activity_records[0].timestamp) == datetime
+        assert activity_records[0].timestamp < datetime.now(timezone.utc)
+        assert activity_records[0].timestamp > datetime.now(timezone.utc) - timedelta(seconds=10)
 
         activity_records = mock_config_with_activitystore[0].get_activity_records(first=1)
         assert len(activity_records) == 1

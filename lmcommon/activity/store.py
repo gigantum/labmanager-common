@@ -17,9 +17,9 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-import os
 import re
 import uuid
+import datetime
 from typing import (Any, Dict, List, Tuple, Optional)
 
 from lmcommon.activity.detaildb import ActivityDetailDB
@@ -92,13 +92,13 @@ class ActivityStore(object):
         return [tag.strip().translate({ord(c): None for c in '\`;'}) for tag in tags]
 
     def _get_log_records(self, after: Optional[str]=None, before: Optional[str]=None,
-                         first: Optional[int]=None, last: Optional[int]=None) -> List[Tuple[str, str]]:
-        """Method to get ACTIVITY records from the git log
+                         first: Optional[int]=None, last: Optional[int]=None) -> List[Tuple[str, str, datetime.datetime]]:
+        """Method to get ACTIVITY records from the git log with pagination support
 
         Returns:
-            list: List of log entries
+            list: List of tuples of the format (log string, commit hash, commit datetime)
         """
-        log_entries: List[Tuple[str, str]] = []
+        log_entries: List[Tuple[str, str, datetime.datetime]] = []
         kwargs = dict()
 
         # TODO: Add support for reverse paging
@@ -117,7 +117,7 @@ class ActivityStore(object):
         for entry in self.labbook.git.log(path_info=path_info, **kwargs):
             m = self.note_regex.match(entry['message'])
             if m:
-                log_entries.append((entry['commit'], m.group(0)))
+                log_entries.append((m.group(0), entry['commit'], entry['committed_on']))
 
         return log_entries
 
@@ -161,7 +161,7 @@ class ActivityStore(object):
         entry = self.labbook.git.log_entry(commit)
         m = self.note_regex.match(entry["message"])
         if m:
-            ar = ActivityRecord.from_log_str(m.group(0), commit)
+            ar = ActivityRecord.from_log_str(m.group(0), commit, entry['committed_on'])
             return ar
         else:
             raise ValueError("Activity data not found in commit {}".format(commit))
@@ -197,7 +197,7 @@ class ActivityStore(object):
                 log_data = log_data[:first]
 
         if log_data:
-            return [ActivityRecord.from_log_str(x[1], x[0]) for x in log_data]
+            return [ActivityRecord.from_log_str(x[0], x[1], x[2]) for x in log_data]
         else:
             return []
 
