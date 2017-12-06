@@ -639,12 +639,14 @@ class LabBook(object):
             _, ext = os.path.splitext(rel_path) or 'file'
 
             # Create detail record
-            adr = ActivityDetailRecord(activity_detail_type)
+            adr = ActivityDetailRecord(activity_detail_type, show=False, importance=0)
             adr.add_value('text/plain', commit_msg)
 
             # Create activity record
             ar = ActivityRecord(activity_type,
-                                message=f"Added {section_str} File",
+                                message=commit_msg,
+                                show=True,
+                                importance=255,
                                 linked_commit=commit.hexsha,
                                 tags=[ext])
             ar.add_detail_object(adr)
@@ -706,13 +708,15 @@ class LabBook(object):
                 activity_type, activity_detail_type, section_str = self.get_activity_type_from_section(section)
 
                 # Create detail record
-                adr = ActivityDetailRecord(activity_detail_type)
+                adr = ActivityDetailRecord(activity_detail_type, show=False, importance=0)
                 adr.add_value('text/plain', commit_msg)
 
                 # Create activity record
                 ar = ActivityRecord(activity_type,
-                                    message=f"Deleted {section_str} File",
+                                    message=commit_msg,
                                     linked_commit=commit.hexsha,
+                                    show=True,
+                                    importance=255,
                                     tags=[ext])
                 ar.add_detail_object(adr)
 
@@ -769,13 +773,15 @@ class LabBook(object):
                 activity_type, activity_detail_type, section_str = self.get_activity_type_from_section(section)
 
                 # Create detail record
-                adr = ActivityDetailRecord(activity_detail_type)
+                adr = ActivityDetailRecord(activity_detail_type, show=False, importance=0)
                 adr.add_value('text/markdown', commit_msg)
 
                 # Create activity record
                 ar = ActivityRecord(activity_type,
-                                    message=f"Moved {section_str} File",
+                                    message=commit_msg,
                                     linked_commit=commit.hexsha,
+                                    show=True,
+                                    importance=255,
                                     tags=['file-move'])
                 ar.add_detail_object(adr)
 
@@ -824,7 +830,7 @@ class LabBook(object):
 
                     # Create detail record
                     activity_type, activity_detail_type, section_str = self.infer_section_from_relative_path(relative_path)
-                    adr = ActivityDetailRecord(activity_detail_type)
+                    adr = ActivityDetailRecord(activity_detail_type, show=False, importance=0)
 
                     msg = f"Created new {section_str} directory `{relative_path}`"
                     commit = self.git.commit(msg)
@@ -832,8 +838,10 @@ class LabBook(object):
 
                     # Create activity record
                     ar = ActivityRecord(activity_type,
-                                        message=f"Created directory in {section_str}",
+                                        message=msg,
                                         linked_commit=commit.hexsha,
+                                        show=True,
+                                        importance=255,
                                         tags=['directory-create'])
                     ar.add_detail_object(adr)
 
@@ -1325,15 +1333,18 @@ class LabBook(object):
 
             # Commit Change
             self.git.add(os.path.join(self.root_dir, ".gigantum", "labbook.yaml"))
-            commit = self.git.commit(f"Renamed LabBook '{old_name}' to '{new_name}'")
+            commit_msg = f"Renamed LabBook '{old_name}' to '{new_name}'"
+            commit = self.git.commit(commit_msg)
 
             # Create detail record
-            adr = ActivityDetailRecord(ActivityDetailType.LABBOOK)
-            adr.add_value('text/plain', f"Renamed LabBook '{old_name}' to '{new_name}'")
+            adr = ActivityDetailRecord(ActivityDetailType.LABBOOK, show=False, importance=0)
+            adr.add_value('text/plain', commit_msg)
 
             # Create activity record
             ar = ActivityRecord(ActivityType.LABBOOK,
-                                message=f"Renamed LabBook",
+                                message=commit_msg,
+                                show=True,
+                                importance=255,
                                 linked_commit=commit.hexsha)
             ar.add_detail_object(adr)
 

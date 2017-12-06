@@ -27,7 +27,7 @@ from lmcommon.logging import LMLogger
 logger = LMLogger.get_logger()
 
 
-class ActivityDetailDB:
+class ActivityDetailDB(object):
     """Git-compliant file based representation of key values used to store Activity Detail Records
     """
     def __init__(self, labbook_root: str, checkout_id: str, logfile_limit: int=8000000) -> None:
@@ -73,7 +73,7 @@ class ActivityDetailDB:
             with open(self._metadata_file, "r") as fp:
                 logmeta = json.load(fp)
                 # opening an existing log
-                if logmeta['checkout_id'] == self.checkout_id:
+                if logmeta.get('checkout_id') == self.checkout_id:
                     self._file_number = int(logmeta['file_number'])
                 else:
                     # This will create a new metadata file and set the file_number to 0
@@ -188,6 +188,9 @@ class ActivityDetailDB:
         Returns:
             detail_key(str): key used to access and identify the object
         """
+        if type(value) != bytes:
+            raise ValueError("DetailDB record value must be of type `bytes`")
+
         fh = self._open_for_append_and_rotate()
         try:
             # get this file offset
@@ -216,6 +219,12 @@ class ActivityDetailDB:
         Returns:
             bytes
         """
+        if not detail_key:
+            raise ValueError("A key must be provided to load a record from the DetailDB")
+
+        if type(detail_key) != str:
+            raise ValueError("DetailDB key must be of type `str`")
+
         basename, detail_header = self._parse_detail_key(detail_key)
         file_number, offset, length = self._parse_detail_header(detail_header)
 

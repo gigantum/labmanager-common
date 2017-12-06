@@ -17,10 +17,8 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-import json
-from pkg_resources import resource_filename
+import pytest
 import os
-import requests
 from lmcommon.fixtures import mock_labbook, mock_config_with_detaildb
 from lmcommon.activity.detaildb import ActivityDetailDB
 
@@ -143,3 +141,18 @@ class TestDetailDB(object):
 
         return_val = mock_config_with_detaildb[0].get(detail_key)
         assert return_val == my_val
+
+    def test_put_get_errors(self, mock_config_with_detaildb):
+        """Test putting and getting a record with validation errors"""
+
+        with pytest.raises(ValueError):
+            detail_key = mock_config_with_detaildb[0].put("astringvalue")
+
+        with pytest.raises(ValueError):
+            detail_key = mock_config_with_detaildb[0].get(None)
+
+        with pytest.raises(ValueError):
+            detail_key = mock_config_with_detaildb[0].get("")
+
+        with pytest.raises(ValueError):
+            detail_key = mock_config_with_detaildb[0].get(b"abytekey")
