@@ -24,6 +24,9 @@ from typing import (Any, Dict, List, Tuple, Optional)
 
 from lmcommon.activity.detaildb import ActivityDetailDB
 from lmcommon.activity.records import ActivityDetailRecord, ActivityRecord
+from lmcommon.logging import LMLogger
+
+logger = LMLogger.get_logger()
 
 
 class ActivityStore(object):
@@ -80,8 +83,8 @@ class ActivityStore(object):
 
         # Check total number of tags
         if len(tags) > self.max_num_tags:
-            raise ValueError("{} tags provided, but a single Activity Record can only have {} tags.".format(len(tags),
-                             self.max_num_tags))
+            raise ValueError(f"{len(tags)} tags provided, but a single Activity Record can only have {self.max_num_tags} tags.")
+
         # Check tag length
         for tag in tags:
             if len(tag) > self.max_tag_length:
@@ -107,7 +110,9 @@ class ActivityStore(object):
         if last:
             raise ValueError("Paging using the 'last' argument not yet supported.")
 
-        if first:
+        if first is not None:
+            if first < 1:
+                raise ValueError("`first` must be greater than or equal to 1, or None")
             kwargs['max_count'] = first
 
         path_info: Optional[str] = None
@@ -147,6 +152,7 @@ class ActivityStore(object):
         commit = self.labbook.git.commit(record.log_str)
         record.commit = commit.hexsha
 
+        logger.debug(f"Successfully created ActivityRecord {commit.hexsha}")
         return record
 
     def get_activity_record(self, commit: str) -> ActivityRecord:
@@ -201,7 +207,7 @@ class ActivityStore(object):
         else:
             return []
 
-    def _encode_write_options(self, compress: Optional[bool] = None) -> bytes:
+    def _encode_write_options(self, compress: bool = False) -> bytes:
         """Method to encode any options for writing details to a byte
 
         bit option
@@ -217,12 +223,7 @@ class ActivityStore(object):
         Returns:
             bytes
         """
-        if compress is None:
-            result = self.compress_details.to_bytes(1, byteorder='little')
-        else:
-            result = compress.to_bytes(1, byteorder='little')
-
-        return result
+        return compress.to_bytes(1, byteorder='little')
 
     @staticmethod
     def _decode_write_options(option_byte: bytes) -> dict:
@@ -255,6 +256,7 @@ class ActivityStore(object):
         detail_obj.key = self.detaildb.put(self._encode_write_options(compress=compress) +
                                            detail_obj.to_bytes(compress))
 
+        logger.debug(f"Successfully wrote ActivityDetailRecord {detail_obj.key}")
         return detail_obj
 
     def get_detail_record(self, detail_key: str) -> ActivityDetailRecord:

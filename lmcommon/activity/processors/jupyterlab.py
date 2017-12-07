@@ -48,7 +48,7 @@ class BasicJupyterLabProcessor(ActivityProcessor):
         """
         # If there was some code, assume a cell was executed
         if code:
-            if code["code"]:
+            if code.get("code"):
                 # Create detail record to capture executed code
                 adr_code = ActivityDetailRecord(ActivityDetailType.CODE_EXECUTED, show=True, importance=128)
 

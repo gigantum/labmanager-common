@@ -97,6 +97,7 @@ class ActivityDetailDB(object):
         logger.info(f"Writing ActivityDetailDB metadata file for {self.checkout_id}")
         if increment:
             value = self._file_number + 1
+            logger.info(f"Incrementing log file number to {value}")
         else:
             value = 0
 

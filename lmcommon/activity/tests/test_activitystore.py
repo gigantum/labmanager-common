@@ -90,7 +90,7 @@ class TestActivityStore:
         """Test encoding/decoding write options"""
         store = mock_config_with_activitystore[0]
 
-        wo = store._encode_write_options()
+        wo = store._encode_write_options(compress=True)
         assert type(wo) == bytes
         assert wo == b'\x01'
 
@@ -335,6 +335,9 @@ class TestActivityStore:
 
         with pytest.raises(ValueError):
             _ = mock_config_with_activitystore[0]._get_log_records(before=record2.commit)
+
+        with pytest.raises(ValueError):
+            _ = mock_config_with_activitystore[0]._get_log_records(first=0)
 
     def test_get_activity_records(self, mock_config_with_activitystore):
         """Method to test creating and getting a bunch of activity records"""
