@@ -30,7 +30,7 @@ import requests
 from lmcommon.activity.monitors.devenv import DevEnvMonitor
 from lmcommon.activity.monitors.activity import ActivityMonitor
 from lmcommon.activity.processors.processor import StopProcessingException
-from lmcommon.activity.processors.jupyterlab import BasicJupyterLabProcessor
+from lmcommon.activity.processors.jupyterlab import BasicJupyterLabProcessor, JupyterLabImageExtractorProcessor
 from lmcommon.activity.processors.core import ActivityShowBasicProcessor
 from lmcommon.activity import ActivityType
 from lmcommon.dispatcher import Dispatcher, jobs
@@ -159,6 +159,7 @@ class JupyterLabNotebookMonitor(ActivityMonitor):
             None
         """
         self.add_processor(BasicJupyterLabProcessor())
+        self.add_processor(JupyterLabImageExtractorProcessor())
         self.add_processor(ActivityShowBasicProcessor())
 
     def handle_message(self, msg: Dict[str, Dict], metadata: Dict[str, str]) -> None:
@@ -175,7 +176,6 @@ class JupyterLabNotebookMonitor(ActivityMonitor):
         if msg['msg_type'] == 'status':
             # If status -> busy get messages until status -> idle
             if self.kernel_status == 'busy' and msg['content']['execution_state'] == 'idle':
-
                 try:
                     # Process activity data to generate a note record
                     activity_record = self.process(ActivityType.CODE,
@@ -185,14 +185,22 @@ class JupyterLabNotebookMonitor(ActivityMonitor):
                     # commit = self.commit_file(metadata["path"])
                     commit = self.commit_labbook()
 
+                    # Check if an error occurred, in which
+                    if self.result:
+                        if "error" in self.result:
+                            if self.result['error']:
+                                # An error occurred. Bail out now after doing the commit but BEFORE saving the record.
+                                logger.info("Cell error detected. Committed repo, but not saving record.")
+                                raise StopProcessingException()
+
                     # Create note record
-                    actvity_commit = self.create_activity_record(commit, activity_record)
+                    activity_commit = self.create_activity_record(commit, activity_record)
 
                     # Successfully committed changes. Clear out state
                     self.result = {}
                     self.code = {}
 
-                    logger.info("Created auto-generated note based on kernel activity: {}".format(actvity_commit))
+                    logger.info("Created auto-generated note based on kernel activity: {}".format(activity_commit))
 
                 except StopProcessingException:
                     # Don't want to save changes. Move along.
@@ -219,8 +227,16 @@ class JupyterLabNotebookMonitor(ActivityMonitor):
             # result received
             self.result = {'data': {"text/plain": msg['content']['text']}, 'metadata': {}}
 
+        elif msg['msg_type'] == 'display_data':
+            # result received
+            self.result = msg['content']
+
+        elif msg['msg_type'] == 'error':
+            # An error occured, so don't save this record, but do a commit so repo stays clean
+            self.result = {'error': True}
+
         else:
-            logger.debug("Received and ignored IOPUB Message of type {}".format(msg['msg_type']))
+            logger.info("Received and ignored IOPUB Message of type {}".format(msg['msg_type']))
 
     def start(self, metadata: Dict[str, str], database: int = 1) -> None:
         """Method called in a periodically scheduled async worker that should check the dev env and manage Activity

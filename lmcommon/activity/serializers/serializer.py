@@ -20,6 +20,7 @@
 from typing import Any
 
 from lmcommon.activity.serializers import text
+from lmcommon.activity.serializers import image
 
 
 class Serializer(object):
@@ -29,7 +30,12 @@ class Serializer(object):
         """ Load the database for the specified labbook
         """
         self.serializers = {"text/plain": text.PlainSerializer(),
-                            "text/markdown": text.MarkdownSerializer()}
+                            "text/markdown": text.MarkdownSerializer(),
+                            "image/png": image.PngImageSerializer(),
+                            "image/jpeg": image.JpegImageSerializer(),
+                            "image/jpg": image.JpegImageSerializer(),
+                            "image/gif": image.GifImageSerializer(),
+                            "image/bmp": image.BmpImageSerializer()}
 
     def jsonify(self, mime_type: str, data: Any) -> Any:
         """Method to jsonify an arbitrary data object

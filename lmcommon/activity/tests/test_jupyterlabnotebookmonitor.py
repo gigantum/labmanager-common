@@ -22,7 +22,8 @@ from lmcommon.fixtures import mock_labbook
 import uuid
 import os
 
-from lmcommon.activity.monitors.monitor_jupyterlab import JupyterLabNotebookMonitor, BasicJupyterLabProcessor
+from lmcommon.activity.monitors.monitor_jupyterlab import JupyterLabNotebookMonitor, BasicJupyterLabProcessor,\
+    JupyterLabImageExtractorProcessor
 from lmcommon.activity.processors.core import ActivityShowBasicProcessor
 from lmcommon.activity import ActivityStore, ActivityType, ActivityDetailType
 
@@ -45,9 +46,10 @@ class TestJupyterLabNotebookMonitor(object):
         monitor = JupyterLabNotebookMonitor("test", "test", mock_labbook[2].name,
                                             monitor_key, config_file=mock_labbook[0])
 
-        assert len(monitor.processors) == 2
+        assert len(monitor.processors) == 3
         assert type(monitor.processors[0]) == BasicJupyterLabProcessor
-        assert type(monitor.processors[1]) == ActivityShowBasicProcessor
+        assert type(monitor.processors[1]) == JupyterLabImageExtractorProcessor
+        assert type(monitor.processors[2]) == ActivityShowBasicProcessor
 
     def test_start(self, redis_client, mock_labbook, mock_kernel):
         """Test processing notebook activity"""
@@ -275,12 +277,12 @@ class TestJupyterLabNotebookMonitor(object):
         assert record.detail_objects[3][2] == 0
 
         detail = a_store.get_detail_record(record.detail_objects[2][3].key)
-        assert len(detail.data) == 2
-        assert detail.data['text/plain'] == 'Created new Output Data file output/result.bin'
+        assert len(detail.data) == 1
+        assert detail.data['text/markdown'] == 'Created new Output Data file `output/result.bin`'
 
         detail = a_store.get_detail_record(record.detail_objects[3][3].key)
-        assert len(detail.data) == 2
-        assert detail.data['text/plain'] == 'Modified Code file code/Test.ipynb'
+        assert len(detail.data) == 1
+        assert detail.data['text/markdown'] == 'Modified Code file `code/Test.ipynb`'
 
     def test_no_show(self, redis_client, mock_labbook, mock_kernel):
         """Test processing notebook activity that doesn't have any important detail items"""
@@ -428,3 +430,53 @@ class TestJupyterLabNotebookMonitor(object):
         assert record.detail_objects[201][0] is True
         assert record.detail_objects[201][1] == ActivityDetailType.OUTPUT_DATA.value
         assert record.detail_objects[201][2] == 100
+
+    def test_no_record_on_error(self, redis_client, mock_labbook, mock_kernel):
+        """Test processing notebook activity that didn't execute successfully"""
+        monitor_key = "dev_env_monitor:{}:{}:{}:{}:activity_monitor:{}".format('test',
+                                                                               'test',
+                                                                               'labbook1',
+                                                                               'jupyterlab-ubuntu1604',
+                                                                               uuid.uuid4())
+
+        monitor = JupyterLabNotebookMonitor("test", "test", mock_labbook[2].name,
+                                            monitor_key, config_file=mock_labbook[0])
+
+        # Setup monitoring metadata
+        metadata = {"kernel_id": "XXXX",
+                    "kernel_name": 'python',
+                    "kernel_type": 'notebook',
+                    "path": 'code/Test.ipynb'}
+
+        # Perform an action
+        mock_kernel[0].execute("1/0")
+
+        # Check lab book repo state
+        status = mock_labbook[2].git.status()
+        assert len(status["untracked"]) == 0
+
+        # Process messages
+        msg1 = mock_kernel[0].get_iopub_msg()
+        msg2 = mock_kernel[0].get_iopub_msg()
+        msg3 = mock_kernel[0].get_iopub_msg()
+        msg4 = mock_kernel[0].get_iopub_msg()
+
+        # Process first state change message
+        assert monitor.kernel_status == 'idle'
+        monitor.handle_message(msg1, metadata)
+        assert monitor.kernel_status == 'busy'
+
+        # Process input message
+        monitor.handle_message(msg2, metadata)
+        assert len(monitor.code) > 0
+
+        # Process output message
+        monitor.handle_message(msg3, metadata)
+        monitor.handle_message(msg4, metadata)
+
+        # Check activity entry
+        log = mock_labbook[2].git.log()
+
+        # log should increment by only 1, not 2 because of error and not be an Activity Record.
+        assert len(log) == 2
+        assert 'GTM' not in log[0]['message']

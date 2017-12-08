@@ -53,7 +53,6 @@ class BasicJupyterLabProcessor(ActivityProcessor):
                 adr_code = ActivityDetailRecord(ActivityDetailType.CODE_EXECUTED, show=True, importance=128)
 
                 # TODO: Use kernel info to get the language and provide a text/html type that is styled
-                adr_code.add_value('text/plain', code['code'])
                 adr_code.add_value('text/markdown', f"```{code['code']}```")
                 result_obj.add_detail_object(adr_code)
 
@@ -64,44 +63,51 @@ class BasicJupyterLabProcessor(ActivityProcessor):
                 # Create detail records for file changes
                 cnt = 0
                 for filename in status['untracked']:
+                    # skip any file in .git or .gigantum dirs
+                    if ".git" in filename or ".gigantum" in filename:
+                        continue
+
                     activity_type, activity_detail_type, section = LabBook.infer_section_from_relative_path(filename)
                     if activity_type == ActivityType.INPUT_DATA or activity_type == ActivityType.OUTPUT_DATA:
                         show = True
                     else:
                         show = False
                     adr = ActivityDetailRecord(activity_detail_type, show=show, importance=min(100+cnt, 255))
-                    adr.add_value('text/plain', f"Created new {section} file {filename}")
                     adr.add_value('text/markdown', f"Created new {section} file `{filename}`")
                     result_obj.add_detail_object(adr)
                     cnt += 1
 
                 cnt = 0
                 for filename, change in status['unstaged']:
+                    # skip any file in .git or .gigantum dirs
+                    if ".git" in filename or ".gigantum" in filename:
+                        continue
+
                     activity_type, activity_detail_type, section = LabBook.infer_section_from_relative_path(filename)
                     if activity_type == ActivityType.INPUT_DATA or activity_type == ActivityType.OUTPUT_DATA:
                         show = True
                     else:
                         show = False
                     adr = ActivityDetailRecord(activity_detail_type, show=show, importance=min(cnt, 255))
-                    adr.add_value('text/plain', f"{change[0].upper() + change[1:]} {section} file {filename}")
                     adr.add_value('text/markdown', f"{change[0].upper() + change[1:]} {section} file `{filename}`")
                     result_obj.add_detail_object(adr)
                     cnt += 1
 
-                # Create detail record for any printed/plain text result
                 if result:
-                    # Only store up to 4MB of result data (if the user printed a TON don't save it all)
-                    truncate_at = 1000 * 4000
-                    if len(result['data']["text/plain"]) > 0:
-                        adr = ActivityDetailRecord(ActivityDetailType.RESULT, show=True, importance=200)
+                    # Only store up to 2MB of plain text result data (if the user printed a TON don't save it all)
+                    truncate_at = 1000 * 2000
+                    if 'data' in result:
+                        if 'text/plain' in result['data']:
+                            if len(result['data']["text/plain"]) > 0:
+                                adr = ActivityDetailRecord(ActivityDetailType.RESULT, show=True, importance=200)
 
-                        if len(result['data']["text/plain"]) <= truncate_at:
-                            adr.add_value("text/plain", result['data']["text/plain"])
-                        else:
-                            adr.add_value("text/plain",
-                                          result['data']["text/plain"][:truncate_at] + " ...\n\n <result truncated>")
+                                if len(result['data']["text/plain"]) <= truncate_at:
+                                    adr.add_value("text/plain", result['data']["text/plain"])
+                                else:
+                                    adr.add_value("text/plain",
+                                                  result['data']["text/plain"][:truncate_at] + " ...\n\n <result truncated>")
 
-                        result_obj.add_detail_object(adr)
+                                result_obj.add_detail_object(adr)
 
                 # Set Activity Record Message
                 result_obj.message = "Executed cell in notebook {}".format(metadata['path'])
@@ -114,3 +120,39 @@ class BasicJupyterLabProcessor(ActivityProcessor):
             logger.info("Processed activity with no code executed")
             raise StopProcessingException("No code executed. Nothing to process")
 
+
+class JupyterLabImageExtractorProcessor(ActivityProcessor):
+    """Class to perform image extraction for JupyterLab activity"""
+
+    def process(self, result_obj: ActivityRecord, code: Dict[str, Any], result: Dict[str, Any], status: Dict[str, Any],
+                metadata: Dict[str, Any]) -> ActivityRecord:
+        """Method to update a result object based on code and result data
+
+        Args:
+            result_obj(ActivityNote): An object containing the note
+            code(dict): A dict containing data specific to the dev env containing code that was executed
+            result(dict): A dict containing data specific to the dev env containing the result of code execution
+            status(dict): A dict containing the result of git status from gitlib
+            metadata(str): A dictionary containing Dev Env specific or other developer defined data
+
+        Returns:
+            ActivityNote
+        """
+        supported_image_types = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/bmp']
+        # If a supported image exists in the result, grab it and create a detail record
+
+        if result:
+            if 'data' in result:
+                for mime_type in result['data']:
+                    if mime_type in supported_image_types:
+                        # You got an image!
+                        adr_img = ActivityDetailRecord(ActivityDetailType.RESULT, show=True,
+                                                       importance=255)
+                        adr_img.add_value(mime_type, result['data'][mime_type])
+
+                        result_obj.add_detail_object(adr_img)
+
+                        # Set Activity Record Message
+                        result_obj.message = "Executed cell in notebook {} and generated a result".format(metadata['path'])
+
+        return result_obj
