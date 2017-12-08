@@ -17,7 +17,38 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
+from lmcommon.activity.serializers.mime import MimeSerializer
+from typing import Any
 
-from .fixtures import (labbook_dir_tree, mock_config_file, mock_config_with_repo,
-                       mock_config_file_team, mock_config_file_with_auth, mock_labbook, mock_config_with_activitystore,
-                       mock_config_with_detaildb, remote_labbook_repo)
+
+class PlainSerializer(MimeSerializer):
+    """Class for serializing plain text"""
+
+    def jsonify(self, data: str) -> str:
+        # Just return the text when jsonifying since it will serialize properly
+        return data
+
+    def serialize(self, data: Any) -> bytes:
+        # Byte encode the string
+        return data.encode('utf-8')
+
+    def deserialize(self, data: bytes) -> str:
+        # Decode the bytes to a string object
+        return data.decode('utf-8')
+
+
+class MarkdownSerializer(MimeSerializer):
+    """Class for serializing markdown text"""
+
+    def jsonify(self, data: str) -> str:
+        # Just return the text when jsonifying since it will serialize properly
+        return data
+
+    def serialize(self, data: Any) -> bytes:
+        # Byte encode the string
+        return data.encode('utf-8')
+
+    def deserialize(self, data: bytes) -> str:
+        # Decode the bytes to a string object
+        return data.decode('utf-8')
+

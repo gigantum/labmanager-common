@@ -32,14 +32,13 @@ from pkg_resources import resource_filename
 from lmcommon.configuration import Configuration
 from lmcommon.gitlib import get_git_interface, GitAuthor
 from lmcommon.logging import LMLogger
-from lmcommon.notes import NoteLogLevel, NoteStore
 from lmcommon.labbook.schemas import validate_schema
+from lmcommon.activity import ActivityStore, ActivityType, ActivityRecord, ActivityDetailType, ActivityDetailRecord
 
 from redis import StrictRedis
 import redis_lock
 
 
-GIT_IGNORE_DEFAULT = """.DS_Store"""
 logger = LMLogger.get_logger()
 
 
@@ -50,8 +49,8 @@ class LabbookException(Exception):
 class LabBook(object):
     """Class representing a single LabBook"""
 
-    # If this is not defined, implicitly the version is "0.1"
-    LABBOOK_DATA_SCHEMA_VERSION = "0.1"
+    # If this is not defined, implicitly the version is "0.2"
+    LABBOOK_DATA_SCHEMA_VERSION = "0.2"
 
     def __init__(self, config_file: Optional[str] = None) -> None:
         self.labmanager_config = Configuration(config_file)
@@ -362,6 +361,54 @@ class LabBook(object):
         """
         return ''.join(c for c in value if c not in '\<>?/;"`\'')
 
+    @staticmethod
+    def get_activity_type_from_section(section_name: str) -> Tuple[ActivityType, ActivityDetailType, str]:
+        """Method to get activity and detail types from the section name
+
+        Args:
+            section_name(str): section subdirectory/identifier (code, input, output)
+
+        Returns:
+            tuple
+        """
+        if section_name == 'code':
+            activity_detail_type = ActivityDetailType.CODE
+            activity_type = ActivityType.CODE
+            section = "Code"
+        elif section_name == 'input':
+            activity_detail_type = ActivityDetailType.INPUT_DATA
+            activity_type = ActivityType.INPUT_DATA
+            section = "Input Data"
+        elif section_name == 'output':
+            activity_detail_type = ActivityDetailType.OUTPUT_DATA
+            activity_type = ActivityType.OUTPUT_DATA
+            section = "Output Data"
+        else:
+            raise ValueError(f"Unsupported LabBook section: '{section_name}'")
+
+        return activity_type, activity_detail_type, section
+
+    @staticmethod
+    def infer_section_from_relative_path(relative_path: str) -> Tuple[ActivityType, ActivityDetailType, str]:
+        """Method to try to infer the "section" from a relative file path
+
+        Args:
+            relative_path(str): a relative file path within a LabBook section (code, input, output)
+
+        Returns:
+            tuple
+        """
+        # If leading slash, remove it first
+        if relative_path[0] == os.path.sep:
+            relative_path = relative_path[1:]
+
+        # if no trailing slash add it. simple parsing below assumes no trailing and a leading slash to work.
+        if relative_path[-1] != os.path.sep:
+            relative_path = relative_path + os.path.sep
+
+        possible_section, _ = relative_path.split('/', 1)
+        return LabBook.get_activity_type_from_section(possible_section)
+
     def get_file_info(self, section: str, rel_file_path: str) -> Dict[str, Any]:
         """Method to get a file's detail information
 
@@ -415,13 +462,7 @@ class LabBook(object):
             pass
         """
         if not self.is_repo_clean:
-            # TODO - This must be removed once LevelDB is replaced for the notes system.
-            logger.warning(f"Labbook {str(self)}: Committing untracked/uncommitted changes "
-                           f"before branching to {branch_name}")
-            self.git.add_all()
-            self.git.commit(f"Cleanup of uncommitted changes before making branch {branch_name}.")
-            # After the above TODO is done, the above code must be replaced with the following:
-            #raise LabbookException(f"Cannot checkout {branch_name}: Untracked and/or uncommitted changes")
+            raise LabbookException(f"Cannot checkout {branch_name}: Untracked and/or uncommitted changes")
 
         try:
             self.git.fetch()
@@ -579,23 +620,35 @@ class LabBook(object):
             logger.info(f"Inserting new file for {str(self)} from `{src_file}` to `{dst_path}")
             shutil.copyfile(src_file, dst_path)
 
+            # Get LabBook section info
+            activity_type, activity_detail_type, section_str = self.get_activity_type_from_section(section)
+
             # Create commit
             rel_path = dst_path.replace(os.path.join(self.root_dir, section), '')
-            commit_msg = f"Added new {section} file {rel_path}"
+            commit_msg = f"Added new {section_str} file {rel_path}"
             self.git.add(dst_path)
             commit = self.git.commit(commit_msg)
 
-            # Create Activity record
+            # Create Activity record and detail
             _, ext = os.path.splitext(rel_path) or 'file'
-            ns = NoteStore(self)
-            ns.create_note({
-                'linked_commit': commit.hexsha,
-                'message': commit_msg,
-                'level': NoteLogLevel.USER_MAJOR,
-                'tags': [ext],
-                'free_text': '',
-                'objects': ''
-            })
+
+            # Create detail record
+            adr = ActivityDetailRecord(activity_detail_type, show=False, importance=0)
+            adr.add_value('text/plain', commit_msg)
+
+            # Create activity record
+            ar = ActivityRecord(activity_type,
+                                message=commit_msg,
+                                show=True,
+                                importance=255,
+                                linked_commit=commit.hexsha,
+                                tags=[ext])
+            ar.add_detail_object(adr)
+
+            # Store
+            ars = ActivityStore(self)
+            ars.create_activity_record(ar)
+
             return self.get_file_info(section, rel_path)
 
     def delete_file(self, section: str, relative_path: str, directory: bool = False) -> bool:
@@ -644,15 +697,27 @@ class LabBook(object):
                     _, ext = os.path.splitext(target_path)
                 else:
                     ext = 'directory'
-                ns = NoteStore(self)
-                ns.create_note({
-                    'linked_commit': commit.hexsha,
-                    'message': commit_msg,
-                    'level': NoteLogLevel.USER_MAJOR,
-                    'tags': ['remove', ext],
-                    'free_text': '',
-                    'objects': ''
-                })
+
+                # Get LabBook section
+                activity_type, activity_detail_type, section_str = self.get_activity_type_from_section(section)
+
+                # Create detail record
+                adr = ActivityDetailRecord(activity_detail_type, show=False, importance=0)
+                adr.add_value('text/plain', commit_msg)
+
+                # Create activity record
+                ar = ActivityRecord(activity_type,
+                                    message=commit_msg,
+                                    linked_commit=commit.hexsha,
+                                    show=True,
+                                    importance=255,
+                                    tags=[ext])
+                ar.add_detail_object(adr)
+
+                # Store
+                ars = ActivityStore(self)
+                ars.create_activity_record(ar)
+
                 return True
 
     def move_file(self, section: str, src_rel_path: str, dst_rel_path: str) -> Dict[str, Any]:
@@ -697,15 +762,26 @@ class LabBook(object):
                     self.git.add(dst_abs_path)
 
                 commit = self.git.commit(commit_msg)
-                ns = NoteStore(self)
-                ns.create_note({
-                    'linked_commit': commit.hexsha,
-                    'message': commit_msg,
-                    'level': NoteLogLevel.USER_MAJOR,
-                    'tags': ['file-move'],
-                    'free_text': '',
-                    'objects': ''
-                })
+
+                # Get LabBook section
+                activity_type, activity_detail_type, section_str = self.get_activity_type_from_section(section)
+
+                # Create detail record
+                adr = ActivityDetailRecord(activity_detail_type, show=False, importance=0)
+                adr.add_value('text/markdown', commit_msg)
+
+                # Create activity record
+                ar = ActivityRecord(activity_type,
+                                    message=commit_msg,
+                                    linked_commit=commit.hexsha,
+                                    show=True,
+                                    importance=255,
+                                    tags=['file-move'])
+                ar.add_detail_object(adr)
+
+                # Store
+                ars = ActivityStore(self)
+                ars.create_activity_record(ar)
 
                 return self.get_file_info(section, dst_rel_path)
             except Exception as e:
@@ -713,13 +789,13 @@ class LabBook(object):
                 logger.exception(e)
                 raise
 
-    def makedir(self, relative_path: str, make_parents: bool = True, create_note: bool = False) -> None:
+    def makedir(self, relative_path: str, make_parents: bool = True, create_activity_record: bool = False) -> None:
         """Make a new directory inside the labbook directory.
 
         Args:
             relative_path(str): Path within the labbook to make directory
             make_parents(bool): If true, create intermediary directories
-            create_note(bool): If true, create commit and note record
+            create_activity_record(bool): If true, create commit and activity record
 
         Returns:
             str: Absolute path of new directory
@@ -743,20 +819,29 @@ class LabBook(object):
                         gitkeep.write("This file is necessary to keep this directory tracked by Git"
                                       " and archivable by compression tools. Do not delete or modify!")
 
-                if create_note:
+                if create_activity_record:
                     self.git.add_all(new_directory_path)
 
-                    msg = f"Created new directory `{relative_path}`"
+                    # Create detail record
+                    activity_type, activity_detail_type, section_str = self.infer_section_from_relative_path(relative_path)
+                    adr = ActivityDetailRecord(activity_detail_type, show=False, importance=0)
+
+                    msg = f"Created new {section_str} directory `{relative_path}`"
                     commit = self.git.commit(msg)
-                    ns = NoteStore(self)
-                    ns.create_note({
-                        'linked_commit': commit.hexsha,
-                        'message': msg,
-                        'level': NoteLogLevel.USER_MAJOR,
-                        'tags': ['directory-create'],
-                        'free_text': '',
-                        'objects': ''
-                    })
+                    adr.add_value('text/markdown', msg)
+
+                    # Create activity record
+                    ar = ActivityRecord(activity_type,
+                                        message=msg,
+                                        linked_commit=commit.hexsha,
+                                        show=True,
+                                        importance=255,
+                                        tags=['directory-create'])
+                    ar.add_detail_object(adr)
+
+                    # Store
+                    ars = ActivityStore(self)
+                    ars.create_activity_record(ar)
 
     def walkdir(self, section: str, show_hidden: bool = False) -> List[Dict[str, Any]]:
         """Return a list of all files and directories in a section of the labbook. Never includes the .git or
@@ -1079,9 +1164,10 @@ class LabBook(object):
             /output
             /.gigantum
                 labbook.yaml
+                .checkout
                 /env
                     Dockerfile
-                /notes
+                /activity
                     /log
                     /index
             /.git
@@ -1166,9 +1252,10 @@ class LabBook(object):
             os.path.join('.gigantum', 'env', 'dev_env'),
             os.path.join('.gigantum', 'env', 'custom'),
             os.path.join('.gigantum', 'env', 'package_manager'),
-            os.path.join('.gigantum', 'notes'),
-            os.path.join('.gigantum', 'notes', 'log'),
-            os.path.join('.gigantum', 'notes', 'index'),
+            os.path.join('.gigantum', 'activity'),
+            os.path.join('.gigantum', 'activity', 'log'),
+            os.path.join('.gigantum', 'activity', 'index'),
+            os.path.join('.gigantum', 'activity', 'importance'),
         ]
 
         for d in dirs:
@@ -1234,20 +1321,30 @@ class LabBook(object):
             # Rename labbook directory to new directory and update YAML file
             self.name = new_name
 
+            # Remove the .checkout file, as you should create a new checkout context due to the labbook renaming
+            if os.path.exists(os.path.join(self.root_dir, ".gigantum", ".checkout")):
+                os.remove(os.path.join(self.root_dir, ".gigantum", ".checkout"))
+
             # Commit Change
             self.git.add(os.path.join(self.root_dir, ".gigantum", "labbook.yaml"))
-            commit = self.git.commit(f"Renamed LabBook '{old_name}' to '{new_name}'")
+            commit_msg = f"Renamed LabBook '{old_name}' to '{new_name}'"
+            commit = self.git.commit(commit_msg)
 
-            # Add Activity record
-            ns = NoteStore(self)
-            ns.create_note({
-                'linked_commit': commit.hexsha,
-                'message': f"Renamed LabBook '{old_name}' to '{new_name}'",
-                'level': NoteLogLevel.USER_MAJOR,
-                'tags': ['rename'],
-                'free_text': '',
-                'objects': ''
-            })
+            # Create detail record
+            adr = ActivityDetailRecord(ActivityDetailType.LABBOOK, show=False, importance=0)
+            adr.add_value('text/plain', commit_msg)
+
+            # Create activity record
+            ar = ActivityRecord(ActivityType.LABBOOK,
+                                message=commit_msg,
+                                show=True,
+                                importance=255,
+                                linked_commit=commit.hexsha)
+            ar.add_detail_object(adr)
+
+            # Store
+            ars = ActivityStore(self)
+            ars.create_activity_record(ar)
 
     def from_directory(self, root_dir: str) -> None:
         """Method to populate a LabBook instance from a directory

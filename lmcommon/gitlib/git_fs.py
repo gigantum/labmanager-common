@@ -412,7 +412,7 @@ class GitFilesystem(GitRepoInterface):
         return self.repo.index.commit(message, author=self.author, committer=self.committer)
 
     # HISTORY METHODS
-    def log(self, max_count=None, filename=None, skip=None, since=None, author=None):
+    def log(self, path_info=None, max_count=None, filename=None, skip=None, since=None, author=None):
         """Method to get the commit history, optionally for a single file, with pagination support
 
         Returns an ordered list of dictionaries, one entry per commit. Dictionary format:
@@ -426,6 +426,7 @@ class GitFilesystem(GitRepoInterface):
             }
 
         Args:
+            path_info(str): Optional path info to filter (e.g., hash1, hash2..hash1, master)
             filename(str): Optional filename to filter on
             max_count(int): Optional number of commit records to return
             skip(int): Optional number of commit records to skip (supports building pagination)
@@ -452,7 +453,10 @@ class GitFilesystem(GitRepoInterface):
         if author:
             kwargs["author"] = author
 
-        commits = list(self.repo.iter_commits(self.get_current_branch_name(), **kwargs))
+        if path_info:
+            commits = list(self.repo.iter_commits(path_info, **kwargs))
+        else:
+            commits = list(self.repo.iter_commits(self.get_current_branch_name(), **kwargs))
 
         result = []
         for c in commits:

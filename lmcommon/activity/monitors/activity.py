@@ -22,11 +22,10 @@ import git
 from lmcommon.logging import LMLogger
 from typing import (Any, Dict, List, Optional)
 
-from lmcommon.activity.processors.processor import ActivityNote
+from lmcommon.activity import ActivityRecord, ActivityStore, ActivityType
 from lmcommon.activity.processors.processor import ActivityProcessor
 from lmcommon.configuration import get_docker_client
 from lmcommon.labbook import LabBook
-from lmcommon.notes import NoteStore
 
 logger = LMLogger.get_logger()
 
@@ -55,8 +54,8 @@ class ActivityMonitor(metaclass=abc.ABCMeta):
         self.owner = owner
         self.labbook_name = labbook_name
 
-        # Create NoteStore instance
-        self.note_db = NoteStore(self.labbook)
+        # Create ActivityStore instance
+        self.activity_store = ActivityStore(self.labbook)
 
     def add_processor(self, processor_instance: ActivityProcessor) -> None:
         """
@@ -78,13 +77,8 @@ class ActivityMonitor(metaclass=abc.ABCMeta):
         Returns:
             str
         """
-        try:
-            self.labbook.git.add(filename)
-        except git.exc.GitCommandError:
-            # TODO: REMOVE WHEN POLLING FIXED possible polling got in the way. try again just in case.
-            self.labbook.git.add(filename)
-
-        commit = self.labbook.git.commit("Auto-commit due to activity monitoring")
+        self.labbook.git.add(filename)
+        commit = self.labbook.git.commit("Auto-commit from activity monitoring")
         return commit.hexsha
 
     def commit_labbook(self) -> str:
@@ -94,35 +88,32 @@ class ActivityMonitor(metaclass=abc.ABCMeta):
             str
         """
         self.labbook.git.add_all()
-        commit = self.labbook.git.commit("Auto-commit due to activity monitoring")
+        commit = self.labbook.git.commit("Auto-commit from activity monitoring")
         return commit.hexsha
 
-    def create_note(self, linked_commit: str, note_data: ActivityNote) -> str:
+    def create_activity_record(self, linked_commit: str, activity_record: ActivityRecord) -> Optional[str]:
         """Method to commit changes to a file
 
         Args:
-            linked_commit(str): Git commit this note is related to
-            note_data(ActivityNote): The populated ActivityNote object returned by the processing pipeline
+            linked_commit(str): Git commit this ActivityRecord is related to
+            activity_record(ActivityNote): The populated ActivityNote object returned by the processing pipeline
 
         Returns:
             str
         """
-        note_data_dict = {'linked_commit': linked_commit,
-                          'message': note_data.message,
-                          'level': note_data.log_level,
-                          'tags': note_data.tags,
-                          'free_text': note_data.free_text,
-                          'objects': note_data.objects}
+        activity_record.linked_commit = linked_commit
 
-        # Create a note record
-        note_commit = self.note_db.create_note(note_data_dict)
+        # Create a activity record
+        record = self.activity_store.create_activity_record(activity_record)
 
-        return note_commit
+        return record.commit
 
-    def process(self, code: Dict[str, Any], result: Dict[str, Any], metadata: Dict[str, Any]) -> ActivityNote:
+    def process(self, activity_type: ActivityType, code: Dict[str, Any],
+                result: Dict[str, Any], metadata: Dict[str, Any]) -> ActivityRecord:
         """Method to update a result object based on code and result data
 
         Args:
+            activity_type(ActivityType): A ActivityType object indicating the activity type
             code(dict): A dict containing data specific to the dev env containing code that was executed
             result(dict): A dict containing data specific to the dev env containing the result of code execution
             metadata(str): A dictionary containing Dev Env specific or other developer defined data
@@ -130,11 +121,12 @@ class ActivityMonitor(metaclass=abc.ABCMeta):
         Returns:
             ActivityNote
         """
-        note = ActivityNote()
+        activity_record = ActivityRecord(activity_type)
+        status = self.labbook.git.status()
         for p in self.processors:
-            note = p.process(note, code, result, metadata)
+            activity_record = p.process(activity_record, code, result, status, metadata)
 
-        return note
+        return activity_record
 
     def get_container_ip(self) -> Optional[str]:
         """Method to get the monitored lab book container's IP address on the Docker bridge network

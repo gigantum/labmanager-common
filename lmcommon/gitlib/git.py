@@ -340,7 +340,7 @@ class GitRepoInterface(metaclass=abc.ABCMeta):
 
     # HISTORY METHODS
     @abc.abstractmethod
-    def log(self, max_count=10, filename=None, skip=None, since=None, author=None):
+    def log(self, path_info=None, max_count=10, filename=None, skip=None, since=None, author=None):
         """Method to get the commit history, optionally for a single file, with pagination support
 
         Returns an ordered list of dictionaries, one entry per commit. Dictionary format:
@@ -354,6 +354,7 @@ class GitRepoInterface(metaclass=abc.ABCMeta):
             }
 
         Args:
+            path_info(str): Optional path info to filter (e.g., hash1, hash2..hash1, master)
             filename(str): Optional filename to filter on
             max_count(int): Optional number of commit records to return
             skip(int): Optional number of commit records to skip (supports building pagination)

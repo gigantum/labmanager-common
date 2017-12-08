@@ -89,13 +89,13 @@ class TestComponentManager(object):
                 for required_field in 'package_manager', 'name', 'version':
                     assert required_field in fields_dict.keys()
 
-        # Verify git/notes
+        # Verify git/activity
         log = lb.git.log()
         assert len(log) == 10
-        assert "gtmNOTE" in log[0]["message"]
-        assert 'docker' in log[0]["message"]
-        assert "gtmNOTE" in log[4]["message"]
-        assert 'requests' in log[4]["message"]
+        assert "_GTM_ACTIVITY_START_" in log[0]["message"]
+        assert 'Added new software package' in log[0]["message"]
+        assert "_GTM_ACTIVITY_START_" in log[4]["message"]
+        assert 'Added new software package' in log[4]["message"]
 
     def test_add_component(self, mock_config_file):
         """Test adding a component to a labbook"""
@@ -131,11 +131,11 @@ class TestComponentManager(object):
         assert data['info']['version_minor'] == 4
         assert data['###namespace###'] == 'gigantum'
 
-        # Verify git/notes
+        # Verify git/activity
         log = lb.git.log()
         assert len(log) == 4
-        assert "gtmNOTE" in log[0]["message"]
-        assert 'ubuntu1604-python3' in log[0]["message"]
+        assert "_GTM_ACTIVITY_START_" in log[0]["message"]
+        assert 'environment component:' in log[0]["message"]
 
     def test_add_duplicate_component(self, mock_config_file):
         """Test adding a duplicate component to a labbook"""

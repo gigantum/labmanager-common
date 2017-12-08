@@ -19,17 +19,6 @@ OSX:
 brew install libyaml
 ```
 
-### levelDB
-The embedded Notes database is built on levelDB and must be installed before you can pip install
-the requirements of `lmcommon`
-
-OSX:
-
-```
-brew install leveldb
-```
-
-
 ## Packages
 
 ### configuration

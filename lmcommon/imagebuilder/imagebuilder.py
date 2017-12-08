@@ -31,7 +31,7 @@ from lmcommon.environment.componentmanager import ComponentManager
 from lmcommon.dispatcher import Dispatcher, jobs
 from lmcommon.labbook import LabBook
 from lmcommon.logging import LMLogger
-from lmcommon.notes import NoteLogLevel, NoteStore
+from lmcommon.activity import ActivityDetailType, ActivityType, ActivityRecord, ActivityDetailRecord, ActivityStore
 
 logger = LMLogger.get_logger()
 
@@ -257,15 +257,22 @@ class ImageBuilder(object):
             lb.git.add(dockerfile_name)
             commit = lb.git.commit(short_message)
 
-            # Create a note record
-            ns = NoteStore(lb)
-            ns.create_note({"linked_commit": commit.hexsha,
-                            "message": short_message,
-                            "level": NoteLogLevel.AUTO_MINOR,
-                            "tags": ["environment", 'dockerfile'],
-                            "free_text": "",
-                            "objects": []
-                            })
+            # Create detail record
+            adr = ActivityDetailRecord(ActivityDetailType.ENVIRONMENT, show=False)
+            adr.add_value('text/plain', short_message)
+
+            # Create activity record
+            ar = ActivityRecord(ActivityType.ENVIRONMENT,
+                                message=short_message,
+                                show=False,
+                                linked_commit=commit.hexsha,
+                                tags=['dockerfile'])
+            ar.add_detail_object(adr)
+
+            # Store
+            ars = ActivityStore(lb)
+            ars.create_activity_record(ar)
+
         else:
             logger.info("Dockerfile NOT being written; write=False; {}".format(dockerfile_name))
 

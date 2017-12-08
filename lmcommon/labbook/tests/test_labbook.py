@@ -58,9 +58,9 @@ class TestLabBook(object):
         assert os.path.isdir(os.path.join(labbook_dir, "output")) is True
         assert os.path.isdir(os.path.join(labbook_dir, ".gigantum")) is True
         assert os.path.isdir(os.path.join(labbook_dir, ".gigantum", "env")) is True
-        assert os.path.isdir(os.path.join(labbook_dir, ".gigantum", "notes")) is True
-        assert os.path.isdir(os.path.join(labbook_dir, ".gigantum", "notes", "log")) is True
-        assert os.path.isdir(os.path.join(labbook_dir, ".gigantum", "notes", "index")) is True
+        assert os.path.isdir(os.path.join(labbook_dir, ".gigantum", "activity")) is True
+        assert os.path.isdir(os.path.join(labbook_dir, ".gigantum", "activity", "log")) is True
+        assert os.path.isdir(os.path.join(labbook_dir, ".gigantum", "activity", "index")) is True
 
         # Validate labbook data file
         with open(os.path.join(labbook_dir, ".gigantum", "labbook.yaml"), "rt") as data_file:
@@ -93,9 +93,9 @@ class TestLabBook(object):
         assert os.path.isdir(os.path.join(labbook_dir, "output")) is True
         assert os.path.isdir(os.path.join(labbook_dir, ".gigantum")) is True
         assert os.path.isdir(os.path.join(labbook_dir, ".gigantum", "env")) is True
-        assert os.path.isdir(os.path.join(labbook_dir, ".gigantum", "notes")) is True
-        assert os.path.isdir(os.path.join(labbook_dir, ".gigantum", "notes", "log")) is True
-        assert os.path.isdir(os.path.join(labbook_dir, ".gigantum", "notes", "index")) is True
+        assert os.path.isdir(os.path.join(labbook_dir, ".gigantum", "activity")) is True
+        assert os.path.isdir(os.path.join(labbook_dir, ".gigantum", "activity", "log")) is True
+        assert os.path.isdir(os.path.join(labbook_dir, ".gigantum", "activity", "index")) is True
 
         # Validate labbook data file
         with open(os.path.join(labbook_dir, ".gigantum", "labbook.yaml"), "rt") as data_file:
@@ -197,9 +197,9 @@ class TestLabBook(object):
         assert os.path.isdir(os.path.join(lb.root_dir, "output")) is True
         assert os.path.isdir(os.path.join(lb.root_dir, ".gigantum")) is True
         assert os.path.isdir(os.path.join(lb.root_dir, ".gigantum", "env")) is True
-        assert os.path.isdir(os.path.join(lb.root_dir, ".gigantum", "notes")) is True
-        assert os.path.isdir(os.path.join(lb.root_dir, ".gigantum", "notes", "log")) is True
-        assert os.path.isdir(os.path.join(lb.root_dir, ".gigantum", "notes", "index")) is True
+        assert os.path.isdir(os.path.join(lb.root_dir, ".gigantum", "activity")) is True
+        assert os.path.isdir(os.path.join(lb.root_dir, ".gigantum", "activity", "log")) is True
+        assert os.path.isdir(os.path.join(lb.root_dir, ".gigantum", "activity", "index")) is True
 
         # Validate labbook data file
         with open(os.path.join(lb.root_dir, ".gigantum", "labbook.yaml"), "rt") as data_file:
@@ -289,9 +289,9 @@ class TestLabBook(object):
         assert os.path.isdir(os.path.join(labbook_dir, "output")) is True
         assert os.path.isdir(os.path.join(labbook_dir, ".gigantum")) is True
         assert os.path.isdir(os.path.join(labbook_dir, ".gigantum", "env")) is True
-        assert os.path.isdir(os.path.join(labbook_dir, ".gigantum", "notes")) is True
-        assert os.path.isdir(os.path.join(labbook_dir, ".gigantum", "notes", "log")) is True
-        assert os.path.isdir(os.path.join(labbook_dir, ".gigantum", "notes", "index")) is True
+        assert os.path.isdir(os.path.join(labbook_dir, ".gigantum", "activity")) is True
+        assert os.path.isdir(os.path.join(labbook_dir, ".gigantum", "activity", "log")) is True
+        assert os.path.isdir(os.path.join(labbook_dir, ".gigantum", "activity", "index")) is True
 
         # Validate labbook data file
         with open(os.path.join(labbook_dir, ".gigantum", "labbook.yaml"), "rt") as data_file:
@@ -330,9 +330,9 @@ class TestLabBook(object):
         assert os.path.isdir(os.path.join(labbook_dir, "output")) is True
         assert os.path.isdir(os.path.join(labbook_dir, ".gigantum")) is True
         assert os.path.isdir(os.path.join(labbook_dir, ".gigantum", "env")) is True
-        assert os.path.isdir(os.path.join(labbook_dir, ".gigantum", "notes")) is True
-        assert os.path.isdir(os.path.join(labbook_dir, ".gigantum", "notes", "log")) is True
-        assert os.path.isdir(os.path.join(labbook_dir, ".gigantum", "notes", "index")) is True
+        assert os.path.isdir(os.path.join(labbook_dir, ".gigantum", "activity")) is True
+        assert os.path.isdir(os.path.join(labbook_dir, ".gigantum", "activity", "log")) is True
+        assert os.path.isdir(os.path.join(labbook_dir, ".gigantum", "activity", "index")) is True
 
         # Validate labbook data file
         with open(os.path.join(labbook_dir, ".gigantum", "labbook.yaml"), "rt") as data_file:
@@ -562,12 +562,12 @@ class TestLabBook(object):
 
         assert os.path.exists(os.path.join(lb.root_dir, 'code', 'test')) is False
 
-        lb.makedir("code/test", create_note=True)
+        lb.makedir("code/test", create_activity_record=True)
 
         assert os.path.exists(os.path.join(lb.root_dir, 'code', 'test')) is True
         assert lb.is_repo_clean is True
 
-        lb.makedir("code/test2", create_note=False)
+        lb.makedir("code/test2", create_activity_record=False)
         assert os.path.exists(os.path.join(lb.root_dir, 'code', 'test2')) is True
         assert lb.is_repo_clean is False
 
@@ -605,8 +605,14 @@ class TestLabBook(object):
         assert len(dir_walks) == 7
         assert dir_walks[0]['key'] == 'cat_dir/'
         assert dir_walks[0]['is_dir'] is True
+        assert dir_walks[1]['key'] == 'dog_dir/'
+        assert dir_walks[1]['is_dir'] is True
         assert dir_walks[2]['key'] == 'mouse_dir/'
         assert dir_walks[2]['is_dir'] is True
+        assert dir_walks[3]['is_dir'] is False
+        assert dir_walks[4]['is_dir'] is False
+        assert dir_walks[5]['is_dir'] is True
+        assert dir_walks[5]['key'] == 'mouse_dir/new_dir/'
         assert dir_walks[6]['is_dir'] is False
 
     def test_listdir(self, mock_config_file, sample_src_file):
@@ -722,5 +728,3 @@ class TestLabBook(object):
         assert dir_walks[3]['is_dir'] is False
         assert dir_walks[4]['is_favorite'] is True
         assert dir_walks[4]['is_dir'] is False
-
-
