@@ -36,7 +36,7 @@ from lmcommon.activity import ActivityDetailType, ActivityType, ActivityRecord, 
 logger = LMLogger.get_logger()
 
 
-def dockerize_volume_path(volpath: str) -> str:
+def dockerize_path(volpath: str) -> str:
     # TODO - This must be removed and replaced.
     if os.path.__name__ == 'ntpath':
         # for windows switch the slashes and then sub the drive letter
@@ -372,7 +372,8 @@ class ImageBuilder(object):
         for dev_env in dev_envs_list:
             exposed_ports.update({"{}/tcp".format(port): port for port in dev_env['exposed_tcp_ports']})
 
-        mnt_point = labbook.root_dir.replace('/mnt/gigantum', os.environ['HOST_WORK_DIR'])
+        
+        mnt_point = labbook.root_dir.replace('/mnt/gigantum', dockerize_path(os.environ['HOST_WORK_DIR']))
 
         # Map volumes - The labbook docker container is unaware of labbook name, all labbooks
         # map to /mnt/labbook.
