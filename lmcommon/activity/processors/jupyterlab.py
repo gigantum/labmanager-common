@@ -50,7 +50,7 @@ class BasicJupyterLabProcessor(ActivityProcessor):
         if code:
             if code.get("code"):
                 # Create detail record to capture executed code
-                adr_code = ActivityDetailRecord(ActivityDetailType.CODE_EXECUTED, show=True, importance=128)
+                adr_code = ActivityDetailRecord(ActivityDetailType.CODE_EXECUTED, show=False, importance=128)
 
                 # TODO: Use kernel info to get the language and provide a text/html type that is styled
                 adr_code.add_value('text/markdown', f"```{code['code']}```")
@@ -68,11 +68,8 @@ class BasicJupyterLabProcessor(ActivityProcessor):
                         continue
 
                     activity_type, activity_detail_type, section = LabBook.infer_section_from_relative_path(filename)
-                    if activity_type == ActivityType.INPUT_DATA or activity_type == ActivityType.OUTPUT_DATA:
-                        show = True
-                    else:
-                        show = False
-                    adr = ActivityDetailRecord(activity_detail_type, show=show, importance=min(100+cnt, 255))
+
+                    adr = ActivityDetailRecord(activity_detail_type, show=False, importance=min(100+cnt, 255))
                     adr.add_value('text/markdown', f"Created new {section} file `{filename}`")
                     result_obj.add_detail_object(adr)
                     cnt += 1
@@ -84,11 +81,8 @@ class BasicJupyterLabProcessor(ActivityProcessor):
                         continue
 
                     activity_type, activity_detail_type, section = LabBook.infer_section_from_relative_path(filename)
-                    if activity_type == ActivityType.INPUT_DATA or activity_type == ActivityType.OUTPUT_DATA:
-                        show = True
-                    else:
-                        show = False
-                    adr = ActivityDetailRecord(activity_detail_type, show=show, importance=min(cnt, 255))
+
+                    adr = ActivityDetailRecord(activity_detail_type, show=False, importance=min(cnt, 255))
                     adr.add_value('text/markdown', f"{change[0].upper() + change[1:]} {section} file `{filename}`")
                     result_obj.add_detail_object(adr)
                     cnt += 1
