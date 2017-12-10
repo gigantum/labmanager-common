@@ -36,6 +36,14 @@ from lmcommon.activity import ActivityDetailType, ActivityType, ActivityRecord, 
 logger = LMLogger.get_logger()
 
 
+def dockerize_path(volpath: str) -> str:
+    if os.environ.get('WINDOWS_HOST'):
+        # for windows switch the slashes and then sub the drive letter
+        return re.sub('(^[A-Z]):(.*$)', '//\g<1>\g<2>', volpath.replace('\\', '/'))
+    else:
+        return volpath
+
+
 class ImageBuilder(object):
     """Class to ingest indexes describing base images, environments, and dependencies into Dockerfiles. """
 
@@ -364,7 +372,8 @@ class ImageBuilder(object):
             exposed_ports.update({"{}/tcp".format(port): port for port in dev_env['exposed_tcp_ports']})
 
         
-        mnt_point = labbook.root_dir.replace('/mnt/gigantum', os.environ['HOST_WORK_DIR'])
+        mnt_point = dockerize_path(labbook.root_dir.replace('/mnt/gigantum', os.environ['HOST_WORK_DIR']))
+        logger.info("RBRBRBRBRBRBRBR {}".format(mnt_point))
 
         # Map volumes - The labbook docker container is unaware of labbook name, all labbooks
         # map to /mnt/labbook.
