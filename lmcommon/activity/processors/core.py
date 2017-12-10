@@ -42,10 +42,6 @@ class ActivityShowBasicProcessor(ActivityProcessor):
         """
         result_obj.show = False
         for detail in result_obj.detail_objects:
-            # Don't take CODE_EXECUTED details into account, as we always set those to show
-            if detail[1] == ActivityDetailType.CODE_EXECUTED.value:
-                continue
-
             if detail[0]:
                 result_obj.show = True
                 break
