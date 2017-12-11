@@ -373,7 +373,6 @@ class ImageBuilder(object):
 
         
         mnt_point = dockerize_path(labbook.root_dir.replace('/mnt/gigantum', os.environ['HOST_WORK_DIR']))
-        logger.info("RBRBRBRBRBRBRBR {}".format(mnt_point))
 
         # Map volumes - The labbook docker container is unaware of labbook name, all labbooks
         # map to /mnt/labbook.
