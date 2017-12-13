@@ -21,6 +21,7 @@ import glob
 import os
 import re
 import shutil
+from functools import wraps
 from typing import (Any, Dict, List, Optional, Set, Tuple)
 import uuid
 import yaml
@@ -30,7 +31,7 @@ from contextlib import contextmanager
 from pkg_resources import resource_filename
 
 from lmcommon.configuration import Configuration
-from lmcommon.gitlib import get_git_interface, GitAuthor
+from lmcommon.gitlib import get_git_interface, GitAuthor, GitRepoInterface
 from lmcommon.logging import LMLogger
 from lmcommon.labbook.schemas import validate_schema
 from lmcommon.activity import ActivityStore, ActivityType, ActivityRecord, ActivityDetailType, ActivityDetailRecord
@@ -41,6 +42,31 @@ import redis_lock
 
 logger = LMLogger.get_logger()
 
+
+
+def _check_git_tracked(repo: GitRepoInterface) -> None:
+    """Validates that a Git repo is not leaving any uncommitted changes or files.
+    Raises ValueError if it does."""
+
+    try:
+        # This is known to throw a ValueError if the repo is bare - i.e., does not yet
+        # have any commits.
+        # TODO - A better way to determine if the repo does not yet have any commits.
+        # I tried a variety of ways and this try-catch-ValueError is the only thing that works.
+        repo.commit_hash
+    except ValueError as e:
+        logger.info("Not checking Git status, appears to be uninitialized.")
+        return
+
+    result_status = repo.status()
+    # status_key is one of "staged", "unstaged", "untracked"
+    for status_key in result_status.keys():
+        n = result_status.get(status_key)
+        if n:
+            errmsg = f"Found unexpected {status_key} files in repo {n} aborting."
+            logger.error(errmsg)
+            raise ValueError(errmsg)
+            # TODO - Rollback, revert?
 
 class LabbookException(Exception):
     pass
@@ -77,6 +103,28 @@ class LabBook(object):
             return f'<LabBook at `{self._root_dir}`>'
         else:
             return f'<LabBook UNINITIALIZED>'
+
+
+    def _validate_git(method_ref): #type: ignore
+        """Definition of decorator that validates git operations.
+
+        Note! The approach here is taken from Stack Overflow answer https://stackoverflow.com/a/1263782
+        """
+        def __validator(self, *args, **kwargs):
+            # Note, `create_activity_record` indicates whether this filesystem operation should be immediately
+            # put into the Git history via an activity record. For now, if this is not true, then do not immediately
+            # put this in the Git history. Generally, calls from within this class will set it to false (and do commits
+            # later) and calls from outside will set create_activity_record to True.
+            if kwargs.get('create_activity_record') is True:
+                try:
+                    _check_git_tracked(self.git)
+                    n = method_ref(self, *args, **kwargs) #type: ignore
+                finally:
+                    _check_git_tracked(self.git)
+            else:
+                n = method_ref(self, *args, **kwargs)  # type: ignore
+            return n
+        return __validator
 
     @contextmanager
     def lock_labbook(self, lock_key: str = None):
@@ -580,6 +628,7 @@ class LabBook(object):
             logger.exception(e)
             raise LabbookException(e)
 
+    @_validate_git
     def insert_file(self, section: str, src_file: str, dst_dir: str,
                     base_filename: Optional[str] = None) -> Dict[str, Any]:
         """Copy the file at `src_file` into the `dst_dir`. Filename removes upload ID if present.
@@ -651,8 +700,10 @@ class LabBook(object):
 
             return self.get_file_info(section, rel_path)
 
+    @_validate_git
     def delete_file(self, section: str, relative_path: str, directory: bool = False) -> bool:
         """Delete file (or directory) from inside lb section.
+
 
         Part of the intention is to mirror the unix "rm" command. Thus, there
         needs to be some extra arguments in order to delete a directory, especially
@@ -720,7 +771,9 @@ class LabBook(object):
 
                 return True
 
+    @_validate_git
     def move_file(self, section: str, src_rel_path: str, dst_rel_path: str) -> Dict[str, Any]:
+
         """Move a file or directory within a labbook, but not outside of it. Wraps
         underlying "mv" call.
 
@@ -789,6 +842,8 @@ class LabBook(object):
                 logger.exception(e)
                 raise
 
+
+    @_validate_git
     def makedir(self, relative_path: str, make_parents: bool = True, create_activity_record: bool = False) -> None:
         """Make a new directory inside the labbook directory.
 
@@ -818,10 +873,9 @@ class LabBook(object):
                     with open(os.path.join(full_new_dir, '.gitkeep'), 'w') as gitkeep:
                         gitkeep.write("This file is necessary to keep this directory tracked by Git"
                                       " and archivable by compression tools. Do not delete or modify!")
-
-                if create_activity_record:
                     self.git.add_all(new_directory_path)
 
+                if create_activity_record:
                     # Create detail record
                     activity_type, activity_detail_type, section_str = self.infer_section_from_relative_path(relative_path)
                     adr = ActivityDetailRecord(activity_detail_type, show=False, importance=0)

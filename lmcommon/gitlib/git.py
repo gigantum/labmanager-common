@@ -22,6 +22,8 @@ import abc
 import importlib
 from typing import Dict, List, Optional
 
+from typing import Dict, List, Tuple
+
 # Dictionary of supported implementations.
 # Key is the value to put in the config_dict["backend"].
 # Value is a list with the first entry being the module and the second the class
@@ -203,7 +205,7 @@ class GitRepoInterface(metaclass=abc.ABCMeta):
 
     # LOCAL CHANGE METHODS
     @abc.abstractmethod
-    def status(self):
+    def status(self) -> Dict[str, List[Tuple[str, str]]]:
         """Get the status of a repo
 
         Should return a dictionary of lists of tuples of the following format:

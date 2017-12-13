@@ -23,7 +23,8 @@ from git import InvalidGitRepositoryError, BadName
 import os
 import re
 import shutil
-from typing import Dict, List, Optional
+
+from typing import Dict, List, Optional, Tuple
 
 from lmcommon.logging import LMLogger
 
@@ -160,7 +161,7 @@ class GitFilesystem(GitRepoInterface):
         self.repo = Repo.clone_from(source, directory or self.working_directory)
 
     # LOCAL CHANGE METHODS
-    def status(self):
+    def status(self) -> Dict[str, List[Tuple[str, str]]]:
         """Get the status of a repo
 
         Should return a dictionary of lists of tuples of the following format:
