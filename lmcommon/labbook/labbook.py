@@ -474,7 +474,7 @@ class LabBook(object):
         file_info = os.stat(full_path)
         is_dir = os.path.isdir(full_path)
 
-        # If it's a directory, add a trailing slash to UI renders properly
+        # If it's a directory, add a trailing slash so UI renders properly
         if is_dir:
             if rel_file_path[-1] != os.path.sep:
                 rel_file_path = f"{rel_file_path}{os.path.sep}"
@@ -482,7 +482,7 @@ class LabBook(object):
         return {
                   'key': rel_file_path,
                   'is_dir': is_dir,
-                  'size': file_info.st_size,
+                  'size': file_info.st_size if not is_dir else 0,
                   'modified_at': file_info.st_mtime,
                   'is_favorite': rel_file_path in self.favorite_keys[section]
                }
