@@ -123,7 +123,7 @@ class Dispatcher(object):
 
         labbook_jobs = [job for job in self.all_jobs if is_match(job)]
         if not labbook_jobs:
-            logger.warning(f"No background jobs found for labbook `{labbook_key}`")
+            logger.debug(f"No background jobs found for labbook `{labbook_key}`")
 
         return labbook_jobs
 
