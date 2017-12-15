@@ -24,6 +24,9 @@ environment:
 git:
   backend: "filesystem"
   working_directory: "~/gigantum"
+  remotes:
+    - repo.gigantum.io:
+        - admin_service: usersrv.gigantum.io
 
 # Embedded Detail Object Database config
 detaildb:
