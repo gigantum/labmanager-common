@@ -59,7 +59,6 @@ class GitLabRepositoryManager(object):
 
         return self._user_token
 
-    @property
     def repository_id(self) -> Optional[int]:
         """Method to get the repository's ID in GitLab"""
         if not self._repository_id:
@@ -86,17 +85,11 @@ class GitLabRepositoryManager(object):
         Returns:
             bool
         """
-        # Call API
-        response = requests.get(f"https://{self.remote_host}/api/v4/projects?search={self.labbook_name}",
-                                headers={"PRIVATE-TOKEN": self.user_token})
-        if response.status_code == 404:
-            return False
-        elif response.status_code == 200:
+        try:
+            _ = self.repository_id()
             return True
-        else:
-            logger.error(f"Failed to check if repository exists. Status code {response.status_code}")
-            logger.error(response.json())
-            raise ValueError(f"Failed to check if repository exists. Status code {response.status_code}")
+        except ValueError:
+            return False
 
     def create(self) -> None:
         """Method to create the remote repository
@@ -105,7 +98,7 @@ class GitLabRepositoryManager(object):
 
         """
         if self.exists():
-            raise IOError("Cannot create remote repository that already exists")
+            raise ValueError("Cannot create remote repository that already exists")
 
         data = {"name": self.labbook_name,
                 "issues_enabled": False,
@@ -126,30 +119,35 @@ class GitLabRepositoryManager(object):
         if response.status_code != 201:
             logger.error("Failed to create remote repository")
             logger.error(response.json())
-            raise IOError("Failed to create remote repository")
+            raise ValueError("Failed to create remote repository")
         else:
-            logger.info(f"Created remote repository for user: {self.username}, owner: {self.owner}, labbook:{self.labbook_name}")
+            logger.info(f"Created remote repository for {self.username}/{self.owner}/{self.labbook_name}")
 
-    def get_collaborators(self) -> Optional[List[Tuple[int, str]]]:
+            # Save ID
+            self._repository_id = response.json()['id']
+
+    def get_collaborators(self) -> Optional[List[Tuple[int, str, bool]]]:
         """Method to get usernames and IDs of collaborators that have access to the repo
+
+        The method returns a list of tuples where the entries in the tuple are (user id, username, is owner)
 
         Returns:
             list
         """
-        if self.exists():
-            raise IOError("Cannot get collaborators of a repository that does not exist")
+        if not self.exists():
+            raise ValueError("Cannot get collaborators of a repository that does not exist")
 
         # Call API to get all collaborators
-        response = requests.get(f"https://{self.remote_host}/api/v4/projects/{self.repository_id}/members",
+        response = requests.get(f"https://{self.remote_host}/api/v4/projects/{self.repository_id()}/members",
                                 headers={"PRIVATE-TOKEN": self.user_token})
 
         if response.status_code != 200:
             logger.error("Failed to get remote repository collaborators")
             logger.error(response.json())
-            raise IOError("Failed to get remote repository collaborators")
+            raise ValueError("Failed to get remote repository collaborators")
         else:
             # Process response
-            return [(x['id'], x['username']) for x in response.json()]
+            return [(x['id'], x['username'], x['access_level'] == 40) for x in response.json()]
 
     def add_collaborator(self, username) -> Optional[List[Tuple[int, str]]]:
         """Method to add a collaborator to a remote repository by username
@@ -160,8 +158,8 @@ class GitLabRepositoryManager(object):
         Returns:
             list
         """
-        if self.exists():
-            raise IOError("Cannot add a collaborator to a repository that does not exist")
+        if not self.exists():
+            raise ValueError("Cannot add a collaborator to a repository that does not exist")
 
         # Call API to get ID of the user
         response = requests.get(f"https://{self.remote_host}/api/v4/users?username={username}",
@@ -169,21 +167,21 @@ class GitLabRepositoryManager(object):
         if response.status_code != 200:
             logger.error("Failed to get id for user when adding collaborator")
             logger.error(response.json())
-            raise IOError("Failed to get id for user when adding collaborator")
+            raise ValueError("Failed to get id for user when adding collaborator")
 
         user_id = response.json()[0]['id']
 
         # Call API to add a collaborator
         data = {"user_id": user_id,
                 "access_level": 30}
-        response = requests.post(f"https://{self.remote_host}/api/v4/projects/{self.repository_id}/members",
+        response = requests.post(f"https://{self.remote_host}/api/v4/projects/{self.repository_id()}/members",
                                  headers={"PRIVATE-TOKEN": self.user_token},
                                  json=data)
 
         if response.status_code != 201:
             logger.error("Failed to add collaborator")
             logger.error(response.json())
-            raise IOError("Failed to add collaborator")
+            raise ValueError("Failed to add collaborator")
         else:
             # Re-query for collaborators and return
             return self.get_collaborators()
@@ -199,17 +197,17 @@ class GitLabRepositoryManager(object):
         Returns:
 
         """
-        if self.exists():
-            raise IOError("Cannot remove a collaborator to a repository that does not exist")
+        if not self.exists():
+            raise ValueError("Cannot remove a collaborator to a repository that does not exist")
 
         # Call API to remove a collaborator
-        response = requests.delete(f"https://{self.remote_host}/api/v4/projects/{self.repository_id}/members/{user_id}",
+        response = requests.delete(f"https://{self.remote_host}/api/v4/projects/{self.repository_id()}/members/{user_id}",
                                    headers={"PRIVATE-TOKEN": self.user_token})
 
         if response.status_code != 204:
             logger.error("Failed to remove collaborator")
             logger.error(response.json())
-            raise IOError("Failed to remove collaborator")
+            raise ValueError("Failed to remove collaborator")
         else:
             # Re-query for collaborators and return
             return self.get_collaborators()
