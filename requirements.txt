@@ -17,3 +17,4 @@ blosc==1.5.1
 # Testing support
 mockredispy==2.9.3
 mypy==0.521
+responses==0.8.1

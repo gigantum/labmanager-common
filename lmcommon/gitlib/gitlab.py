@@ -18,8 +18,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 import requests
-
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 from lmcommon.logging import LMLogger
 
@@ -29,7 +28,7 @@ logger = LMLogger.get_logger()
 class GitLabRepositoryManager(object):
     """Class to manage administrative operations to a remote GitLab repository for a labbook"""
     def __init__(self, remote_host: str, admin_service: str, access_token: str,
-                 username: str, owner: str, labbook_name: str)  -> None:
+                 username: str, owner: str, labbook_name: str) -> None:
         """Constructor"""
         self.remote_host = remote_host
         self.admin_service = admin_service
@@ -49,13 +48,14 @@ class GitLabRepositoryManager(object):
         """Method to get the user's API token from the auth microservice"""
         if not self._user_token:
             # Get the token
-            response = requests.get(f"https://{self.admin_service}/key", headers={"Authorization": f"Bearer {access_token}"})
+            response = requests.get(f"https://{self.admin_service}/key",
+                                    headers={"Authorization": f"Bearer {self.access_token}"})
             if response.status_code == 200:
                 self._user_token = response.json()['key']
             else:
                 logger.error("Failed to get user access key from server")
                 logger.error(response.json())
-                raise IOError("Failed to get user access key from server")
+                raise ValueError("Failed to get user access key from server")
 
         return self._user_token
 
@@ -67,11 +67,16 @@ class GitLabRepositoryManager(object):
             response = requests.get(f"https://{self.remote_host}/api/v4/projects?search={self.labbook_name}",
                                     headers={"PRIVATE-TOKEN": self.user_token})
             if response.status_code == 200:
-                self._repository_id = response.json()['id']
+                data = response.json()
+                if len(data) == 0:
+                    logger.error(f"Failed to get repository id. {self.labbook_name} does not exist.")
+                    raise ValueError(f"Failed to get repository id. {self.labbook_name} does not exist.")
+
+                self._repository_id = data[0]['id']
             else:
                 logger.error("Failed to get repository ID from server")
                 logger.error(response.json())
-                raise IOError("Failed to get repository ID from server")
+                raise ValueError("Failed to get repository ID from server")
 
         return self._repository_id
 
