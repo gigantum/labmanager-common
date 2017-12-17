@@ -149,7 +149,7 @@ class GitLabRepositoryManager(object):
             # Process response
             return [(x['id'], x['username'], x['access_level'] == 40) for x in response.json()]
 
-    def add_collaborator(self, username) -> Optional[List[Tuple[int, str]]]:
+    def add_collaborator(self, username) -> Optional[List[Tuple[int, str, bool]]]:
         """Method to add a collaborator to a remote repository by username
 
         Args:
@@ -186,7 +186,7 @@ class GitLabRepositoryManager(object):
             # Re-query for collaborators and return
             return self.get_collaborators()
 
-    def delete_collaborator(self, user_id) -> Optional[List[Tuple[int, str]]]:
+    def delete_collaborator(self, user_id) -> Optional[List[Tuple[int, str, bool]]]:
         """Method to remove a collaborator from a remote repository by user_id
 
         user id is used because it is assumed you've already listed the current collaborators
