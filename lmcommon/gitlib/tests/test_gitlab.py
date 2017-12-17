@@ -219,3 +219,143 @@ class TestGitLabRepositoryManager(object):
         # Verify it fails on error to gitlab (should get second mock on second call)
         with pytest.raises(ValueError):
             gitlab_mngr_fixture.get_collaborators()
+
+    @responses.activate
+    def test_add_collaborator(self, gitlab_mngr_fixture, property_mocks_fixture):
+        """Test the add_collaborator method"""
+        responses.add(responses.GET, 'https://repo.gigantum.io/api/v4/users?username=person100',
+                      json=[
+                                {
+                                    "id": 100,
+                                    "name": "New Person",
+                                    "username": "person100",
+                                    "state": "active",
+                                }
+                            ],
+                      status=200)
+        responses.add(responses.POST, 'https://repo.gigantum.io/api/v4/projects/26/members',
+                      json={
+                                "id": 100,
+                                "name": "New Person",
+                                "username": "person100",
+                                "state": "active",
+                            },
+                      status=201)
+        responses.add(responses.GET, 'https://repo.gigantum.io/api/v4/projects/26/members',
+                      json=[
+                                {
+                                    "id": 29,
+                                    "name": "Jane Doe",
+                                    "username": "janed",
+                                    "access_level": 40,
+                                    "expires_at": None
+                                },
+                                {
+                                    "id": 100,
+                                    "name": "New Person",
+                                    "username": "person100",
+                                    "access_level": 30,
+                                    "expires_at": None
+                                }
+                            ],
+                      status=200)
+
+        collaborators = gitlab_mngr_fixture.add_collaborator("person100")
+
+        assert len(collaborators) == 2
+        assert collaborators[0] == (29, 'janed', True)
+        assert collaborators[1] == (100, 'person100', False)
+
+    @responses.activate
+    def test_add_collaborator_errors(self, gitlab_mngr_fixture, property_mocks_fixture):
+        """Test the add_collaborator method exception handling"""
+        responses.add(responses.GET, 'https://repo.gigantum.io/api/v4/users?username=person100',
+                      json=[
+                                {
+                                    "id": 100,
+                                    "name": "New Person",
+                                    "username": "person100",
+                                    "state": "active",
+                                }
+                            ],
+                      status=400)
+        responses.add(responses.GET, 'https://repo.gigantum.io/api/v4/users?username=person100',
+                      json=[
+                                {
+                                    "id": 100,
+                                    "name": "New Person",
+                                    "username": "person100",
+                                    "state": "active",
+                                }
+                            ],
+                      status=200)
+        responses.add(responses.POST, 'https://repo.gigantum.io/api/v4/projects/26/members',
+                      json={
+                                "id": 100,
+                                "name": "New Person",
+                                "username": "person100",
+                                "state": "active",
+                            },
+                      status=400)
+
+        with pytest.raises(ValueError):
+            _ = gitlab_mngr_fixture.add_collaborator("person100")
+
+        with pytest.raises(ValueError):
+            _ = gitlab_mngr_fixture.add_collaborator("person100")
+
+    @responses.activate
+    def test_delete_collaborator(self, gitlab_mngr_fixture, property_mocks_fixture):
+        """Test the delete_collaborator method"""
+        responses.add(responses.DELETE, 'https://repo.gigantum.io/api/v4/projects/26/members/100', status=204)
+        responses.add(responses.GET, 'https://repo.gigantum.io/api/v4/projects/26/members',
+                      json=[
+                                {
+                                    "id": 29,
+                                    "name": "Jane Doe",
+                                    "username": "janed",
+                                    "access_level": 40,
+                                    "expires_at": None
+                                }
+                            ],
+                      status=200)
+
+        collaborators = gitlab_mngr_fixture.delete_collaborator(100)
+
+        assert len(collaborators) == 1
+        assert collaborators[0] == (29, 'janed', True)
+
+    @responses.activate
+    def test_delete_collaborator_error(self, gitlab_mngr_fixture, property_mocks_fixture):
+        """Test the delete_collaborator method exception handling"""
+        responses.add(responses.DELETE, 'https://repo.gigantum.io/api/v4/projects/26/members/100', status=204)
+        responses.add(responses.GET, 'https://repo.gigantum.io/api/v4/projects/26/members',
+                      json=[
+                                {
+                                    "id": 29,
+                                    "name": "Jane Doe",
+                                    "username": "janed",
+                                    "access_level": 40,
+                                    "expires_at": None
+                                }
+                            ],
+                      status=400)
+
+        with pytest.raises(ValueError):
+            gitlab_mngr_fixture.delete_collaborator(100)
+
+    @responses.activate
+    def test_error_on_missing_repo(self, gitlab_mngr_fixture):
+        """Test the exception handling on a repo when it doesn't exist"""
+        responses.add(responses.GET, 'https://usersrv.gigantum.io/key',
+                      json={'key': 'afaketoken'}, status=200)
+        responses.add(responses.GET, 'https://repo.gigantum.io/api/v4/projects?search=test-labbook',
+                      json=[],
+                      status=200, match_querystring=True)
+
+        with pytest.raises(ValueError):
+            gitlab_mngr_fixture.get_collaborators()
+        with pytest.raises(ValueError):
+            gitlab_mngr_fixture.add_collaborator("test")
+        with pytest.raises(ValueError):
+            gitlab_mngr_fixture.delete_collaborator(100)
