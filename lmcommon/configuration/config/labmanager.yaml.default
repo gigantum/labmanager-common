@@ -24,6 +24,7 @@ environment:
 git:
   backend: "filesystem"
   working_directory: "~/gigantum"
+  default_remote: "repo.gigantum.io"
   remotes:
     - repo.gigantum.io:
         - admin_service: usersrv.gigantum.io

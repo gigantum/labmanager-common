@@ -307,6 +307,16 @@ class TestGitLabRepositoryManager(object):
     @responses.activate
     def test_delete_collaborator(self, gitlab_mngr_fixture, property_mocks_fixture):
         """Test the delete_collaborator method"""
+        responses.add(responses.GET, 'https://repo.gigantum.io/api/v4/users?username=person100',
+                      json=[
+                                {
+                                    "id": 100,
+                                    "name": "New Person",
+                                    "username": "person100",
+                                    "state": "active",
+                                }
+                            ],
+                      status=200)
         responses.add(responses.DELETE, 'https://repo.gigantum.io/api/v4/projects/26/members/100', status=204)
         responses.add(responses.GET, 'https://repo.gigantum.io/api/v4/projects/26/members',
                       json=[
@@ -328,6 +338,16 @@ class TestGitLabRepositoryManager(object):
     @responses.activate
     def test_delete_collaborator_error(self, gitlab_mngr_fixture, property_mocks_fixture):
         """Test the delete_collaborator method exception handling"""
+        responses.add(responses.GET, 'https://repo.gigantum.io/api/v4/users?username=person100',
+                      json=[
+                                {
+                                    "id": 100,
+                                    "name": "New Person",
+                                    "username": "person100",
+                                    "state": "active",
+                                }
+                            ],
+                      status=200)
         responses.add(responses.DELETE, 'https://repo.gigantum.io/api/v4/projects/26/members/100', status=204)
         responses.add(responses.GET, 'https://repo.gigantum.io/api/v4/projects/26/members',
                       json=[

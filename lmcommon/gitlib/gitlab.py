@@ -59,6 +59,27 @@ class GitLabRepositoryManager(object):
 
         return self._user_token
 
+    def _get_user_id_from_username(self, username: str) -> int:
+        """Method to get a user's id in GitLab based on their username
+
+        Args:
+            username(str):
+
+        Returns:
+            int
+        """
+        # Call API to get ID of the user
+        response = requests.get(f"https://{self.remote_host}/api/v4/users?username={username}",
+                                headers={"PRIVATE-TOKEN": self.user_token})
+        if response.status_code != 200:
+            logger.error("Failed to get id for user when adding collaborator")
+            logger.error(response.json())
+            raise ValueError("Failed to get id for user when adding collaborator")
+
+        user_id = response.json()[0]['id']
+
+        return user_id
+
     def repository_id(self) -> Optional[int]:
         """Method to get the repository's ID in GitLab"""
         if not self._repository_id:
@@ -149,7 +170,7 @@ class GitLabRepositoryManager(object):
             # Process response
             return [(x['id'], x['username'], x['access_level'] == 40) for x in response.json()]
 
-    def add_collaborator(self, username) -> Optional[List[Tuple[int, str, bool]]]:
+    def add_collaborator(self, username: str) -> Optional[List[Tuple[int, str, bool]]]:
         """Method to add a collaborator to a remote repository by username
 
         Args:
@@ -162,14 +183,7 @@ class GitLabRepositoryManager(object):
             raise ValueError("Cannot add a collaborator to a repository that does not exist")
 
         # Call API to get ID of the user
-        response = requests.get(f"https://{self.remote_host}/api/v4/users?username={username}",
-                                headers={"PRIVATE-TOKEN": self.user_token})
-        if response.status_code != 200:
-            logger.error("Failed to get id for user when adding collaborator")
-            logger.error(response.json())
-            raise ValueError("Failed to get id for user when adding collaborator")
-
-        user_id = response.json()[0]['id']
+        user_id = self._get_user_id_from_username(username)
 
         # Call API to add a collaborator
         data = {"user_id": user_id,
@@ -186,19 +200,22 @@ class GitLabRepositoryManager(object):
             # Re-query for collaborators and return
             return self.get_collaborators()
 
-    def delete_collaborator(self, user_id) -> Optional[List[Tuple[int, str, bool]]]:
+    def delete_collaborator(self,  username: str) -> Optional[List[Tuple[int, str, bool]]]:
         """Method to remove a collaborator from a remote repository by user_id
 
         user id is used because it is assumed you've already listed the current collaborators
 
         Args:
-            user_id(int): Id in GitLab of the user to remove
+            username(str): username to remove
 
         Returns:
 
         """
         if not self.exists():
             raise ValueError("Cannot remove a collaborator to a repository that does not exist")
+
+        # Call API to get ID of the user
+        user_id = self._get_user_id_from_username(username)
 
         # Call API to remove a collaborator
         response = requests.delete(f"https://{self.remote_host}/api/v4/projects/{self.repository_id()}/members/{user_id}",
