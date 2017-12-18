@@ -19,10 +19,76 @@
 # SOFTWARE.
 import requests
 from typing import List, Optional, Tuple
+from contextlib import ContextDecorator
+import subprocess
 
 from lmcommon.logging import LMLogger
+from lmcommon.gitlib.gitlab import GitLabRepositoryManager
+from lmcommon.labbook import LabBook
 
 logger = LMLogger.get_logger()
+
+
+class git_credentials(ContextDecorator):
+    """A decorator to automatically configure credentials for the local git client"""
+    def _call_shell(self, command, input_list=None):
+        p = subprocess.Popen(command, shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+        if input_list:
+            for i in input_list:
+                p.stdin.write(i.encode())
+
+        try:
+            out, err = p.communicate(timeout=5)
+        except subprocess.TimeoutExpired:
+            p.kill()
+            out, err = p.communicate()
+
+        return out, err
+
+    def __enter__(self, labbook: LabBook, bearer_token: str):
+        # Check if already configured
+        out, err = self._call_shell("git credential fill", ["\n"])
+        if err:
+            raise ValueError("Failed to check for git credentials")
+
+        if not out:
+            # Need to init git creds, select helper
+            out, err = self._call_shell("git config --global credential.helper 'cache --timeout=7200'")
+            if err:
+                raise ValueError("Failed to configure git credential helper")
+
+            # Get user token
+            # TODO: Future work will look up remote in LabBook data, allowing user to select remote.
+            default_remote = labbook.labmanager_config.config['git']['default_remote']
+            admin_service = None
+            for remote in labbook.labmanager_config.config['git']['remotes']:
+                if default_remote == remote:
+                    admin_service = labbook.labmanager_config.config['git']['remotes'][remote]['admin_service']
+                    break
+            mgr = GitLabRepositoryManager(default_remote, admin_service, bearer_token,
+                                          labbook.owner['username'], labbook.owner['username'], labbook.name)
+            token = mgr.user_token
+
+            # Set credentials
+            out, err = self._call_shell("git credential approve", ["protocol=https\n",
+                                                                   "host=localhost\n",
+                                                                   f"username={username}\n",
+                                                                   f"password={token}\n"])
+            if err:
+                raise ValueError("Failed to configure git credentials")
+        else:
+            out, err = self._call_shell("git credential fill", ["\n"])
+            if err:
+                raise ValueError("Failed to check for git credentials")
+
+            _, password_str, _ = out.decode().split("\n")
+            _, token = password_str.split("=")
+
+        return self
+
+    def __exit__(self, *exc):
+        print('Finishing')
+        return False
 
 
 class GitLabRepositoryManager(object):
