@@ -251,7 +251,8 @@ class GitLabRepositoryManager(object):
         # If additional commands provided, send to stdin
         if input_list:
             for i in input_list:
-                p.stdin.write(i.encode())
+                p.stdin.write(i.encode('utf-8'))
+                p.stdin.flush()
 
         # Get output
         try:
