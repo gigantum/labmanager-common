@@ -379,3 +379,39 @@ class TestGitLabRepositoryManager(object):
             gitlab_mngr_fixture.add_collaborator("test")
         with pytest.raises(ValueError):
             gitlab_mngr_fixture.delete_collaborator(100)
+
+    @responses.activate
+    def test_configure_git_credentials(self, gitlab_mngr_fixture):
+        """test the configure_git_credentials method"""
+        # Setup responses mock for this test
+        responses.add(responses.GET, 'https://usersrv.gigantum.io/key',
+                      json={'key': 'afaketoken'}, status=200)
+
+        # Check that creds are empty
+        out, err = gitlab_mngr_fixture._call_shell("git credential fill", ["\n"])
+
+        assert out == b""
+        assert err is None
+
+        # Set creds
+        gitlab_mngr_fixture.configure_git_credentials("test.gigantum.io", "testuser")
+
+        # Check that creds are configured
+        out, err = gitlab_mngr_fixture._call_shell("git credential fill", ["\n"])
+
+        assert out is not None
+        assert err is None
+
+        _, password_str, _ = out.decode().split("\n")
+        _, token = password_str.split("=")
+
+        assert token == "afaketoken"
+
+        # Set creds
+        gitlab_mngr_fixture.clear_git_credentials("test.gigantum.io")
+
+        # Check that creds are configured
+        out, err = gitlab_mngr_fixture._call_shell("git credential fill", ["\n"])
+
+        assert out == b""
+        assert err is None
