@@ -291,7 +291,7 @@ class GitLabRepositoryManager(object):
             return None
         elif i == 1:
             # Possibly configured, verify a valid string
-            matches = re.finditer(r"password=[\w\-\._]+", child.after.decode("utf-8"))
+            matches = re.finditer(r"password=[a-zA-Z0-9\!@\#\$%\^&\*]+", child.after.decode("utf-8"))
 
             token = None
             try:
