@@ -19,11 +19,11 @@
 # SOFTWARE.
 import requests
 from typing import List, Optional, Tuple
-from contextlib import ContextDecorator
 import subprocess
+import pexpect
+import re
 
 from lmcommon.logging import LMLogger
-from lmcommon.labbook import LabBook
 
 logger = LMLogger.get_logger()
 
@@ -264,6 +264,50 @@ class GitLabRepositoryManager(object):
 
         return out, err
 
+    def _check_if_git_credentials_configured(self, host: str, username: str) -> Optional[str]:
+        """
+
+        Args:
+            host:
+            username:
+
+        Returns:
+
+        """
+        # Check if already configured
+        child = pexpect.spawn("git credential fill")
+        child.expect("")
+        child.sendline("protocol=https")
+        child.expect("")
+        child.sendline(f"host={host}")
+        child.expect("")
+        child.sendline(f"username={username}")
+        child.expect("")
+        child.sendline("")
+        i = child.expect(["Password for 'https://", "password=[\w\-\._]+"])
+        if i == 0:
+            # Not configured
+            child.sendline("")
+            return None
+        elif i == 1:
+            # Possibly configured, verify a valid string
+            matches = re.finditer(r"password=[\w\-\._]+", child.after.decode("utf-8"))
+
+            token = None
+            try:
+                for match in matches:
+                    _, token = match.group().split("=")
+                    break
+            except ValueError:
+                # if string is malformed it won't split properly and you don't have a token
+                pass
+
+            if not token:
+                child.sendline("")
+            child.close()
+
+            return token
+
     def configure_git_credentials(self, host: str, username: str) -> None:
         """Method to configure the local git client's credentials
 
@@ -275,45 +319,29 @@ class GitLabRepositoryManager(object):
             None
         """
         # Check if already configured
-        out, err = self._call_shell("git credential fill", ["protocol=https\n",
-                                                            f"host={host}\n",
-                                                            f"username={username}\n",
-                                                            "\n", "\n"])
-        if err:
-            raise ValueError("Failed to check for git credentials")
+        token = self._check_if_git_credentials_configured(host, username)
 
-        configure = False
-        if out:
-            try:
-                parts = out.decode().split("\n")
-                for p in parts:
-                    if "password" in p:
-                        _, token = p.split("=")
-
-                        if token == "":
-                            configure = True
-
-            except ValueError:
-                # Need to configure because failed to parse
-                configure = True
-        else:
-            # Need to configure because git credential fill returned nothing
-            configure = True
-
-        if configure:
+        if token is None:
             # Need to init git creds, first select helper
-            out, err = self._call_shell("git config --global credential.helper 'cache --timeout=7200'")
+            out, err = self._call_shell("git config --global credential.helper store")
+            #out, err = self._call_shell("git config --global credential.helper 'cache --timeout=7200'")
             if err:
                 raise ValueError("Failed to configure git credential helper")
 
-            # Set credentials
-            out, err = self._call_shell("git credential approve", ["protocol=https\n",
-                                                                   f"host={host}\n",
-                                                                   f"username={username}\n",
-                                                                   f"password={self.user_token}\n",
-                                                                   "\n", "\n"])
-            if err:
-                raise ValueError("Failed to configure git credentials")
+            child = pexpect.spawn("git credential approve")
+            child.expect("")
+            child.sendline("protocol=https")
+            child.expect("")
+            child.sendline(f"host={host}")
+            child.expect("")
+            child.sendline(f"username={username}")
+            child.expect("")
+            child.sendline(f"password={self.user_token}")
+            child.expect("")
+            child.sendline("")
+            child.expect("")
+            child.sendline("")
+            child.close()
 
             logger.info(f"Configured local git credentials for {host}")
 
@@ -326,10 +354,16 @@ class GitLabRepositoryManager(object):
         Returns:
             None
         """
-        # Set credentials
-        out, err = self._call_shell("git credential reject", ["protocol=https\n",
-                                                              f"host={host}\n", "\n"])
-        if err:
-            raise ValueError("Failed to clear git credentials")
+        child = pexpect.spawn("git credential reject")
+        child.expect("")
+        child.sendline("protocol=https")
+        child.expect("")
+        child.sendline(f"host={host}")
+        child.expect("")
+        child.sendline("")
+        child.expect("")
+        child.sendline("")
+        child.expect("")
+        child.sendline("")
 
         logger.info(f"Removed local git credentials for {host}")

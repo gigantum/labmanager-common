@@ -383,46 +383,28 @@ class TestGitLabRepositoryManager(object):
     @responses.activate
     def test_configure_git_credentials(self, gitlab_mngr_fixture):
         """test the configure_git_credentials method"""
+        host = "test.gigantum.io"
+        username = "testuser"
+
         # Setup responses mock for this test
         responses.add(responses.GET, 'https://usersrv.gigantum.io/key',
                       json={'key': 'afaketoken'}, status=200)
 
         # Check that creds are empty
-        out, err = gitlab_mngr_fixture._call_shell("git credential fill", ["protocol=https\n",
-                                                                           f"host=test.gigantum.io\n",
-                                                                           f"username=testuser\n",
-                                                                           "\n", "\n"])
-
-        assert out == b""
-        assert err is None
+        token = gitlab_mngr_fixture._check_if_git_credentials_configured(host, username)
+        assert token is None
 
         # Set creds
-        gitlab_mngr_fixture.configure_git_credentials("test.gigantum.io", "testuser")
+        gitlab_mngr_fixture.configure_git_credentials(host, username)
 
         # Check that creds are configured
-        out, err = gitlab_mngr_fixture._call_shell("git credential fill", ["protocol=https\n",
-                                                                           f"host=test.gigantum.io\n",
-                                                                           f"username=testuser\n",
-                                                                           "\n", "\n"])
-
-        assert out is not None
-        assert err is None
-
-        parts = out.decode().split("\n")
-        for p in parts:
-            if "password" in p:
-                _, token = p.split("=")
-
+        token = gitlab_mngr_fixture._check_if_git_credentials_configured(host, username)
         assert token == "afaketoken"
 
         # Set creds
-        gitlab_mngr_fixture.clear_git_credentials("test.gigantum.io")
+        gitlab_mngr_fixture.clear_git_credentials(host)
 
         # Check that creds are configured
-        out, err = gitlab_mngr_fixture._call_shell("git credential fill", ["protocol=https\n",
-                                                                           f"host=test.gigantum.io\n",
-                                                                           f"username=testuser\n",
-                                                                           "\n", "\n"])
+        token = gitlab_mngr_fixture._check_if_git_credentials_configured(host, username)
+        assert token is None
 
-        assert out == b""
-        assert err is None
