@@ -256,7 +256,7 @@ class GitLabRepositoryManager(object):
             out, err = p.communicate(timeout=5)
         except subprocess.TimeoutExpired:
             p.kill()
-            out, err = p.communicate()
+            out, err = p.communicate(timeout=5)
 
         return out, err
 
