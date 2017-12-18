@@ -273,7 +273,7 @@ class GitLabRepositoryManager(object):
         # Check if already configured
         out, err = self._call_shell("git credential fill", ["protocol=https\n",
                                                             f"host={host}\n",
-                                                            f"username={username}\n"
+                                                            f"username={username}\n",
                                                             "\n", "\n"])
         if err:
             raise ValueError("Failed to check for git credentials")
@@ -297,6 +297,7 @@ class GitLabRepositoryManager(object):
             configure = True
 
         if configure:
+            logger.info(f"Configuring local git credentials for {host}")
             # Need to init git creds, first select helper
             out, err = self._call_shell("git config --global credential.helper 'cache --timeout=7200'")
             if err:
