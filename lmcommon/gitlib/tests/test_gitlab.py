@@ -397,13 +397,18 @@ class TestGitLabRepositoryManager(object):
         gitlab_mngr_fixture.configure_git_credentials("test.gigantum.io", "testuser")
 
         # Check that creds are configured
-        out, err = gitlab_mngr_fixture._call_shell("git credential fill", ["\n"])
+        out, err = gitlab_mngr_fixture._call_shell("git credential fill", ["protocol=https\n",
+                                                                           f"host=test.gigantum.io\n",
+                                                                           f"username=testuser\n"
+                                                                           "\n", "\n"])
 
         assert out is not None
         assert err is None
 
-        _, password_str, _ = out.decode().split("\n")
-        _, token = password_str.split("=")
+        parts = out.decode().split("\n")
+        for p in parts:
+            if "password" in p:
+                _, token = p.split("=")
 
         assert token == "afaketoken"
 
@@ -411,7 +416,10 @@ class TestGitLabRepositoryManager(object):
         gitlab_mngr_fixture.clear_git_credentials("test.gigantum.io")
 
         # Check that creds are configured
-        out, err = gitlab_mngr_fixture._call_shell("git credential fill", ["\n"])
+        out, err = gitlab_mngr_fixture._call_shell("git credential fill", ["protocol=https\n",
+                                                                           f"host=test.gigantum.io\n",
+                                                                           f"username=testuser\n"
+                                                                           "\n", "\n"])
 
         assert out == b""
         assert err is None

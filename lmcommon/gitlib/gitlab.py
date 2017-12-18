@@ -271,15 +271,24 @@ class GitLabRepositoryManager(object):
             None
         """
         # Check if already configured
-        out, err = self._call_shell("git credential fill", ["\n"])
+        out, err = self._call_shell("git credential fill", ["protocol=https\n",
+                                                            f"host={host}\n",
+                                                            f"username={username}\n"
+                                                            "\n", "\n"])
         if err:
             raise ValueError("Failed to check for git credentials")
 
         configure = False
         if out:
             try:
-                _, password_str, _ = out.decode().split("\n")
-                _, token = password_str.split("=")
+                parts = out.decode().split("\n")
+                for p in parts:
+                    if "password" in p:
+                        _, token = p.split("=")
+
+                        if token == "":
+                            configure = True
+
             except ValueError:
                 # Need to configure because failed to parse
                 configure = True
@@ -297,7 +306,8 @@ class GitLabRepositoryManager(object):
             out, err = self._call_shell("git credential approve", ["protocol=https\n",
                                                                    f"host={host}\n",
                                                                    f"username={username}\n",
-                                                                   f"password={self.user_token}\n"])
+                                                                   f"password={self.user_token}\n",
+                                                                   "\n"])
             if err:
                 raise ValueError("Failed to configure git credentials")
 
@@ -312,6 +322,6 @@ class GitLabRepositoryManager(object):
         """
         # Set credentials
         out, err = self._call_shell("git credential reject", ["protocol=https\n",
-                                                              f"host={host}\n"])
+                                                              f"host={host}\n", "\n"])
         if err:
             raise ValueError("Failed to clear git credentials")
