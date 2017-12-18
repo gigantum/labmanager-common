@@ -19,5 +19,7 @@
 # SOFTWARE.
 
 from .fixtures import (labbook_dir_tree, mock_config_file, mock_config_with_repo,
-                       mock_config_file_team, mock_config_file_with_auth, mock_labbook, mock_config_with_activitystore,
-                       mock_config_with_detaildb, remote_labbook_repo)
+                       mock_config_file_team, mock_config_file_with_auth, mock_labbook, mock_duplicate_labbook,
+                       mock_config_with_activitystore,
+                       mock_config_with_detaildb, remote_labbook_repo, remote_bare_repo, sample_src_file,
+                       _MOCK_create_remote_repo)

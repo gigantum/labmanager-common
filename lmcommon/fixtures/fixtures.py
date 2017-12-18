@@ -88,6 +88,35 @@ def _create_temp_work_dir(override_dict: dict = None):
     return config_file, unit_test_working_dir
 
 
+def _MOCK_create_remote_repo(self, username: str) -> None:
+    """ Used to mock out creating a Labbook remote Gitlab repo. This is not a fixture per se,
+
+    Usage:
+
+    ```
+        @mock.patch('lmcommon.labbook.LabBook._create_remote_repo', new=_MOCK_create_remote_repo)
+        def my_test_(...):
+            ...
+    ```
+    """
+    import tempfile, uuid
+    working_dir = os.path.join(tempfile.gettempdir(), str(uuid.uuid4()))
+    os.makedirs(working_dir, exist_ok=True)
+    import git
+    r = git.Repo.init(path=working_dir, bare=True)
+    assert r.bare is True
+    self.add_remote(remote_name="origin", url=working_dir)
+
+
+@pytest.fixture()
+def sample_src_file():
+    with tempfile.NamedTemporaryFile(mode="w") as sample_f:
+        # Fill sample file with some deterministic crap
+        sample_f.write("n4%nm4%M435A EF87kn*C" * 40)
+        sample_f.seek(0)
+        yield sample_f.name
+
+
 @pytest.fixture()
 def mock_config_file_team():
     """A pytest fixture that creates a temporary directory and a config file to match. Deletes directory after test"""
@@ -184,6 +213,18 @@ def mock_labbook():
 
 
 @pytest.fixture()
+def mock_duplicate_labbook():
+    """A pytest fixture that creates a temporary directory and a config file to match. Deletes directory after test"""
+
+    conf_file, working_dir = _create_temp_work_dir()
+    lb = LabBook(conf_file)
+    labbook_dir = lb.new(username="test", name="labbook1", description="my first labbook",
+                             owner={"username": "test"})
+    yield conf_file, labbook_dir, lb
+    shutil.rmtree(working_dir)
+
+
+@pytest.fixture()
 def remote_labbook_repo():
     conf_file, working_dir = _create_temp_work_dir()
     lb = LabBook(conf_file)
@@ -196,10 +237,21 @@ def remote_labbook_repo():
 
         lb.insert_file("code", codef.name, "")
 
-    lb.checkout_branch("master")
+    lb.checkout_branch("gm.workspace")
 
     # Location of the repo to push/pull from
     yield lb.root_dir
+    shutil.rmtree(working_dir)
+
+
+@pytest.fixture()
+def remote_bare_repo():
+    conf_file, working_dir = _create_temp_work_dir()
+    import git
+    r = git.Repo.init(path=working_dir, bare=True)
+    assert r.bare is True
+
+    yield working_dir
     shutil.rmtree(working_dir)
 
 
@@ -227,4 +279,3 @@ def labbook_dir_tree():
                         os.path.join(tempdir, "my-temp-labbook", ".gigantum", "env", "custom"))
 
         yield os.path.join(tempdir, 'my-temp-labbook')
-

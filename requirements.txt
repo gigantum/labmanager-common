@@ -15,5 +15,6 @@ python-redis-lock==3.2.0
 blosc==1.5.1
 
 # Testing support
+mock==2.0.0
 mockredispy==2.9.3
 mypy==0.521
