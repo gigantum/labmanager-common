@@ -201,6 +201,7 @@ class GitLabRepositoryManager(object):
             raise ValueError("Failed to add collaborator")
         else:
             # Re-query for collaborators and return
+            logger.info(f"Added {username} as a collaborator to {self.labbook_name}")
             return self.get_collaborators()
 
     def delete_collaborator(self,  username: str) -> Optional[List[Tuple[int, str, bool]]]:
@@ -230,6 +231,7 @@ class GitLabRepositoryManager(object):
             raise ValueError("Failed to remove collaborator")
         else:
             # Re-query for collaborators and return
+            logger.info(f"Removed {username} as a collaborator to {self.labbook_name}")
             return self.get_collaborators()
 
     @staticmethod
@@ -255,6 +257,7 @@ class GitLabRepositoryManager(object):
         try:
             out, err = p.communicate(timeout=5)
         except subprocess.TimeoutExpired:
+            logger.warning(f"Subprocess timed-out while calling shell for git configuration")
             p.kill()
             out, err = p.communicate(timeout=5)
 
@@ -297,7 +300,6 @@ class GitLabRepositoryManager(object):
             configure = True
 
         if configure:
-            logger.info(f"Configuring local git credentials for {host}")
             # Need to init git creds, first select helper
             out, err = self._call_shell("git config --global credential.helper 'cache --timeout=7200'")
             if err:
@@ -311,6 +313,8 @@ class GitLabRepositoryManager(object):
                                                                    "\n", "\n"])
             if err:
                 raise ValueError("Failed to configure git credentials")
+
+            logger.info(f"Configured local git credentials for {host}")
 
     def clear_git_credentials(self, host: str) -> None:
         """Method to clear the local git client's credentials
@@ -326,3 +330,5 @@ class GitLabRepositoryManager(object):
                                                               f"host={host}\n", "\n"])
         if err:
             raise ValueError("Failed to clear git credentials")
+
+        logger.info(f"Removed local git credentials for {host}")
