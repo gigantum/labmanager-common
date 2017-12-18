@@ -16,6 +16,7 @@ blosc==1.5.1
 pexpect==4.3.1
 
 # Testing support
+mock==2.0.0
 mockredispy==2.9.3
 mypy==0.521
 responses==0.8.1

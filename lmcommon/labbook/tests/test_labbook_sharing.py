@@ -29,10 +29,17 @@ import git
 from lmcommon.labbook import LabBook, LabbookException
 from lmcommon.fixtures import mock_config_file, mock_labbook, remote_labbook_repo
 
+# Note, I believe most of these tests are deprecated and OBE.
+
+@pytest.fixture(scope="session")
+def pause_wait_for_redis():
+    import time
+    time.sleep(3)
+
 
 class TestLabBook(object):
 
-    def test_from_remote(self, mock_config_file, mock_labbook):
+    def test_from_remote(self, pause_wait_for_redis, mock_config_file, mock_labbook):
         # Basically a "Import Labbook via Git".
 
         shutil.rmtree(f"/tmp/{mock_labbook[2].name}", ignore_errors=True)
@@ -45,22 +52,25 @@ class TestLabBook(object):
         lb2 = LabBook(mock_config_file[0])
         lb2.from_remote(repo_path, username='test2', owner='test2', labbook_name='labbook1')
         assert lb2.name == "labbook1"
+        assert lb2.has_remote is True
+        assert lb2.active_branch == "gm.workspace-test2"
 
     def test_checkout_basics(self, mock_config_file, mock_labbook):
         lb = mock_labbook[2]
-        assert lb.active_branch == "master"
+        assert lb.active_branch == "gm.workspace-test"
         lb.checkout_branch("test-branch", new=True)
         assert lb.active_branch == "test-branch"
-        lb.checkout_branch("master")
-        assert lb.active_branch == "master"
+        lb.checkout_branch("gm.workspace-test")
+        assert lb.active_branch == "gm.workspace-test"
+        assert lb.has_remote is False
 
     def test_checkout_not_allowed_to_create_duplicate_branch(self, mock_config_file, mock_labbook):
         lb = mock_labbook[2]
-        assert lb.active_branch == "master"
+        assert lb.active_branch == "gm.workspace-test"
         lb.checkout_branch("test-branch", new=True)
         assert lb.active_branch == "test-branch"
-        lb.checkout_branch("master")
-        assert lb.active_branch == "master"
+        lb.checkout_branch("gm.workspace-test")
+        assert lb.active_branch == "gm.workspace-test"
         with pytest.raises(LabbookException):
             lb.checkout_branch("test-branch", new=True)
             assert lb.active_branch == "test-branch"
@@ -87,7 +97,7 @@ class TestLabBook(object):
         with pytest.raises(LabbookException):
             # We should not be allowed to switch branches when there are uncommitted changes
             lb.checkout_branch("branchy", new=True)
-        assert lb.active_branch == "master"
+        assert lb.active_branch == "gm.workspace-test"
         # Now, make sure that new file is added and tracked, and then try making the new branch again.
         lb.git.add(os.path.join(lb.root_dir, 'input', 'catfile'))
         lb.git.commit("Added file")
@@ -103,7 +113,7 @@ class TestLabBook(object):
         lb.git.add(os.path.join(lb.root_dir, 'input', 'catfile'))
         lb.git.commit("Added file")
         assert lb.active_branch == "has-catfile"
-        lb.checkout_branch("master")
+        lb.checkout_branch("gm.workspace-test")
         # Just make sure that with doing the checkout the file created in the other branch doesn't exist.
         assert not os.path.exists(os.path.join(lb.root_dir, 'input', 'catfile'))
 
@@ -111,7 +121,7 @@ class TestLabBook(object):
         lb = mock_labbook[2]
         with pytest.raises(LabbookException):
             lb.checkout_branch("new-branch", new=False)
-        assert lb.active_branch == 'master'
+        assert lb.active_branch == 'gm.workspace-test'
 
     def test_push_to_remote_repo_with_new_branch(self, remote_labbook_repo, mock_config_file, mock_labbook):
         # Tests pushing a local branch to the remote.

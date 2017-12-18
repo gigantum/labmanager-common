@@ -560,7 +560,8 @@ class GitFilesystem(GitRepoInterface):
             for n in branch_info_dict[key]:
                 if name == n:
                     raise ValueError(f"Existing {key} branch `{n}` already exists")
-        self.repo.create_head(name)
+        #self.repo.create_head(name)
+        self.repo.git.checkout(b=name)
 
     def publish_branch(self, branch_name, remote_name="origin"):
         """Method to track a remote branch, check it out, and push

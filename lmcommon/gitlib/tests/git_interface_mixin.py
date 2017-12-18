@@ -1005,11 +1005,18 @@ class GitInterfaceMixin(object):
         """Method to test checkout a branch"""
         git = mock_initialized[0]
 
+
         assert git.repo.head.ref.name == "master"
 
         git.create_branch("test_branch1")
 
-        assert git.repo.head.ref.name == "master"
+        import pprint
+        pprint.pprint(git.repo.head.ref.name)
+
+        # BVB NOTE!! I changed behavior so "create_branch" also checks out that new branch
+        #assert git.repo.head.ref.name == "master"  # <-- Original behavior
+
+        assert git.repo.head.ref.name == "test_branch1" # <-- New behavior following BVB changes
 
         # Checkout branch
         git.checkout("test_branch1")
@@ -1028,7 +1035,7 @@ class GitInterfaceMixin(object):
 
         git.create_branch("test_branch1")
 
-        assert git.repo.head.ref.name == "master"
+        assert git.repo.head.ref.name == "test_branch1"
 
         # Write a checkout context file for this test
         os.makedirs(os.path.join(git.working_directory, '.gigantum'))
@@ -1072,6 +1079,7 @@ class GitInterfaceMixin(object):
         assert len(branches["remote"]) == 4
 
         # Delete local branch
+        git.checkout("master")   # <-- BVB Note, this was added for change in create_branch semantics.
         git.delete_branch("test_local_branch")
         branches = git.list_branches()
         assert len(branches["local"]) == 2

@@ -43,6 +43,15 @@ import redis_lock
 logger = LMLogger.get_logger()
 
 
+class LabbookException(Exception):
+    """Any Exception arising from inside the Labbook class will be cast as a LabbookException.
+
+    This is to avoid having "except Exception" clauses in the client code, and to avoid
+    having to be aware of every sub-library that is used by the Labbook and the exceptions that those raise.
+    The principle idea behind this is to have a single catch for all Labbook-related errors. In the stack trace you
+    can still observe the origin of the problem."""
+    pass
+
 
 def _check_git_tracked(repo: GitRepoInterface) -> None:
     """Validates that a Git repo is not leaving any uncommitted changes or files.
@@ -67,9 +76,6 @@ def _check_git_tracked(repo: GitRepoInterface) -> None:
             logger.error(errmsg)
             raise ValueError(errmsg)
             # TODO - Rollback, revert?
-
-class LabbookException(Exception):
-    pass
 
 
 class LabBook(object):
@@ -325,6 +331,31 @@ class LabBook(object):
 
         return self._favorite_keys
 
+    @property
+    def has_remote(self):
+        """Return True if the Labbook has a remote that it can push/pull to/from
+
+        Returns:
+            bool indicating whether a remote is set.
+        """
+        try:
+            return len(self.git.list_remotes()) > 0
+        except Exception as e:
+            logger.exception(e)
+            raise LabbookException(e)
+
+    @property
+    def remote(self) -> Optional[str]:
+        try:
+            r = self.git.list_remotes()
+            if r:
+                return r[0]['url']
+            else:
+                return None
+        except Exception as e:
+            logger.exception(e)
+            raise LabbookException(e)
+
     def _set_root_dir(self, new_root_dir: str) -> None:
         """Update the root directory and also reconfigure the git instance
 
@@ -408,6 +439,24 @@ class LabBook(object):
             str: Output string
         """
         return ''.join(c for c in value if c not in '\<>?/;"`\'')
+
+    def _sweep_uncommitted_changes(self) -> None:
+        result_status = self.git.status()
+        # status_key is one of "staged", "unstaged", "untracked"
+        has_changes = False
+        for status_key in result_status.keys():
+            n = result_status.get(status_key)
+            if n:
+                has_changes = True
+                logger.warning(f"In {str(self)}, sweeping up {status_key} file(s) `{', '.join(n)}`")
+
+        if has_changes:
+            self.git.add_all(self.root_dir)
+            self.git.commit("Sweeping up lingering changes.")
+
+        if not self.is_repo_clean:
+            raise LabbookException("_sweep_uncommitted_changes failed")
+
 
     @staticmethod
     def get_activity_type_from_section(section_name: str) -> Tuple[ActivityType, ActivityDetailType, str]:
@@ -504,10 +553,11 @@ class LabBook(object):
         Checkout a Git branch. Create a new branch locally.
 
         Args:
-            pass
+            branch_name(str): Name of branch to checkout or create
+            new(bool): Indicates this branch should be created.
 
         Return:
-            pass
+            None
         """
         if not self.is_repo_clean:
             raise LabbookException(f"Cannot checkout {branch_name}: Untracked and/or uncommitted changes")
@@ -595,6 +645,8 @@ class LabBook(object):
     def pull(self, remote: str = "origin"):
         """Pull and update from a remote git repository
 
+        Deprecated.
+
         Args:
             remote(str): Remote Git repository to pull from. Default is "origin"
 
@@ -608,6 +660,132 @@ class LabBook(object):
         except Exception as e:
             logger.exception(e)
             raise LabbookException(e)
+
+    @_validate_git
+    def sync(self, username: str, remote: str = "origin") -> int:
+        """Sync workspace and personal workspace with the remote.
+
+        Args:
+            username(str): Username of current user (populated by API)
+            remote(str): Name of the Git remote
+
+        Returns:
+            int: Number of commits pulled from remote (0 implies no upstream changes pulled in).
+
+        Raises:
+            LabbookException on any problems.
+        """
+
+        # Note, BVB: For now, this method only supports the initial branching workflow of having
+        # "workspace" and "workspace-{user}" branches. In the future, its signature will change to support
+        # user feature-branches.
+
+        try:
+            if not self.has_remote:
+                raise ValueError('Labbook does not have remote set')
+
+            logger.info(f"Syncing {str(self)} for user {username} to remote {remote}")
+            self.git.fetch(remote=remote)
+            with self.lock_labbook():
+                self._sweep_uncommitted_changes()
+
+                ## Checkout the workspace and retrieve any upstream updtes
+                self.checkout_branch("gm.workspace")
+                remote_updates_cnt = self.get_commits_behind_remote()[1]
+                self.pull(remote=remote)
+
+                ## Pull those changes into the personal workspace
+                self.checkout_branch(f"gm.workspace-{username}")
+                self.git.merge("gm.workspace")
+                self.git.add_all(self.root_dir)
+                self.git.commit("Sync -- Merged from gm.workspace")
+                self.push(remote=remote)
+
+                ## Get the local workspace and user's local workspace synced.
+                self.checkout_branch("gm.workspace")
+                self.git.merge(f"gm.workspace-{username}")
+                self.git.add_all(self.root_dir)
+                self.git.commit(f"Sync -- Pulled in {username}'s changes")
+
+                ## Sync it with the remote again. Everything should be up-to-date at this point.
+                self.push(remote=remote)
+                self.checkout_branch(f"gm.workspace-{username}")
+
+                return remote_updates_cnt
+        except Exception as e:
+            logger.exception(e)
+            raise LabbookException(e)
+        finally:
+            ## We should (almost) always have the user's personal workspace checked out.
+            self.checkout_branch(f"gm.workspace-{username}")
+
+    def _publish(self, username: str, remote: str) -> None:
+        # Current branch must be the user's workspace.
+        if f'gm.workspace-{username}' != self.active_branch:
+            raise ValueError('User workspace must be active branch to publish')
+
+        # The gm.workspace branch must exist (if not, then there is a problem in Labbook.new())
+        if not 'gm.workspace' in self.get_branches()['local']:
+            raise ValueError('Branch gm.workspace does not exist in local Labbook branches')
+
+        self.git.fetch(remote=remote)
+
+        # Make sure user's workspace is synced (in case they are working on it on other machines)
+        if self.get_commits_behind_remote(remote_name=remote)[1] > 0:
+            raise ValueError(f'Cannot publish since {self.active_branch} is not synced')
+
+        # Make sure the master workspace is synced before attempting to publish.
+        self.git.checkout("gm.workspace")
+        if self.get_commits_behind_remote(remote_name=remote)[1] > 0:
+            raise ValueError(f'Cannot publish since {self.active_branch} is not synced')
+
+        # Now, it should be safe to pull the user's workspace into the master workspace.
+        self.git.merge(f"gm.workspace-{username}")
+        self.git.add_all(self.root_dir)
+        self.git.commit(f"Merged gm.workspace-{username}")
+
+        # Push the master workspace to the remote, creating if necessary
+        if not f"{remote}/{self.active_branch}" in self.get_branches()['remote']:
+            logger.info(f"Pushing and setting upstream branch {self.active_branch} to {remote}")
+            self.git.repo.git.push("--set-upstream", remote, self.active_branch)
+        else:
+            logger.info(f"Pushing {self.active_branch} to {remote}")
+            self.git.publish_branch(branch_name=self.active_branch, remote_name=remote)
+
+        # Return to the user's workspace, merge it with the global workspace (as a precaution)
+        self.checkout_branch(branch_name=f'gm.workspace-{username}')
+        self.git.merge("gm.workspace")
+        self.git.add_all(self.root_dir)
+        self.git.commit(f"Merged gm.workspace-{username}")
+
+        # Now push the user's workspace to the remote repo (again, as a precaution)
+        if not self.active_branch in self.get_branches()['remote']:
+            logger.info(f"Pushing and setting upstream branch {self.active_branch} to {remote}")
+            self.git.repo.git.push("--set-upstream", remote, self.active_branch)
+        else:
+            logger.info(f"Pushing {self.active_branch} to {remote}")
+            self.git.publish_branch(branch_name=self.active_branch, remote_name=remote)
+
+    def _create_remote_repo(self, username: str) -> None:
+        raise NotImplemented('Not yet implemented.')
+
+    @_validate_git
+    def publish(self, username: str, remote: str = "origin") -> None:
+        try:
+            logger.info(f"Publishing {str(self)} for user {username} to remote {remote}")
+            if self.has_remote:
+                raise ValueError("Cannot publish Labbook when remote already set.")
+            with self.lock_labbook():
+                self._create_remote_repo(username=username)
+                self._publish(username=username, remote=remote)
+        except Exception as e:
+            # Unsure what specific exception add_remote creates, so make a catchall.
+            logger.error(f"Labbook {str(self)} may be in corrupted Git state!")
+            logger.exception(e)
+            # TODO - Rollback to before merge
+            raise LabbookException(e)
+        finally:
+            self.checkout_branch(f"gm.workspace-{username}")
 
     def push(self, remote: str = "origin"):
         """Push commits to a remote git repository. Assume current working branch."""
@@ -1209,7 +1387,8 @@ class LabBook(object):
 
         return favorite_data
 
-    def new(self, owner: Dict[str, str], name: str, username: str = None, description: str = None) -> str:
+    def new(self, owner: Dict[str, str], name: str, username: Optional[str] = None,
+            description: Optional[str] = None) -> str:
         """Method to create a new minimal LabBook instance on disk
 
         /[LabBook name]
@@ -1334,7 +1513,15 @@ class LabBook(object):
         self.git.add(os.path.join(self.root_dir, ".gigantum", "labbook.yaml"))
         self.git.add(os.path.join(self.root_dir, ".gigantum", "env", "Dockerfile"))
         self.git.add(os.path.join(self.root_dir, ".gitignore"))
+        self.git.create_branch(name="gm.workspace")
         self.git.commit(f"Creating new empty LabBook: {name}")
+
+        user_workspace_branch = f"gm.workspace-{username}"
+        self.git.create_branch(user_workspace_branch)
+        self.checkout_branch(branch_name=user_workspace_branch)
+
+        if self.active_branch != user_workspace_branch:
+            raise ValueError(f"active_branch should be '{user_workspace_branch}'")
 
         return self.root_dir
 
@@ -1497,6 +1684,15 @@ class LabBook(object):
 
         logger.info(f"Cloning labbook from remote origin `{remote_url}` into `{est_root_dir}...")
         self.git.clone(remote_url, directory=est_root_dir)
+        self.git.fetch()
+        logger.info(f"Checking out gm.workspace")
+        self.git.checkout("gm.workspace")
+
+        logger.info(f"Checking out gm.workspace-{username}")
+        if f'origin/gm.workspace-{username}' in self.get_branches()['remote']:
+            self.git.checkout(f"gm.workspace-{username}")
+        else:
+            self.checkout_branch(f"gm.workspace-{username}", new=True)
 
         # Once the git repo is cloned, the problem just becomes a regular import from file system.
         self.from_directory(est_root_dir)

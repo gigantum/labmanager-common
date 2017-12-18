@@ -27,16 +27,8 @@ import yaml
 import git
 
 from lmcommon.labbook import LabBook, LabbookException
-from lmcommon.fixtures import mock_config_file, mock_labbook, remote_labbook_repo
+from lmcommon.fixtures import mock_config_file, mock_labbook, remote_labbook_repo, sample_src_file
 
-
-@pytest.fixture()
-def sample_src_file():
-    with tempfile.NamedTemporaryFile(mode="w") as sample_f:
-        # Fill sample file with some deterministic crap
-        sample_f.write("n4%nm4%M435A EF87kn*C" * 40)
-        sample_f.seek(0)
-        yield sample_f.name
 
 
 
@@ -135,12 +127,12 @@ class TestLabBook(object):
         assert os.path.exists(checkout_file) is True
 
         parts = checkout_id.split("-")
-        assert len(parts) == 5
+        assert len(parts) == 6
         assert parts[0] == "test"
         assert parts[1] == "test"
         assert parts[2] == "labbook1"
-        assert parts[3] == "master"
-        assert len(parts[4]) == 10
+        assert parts[3] == "gm.workspace"
+        assert len(parts[5]) == 10
 
         # Check repo is clean
         status = lb.git.status()
@@ -304,6 +296,7 @@ class TestLabBook(object):
 
         lb_loaded = LabBook(mock_config_file[0])
         lb_loaded.from_directory(labbook_dir)
+        assert lb.active_branch == 'gm.workspace-test'
 
         assert lb_loaded.root_dir == os.path.join(mock_config_file[1], "test", "test", "labbooks", "labbook1")
         assert type(lb) == LabBook
@@ -345,6 +338,7 @@ class TestLabBook(object):
 
         lb_loaded = LabBook(mock_config_file[0])
         lb_loaded.from_name("test", "test", "labbook1")
+        assert lb_loaded.active_branch == 'gm.workspace-test'
 
         assert lb_loaded.root_dir == os.path.join(mock_config_file[1], "test", "test", "labbooks", "labbook1")
         assert type(lb) == LabBook
@@ -367,6 +361,7 @@ class TestLabBook(object):
         # Reload and see changes
         lb_loaded = LabBook(mock_config_file[0])
         lb_loaded.from_name("test", "test", "new-labbook-1")
+        assert lb_loaded.active_branch == 'gm.workspace-test'
 
         assert lb_loaded.root_dir == os.path.join(mock_config_file[1], "test", "test", "labbooks", "new-labbook-1")
         assert type(lb) == LabBook
@@ -679,6 +674,7 @@ class TestLabBook(object):
         lb1key = lb.key
         lb2 = LabBook(mock_config_file[0])
         lb2.from_key(lb1key)
+        assert lb.active_branch == 'gm.workspace-test'
 
     def test_walkdir_with_favorites(self, mock_config_file, sample_src_file):
         lb = LabBook(mock_config_file[0])
