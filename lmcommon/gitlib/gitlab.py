@@ -307,6 +307,8 @@ class GitLabRepositoryManager(object):
             child.close()
 
             return token
+        else:
+            return None
 
     def configure_git_credentials(self, host: str, username: str) -> None:
         """Method to configure the local git client's credentials
