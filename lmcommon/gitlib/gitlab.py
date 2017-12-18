@@ -274,7 +274,7 @@ class GitLabRepositoryManager(object):
         out, err = self._call_shell("git credential fill", ["protocol=https\n",
                                                             f"host={host}\n",
                                                             f"username={username}\n",
-                                                            "\n", "\n"])
+                                                            "\n", "\n", "\n"])
         if err:
             raise ValueError("Failed to check for git credentials")
 
@@ -308,7 +308,7 @@ class GitLabRepositoryManager(object):
                                                                    f"host={host}\n",
                                                                    f"username={username}\n",
                                                                    f"password={self.user_token}\n",
-                                                                   "\n"])
+                                                                   "\n", "\n"])
             if err:
                 raise ValueError("Failed to configure git credentials")
 

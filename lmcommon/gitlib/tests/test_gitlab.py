@@ -400,7 +400,7 @@ class TestGitLabRepositoryManager(object):
         out, err = gitlab_mngr_fixture._call_shell("git credential fill", ["protocol=https\n",
                                                                            f"host=test.gigantum.io\n",
                                                                            f"username=testuser\n",
-                                                                           "\n", "\n"])
+                                                                           "\n", "\n", "\n"])
 
         assert out is not None
         assert err is None
@@ -419,7 +419,7 @@ class TestGitLabRepositoryManager(object):
         out, err = gitlab_mngr_fixture._call_shell("git credential fill", ["protocol=https\n",
                                                                            f"host=test.gigantum.io\n",
                                                                            f"username=testuser\n",
-                                                                           "\n", "\n"])
+                                                                           "\n", "\n", "\n"])
 
         assert out == b""
         assert err is None
