@@ -32,6 +32,7 @@ from pkg_resources import resource_filename
 
 from lmcommon.configuration import Configuration
 from lmcommon.gitlib import get_git_interface, GitAuthor, GitRepoInterface
+from lmcommon.gitlib.gitlab import GitLabRepositoryManager
 from lmcommon.logging import LMLogger
 from lmcommon.labbook.schemas import validate_schema
 from lmcommon.activity import ActivityStore, ActivityType, ActivityRecord, ActivityDetailType, ActivityDetailRecord
@@ -800,17 +801,36 @@ class LabBook(object):
             logger.info(f"Pushing {self.active_branch} to {remote}")
             self.git.publish_branch(branch_name=self.active_branch, remote_name=remote)
 
-    def _create_remote_repo(self, username: str) -> None:
-        raise NotImplemented('Not yet implemented.')
+    def _create_remote_repo(self, username: str, access_token: Optional[str] = None) -> None:
+        """Create a new repository in GitLab,
+
+        Note: It may make more sense to factor this out later on. TODO. """
+
+        try:
+            default_remote = self.labmanager_config.config['git']['default_remote']
+            admin_service = None
+            for remote in self.labmanager_config.config['git']['remotes']:
+                if default_remote == remote:
+                    admin_service = self.labmanager_config.config['git']['remotes'][remote]['admin_service']
+                    break
+            raise ValueError('admin_service could not be found')
+
+            # Add collaborator to remote service
+            mgr = GitLabRepositoryManager(default_remote, admin_service, access_token=access_token or 'invalid',
+                                          username=username, owner=self.owner['username'], labbook_name=self.name)
+            mgr.create()
+        except Exception as e:
+            logger.exception(e)
+            raise
 
     @_validate_git
-    def publish(self, username: str, remote: str = "origin") -> None:
+    def publish(self, username: str, access_token: Optional[str] = None, remote: str = "origin") -> None:
         try:
             logger.info(f"Publishing {str(self)} for user {username} to remote {remote}")
             if self.has_remote:
                 raise ValueError("Cannot publish Labbook when remote already set.")
             with self.lock_labbook():
-                self._create_remote_repo(username=username)
+                self._create_remote_repo(username=username, access_token=access_token)
                 self._publish(username=username, remote=remote)
         except Exception as e:
             # Unsure what specific exception add_remote creates, so make a catchall.
