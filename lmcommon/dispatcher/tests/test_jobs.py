@@ -55,18 +55,38 @@ class TestJobs(object):
             shutil.rmtree(lb.root_dir)
             assert not os.path.exists(lb_root), f"LabBook at {lb_root} should not exist."
 
-            imported_lb_path = jobs.import_labboook_from_zip(archive_path=exported_archive_path, username="test",
+            # Now import the labbook as a new user, validating that the change of namespace works properly.
+            imported_lb_path = jobs.import_labboook_from_zip(archive_path=exported_archive_path, username="cat",
+                                                             owner="cat", config_file=mock_config_with_repo[0])
+
+            # New path should reflect username of new owner and user.
+            assert imported_lb_path == lb_root.replace('/test/test/', '/cat/cat/')
+            import_lb = LabBook()
+            import_lb.from_directory(imported_lb_path)
+            # After importing, the new user (in this case "cat") should be the current, active workspace.
+            # And be created, if necessary.
+            assert import_lb.active_branch == "gm.workspace-cat"
+            assert not import_lb.has_remote
+
+            # Repeat the above, except with the original user (e.g., re-importing their own labbook)
+            user_import_lb = jobs.import_labboook_from_zip(archive_path=exported_archive_path, username="test",
                                                              owner="test", config_file=mock_config_with_repo[0])
 
-            assert imported_lb_path == lb_root, "Imported labbook directory should be same as the one exported."
+            # New path should reflect username of new owner and user.
+            assert user_import_lb
+            import_lb2 = LabBook()
+            import_lb2.from_directory(user_import_lb)
+            # After importing, the new user (in this case "cat") should be the current, active workspace.
+            # And be created, if necessary.
+            assert import_lb2.active_branch == "gm.workspace-test"
+            assert not import_lb2.has_remote
 
             # Do not build image in CircleCI, just return now.
             if getpass.getuser() == 'circleci':
                 return
 
-            docker_image_id = jobs.build_docker_image(os.path.join(lb_root, '.gigantum', 'env'),
+            docker_image_id = jobs.build_docker_image(os.path.join(imported_lb_path, '.gigantum', 'env'),
                                                       "import-export-test-delete-this", True, True)
-
             try:
                 client = get_docker_client()
                 client.images.remove("import-export-test-delete-this")

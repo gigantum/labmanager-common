@@ -448,7 +448,8 @@ class LabBook(object):
             n = result_status.get(status_key)
             if n:
                 has_changes = True
-                logger.warning(f"In {str(self)}, sweeping up {status_key} file(s) `{', '.join(n)}`")
+                s = ', '.join([f"{a[0]} ({a[1]}" for a in n])
+                logger.warning(f"In {str(self)}, sweeping up {s}")
 
         if has_changes:
             self.git.add_all(self.root_dir)
@@ -662,6 +663,38 @@ class LabBook(object):
             raise LabbookException(e)
 
     @_validate_git
+    def local_sync(self, username: Optional[str] = None) -> None:
+        """Sync locally only to gm.workspace branch - don't do anything with remote. Creates a user's
+         local workspace if necessary.
+
+        Args:
+            username(str): Active username
+        
+        Returns:
+            None
+
+        Raises:
+            LabbookException
+        """
+        try:
+            with self.lock_labbook():
+                self._sweep_uncommitted_changes()
+                if username and f"gm.workspace-{username}" not in self.get_branches()['local']:
+                    self.checkout_branch("gm.workspace")
+                    self.checkout_branch(f"gm.workspace-{username}", new=True)
+                    self.git.merge("gm.workspace")
+                    self.git.commit(f"Created and merged new user workspace gm.workspace-{username}")
+                else:
+                    orig_branch = self.active_branch
+                    self.checkout_branch("gm.workspace")
+                    self.git.merge(orig_branch)
+                    self.git.commit(f"Merged from local workspace")
+                    self.checkout_branch(orig_branch)
+        except Exception as e:
+            logger.exception(e)
+            raise LabbookException(e)
+
+    @_validate_git
     def sync(self, username: str, remote: str = "origin") -> int:
         """Sync workspace and personal workspace with the remote.
 
@@ -682,7 +715,8 @@ class LabBook(object):
 
         try:
             if not self.has_remote:
-                raise ValueError('Labbook does not have remote set')
+                self.local_sync()
+                return 0
 
             logger.info(f"Syncing {str(self)} for user {username} to remote {remote}")
             self.git.fetch(remote=remote)
