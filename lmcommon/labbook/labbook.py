@@ -813,7 +813,9 @@ class LabBook(object):
                 if default_remote == remote:
                     admin_service = self.labmanager_config.config['git']['remotes'][remote]['admin_service']
                     break
-            raise ValueError('admin_service could not be found')
+
+            if not admin_service:
+                raise ValueError('admin_service could not be found')
 
             # Add collaborator to remote service
             mgr = GitLabRepositoryManager(default_remote, admin_service, access_token=access_token or 'invalid',
