@@ -14,8 +14,8 @@ jobs:
             sudo apt-get install -y build-essential redis-server
 
       - run:
-          name: Set Git credentials
-          command: git config --global user.email "noreply@gigantum.io" && git config --global user.name "CircleCI"
+          name: Set Git credentials config
+          command: git config --global user.email "noreply@gigantum.io" && git config --global user.name "CircleCI" && git config --global credential.helper store
 
       - run:
           name: Pip install requirements and pytest

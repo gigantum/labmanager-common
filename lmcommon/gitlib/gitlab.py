@@ -22,6 +22,7 @@ from typing import List, Optional, Tuple
 import subprocess
 import pexpect
 import re
+import os
 
 from lmcommon.logging import LMLogger
 
@@ -55,6 +56,26 @@ class GitLabRepositoryManager(object):
                                     headers={"Authorization": f"Bearer {self.access_token}"})
             if response.status_code == 200:
                 self._user_token = response.json()['key']
+            elif response.status_code == 404:
+                # User not found so create it!
+                response = requests.post(f"https://{self.admin_service}/user",
+                                         headers={"Authorization": f"Bearer {self.access_token}"})
+                if response.status_code != 201:
+                    logger.error("Failed to create new user in GitLab")
+                    logger.error(response.json())
+                    raise ValueError("Failed to create new user in GitLab")
+
+                logger.info(f"Created new user `{self.username}` in remote git server")
+
+                # New get the key so the current request that triggered this still succeeds
+                response = requests.get(f"https://{self.admin_service}/key",
+                                        headers={"Authorization": f"Bearer {self.access_token}"})
+                if response.status_code == 200:
+                    self._user_token = response.json()['key']
+                else:
+                    logger.error("Failed to get user access key from server")
+                    logger.error(response.json())
+                    raise ValueError("Failed to get user access key from server")
             else:
                 logger.error("Failed to get user access key from server")
                 logger.error(response.json())
@@ -274,24 +295,31 @@ class GitLabRepositoryManager(object):
         Returns:
 
         """
-        # Check if already configured
-        child = pexpect.spawn("git credential fill")
-        child.expect("")
-        child.sendline("protocol=https")
-        child.expect("")
-        child.sendline(f"host={host}")
-        child.expect("")
-        child.sendline(f"username={username}")
-        child.expect("")
-        child.sendline("")
-        i = child.expect(["Password for 'https://", "password=[\w\-\._]+"])
+        # Get the current working dir
+        cwd = os.getcwd()
+        try:
+            # Switch to the user's home dir (needed to make git config and credential saving work)
+            os.chdir(os.path.expanduser("~"))
+            child = pexpect.spawn("git credential fill")
+            child.expect("")
+            child.sendline("protocol=https")
+            child.expect("")
+            child.sendline(f"host={host}")
+            child.expect("")
+            child.sendline(f"username={username}")
+            child.expect("")
+            child.sendline("")
+            i = child.expect(["Password for 'https://", "password=[\w\-\._]+", pexpect.EOF])
+        finally:
+            # Switch back to where you were
+            os.chdir(os.path.expanduser(cwd))
         if i == 0:
             # Not configured
             child.sendline("")
             return None
         elif i == 1:
             # Possibly configured, verify a valid string
-            matches = re.finditer(r"password=[a-zA-Z0-9_\!@\#\$%\^&\*]+", child.after.decode("utf-8"))
+            matches = re.finditer(r"password=[a-zA-Z0-9\-_\!@\#\$%\^&\*]+", child.after.decode("utf-8"))
 
             token = None
             try:
@@ -305,8 +333,25 @@ class GitLabRepositoryManager(object):
             if not token:
                 child.sendline("")
             child.close()
-
             return token
+        elif i == 2:
+            # Possibly configured, verify a valid string
+            matches = re.finditer(r"password=[a-zA-Z0-9\-_\!@\#\$%\^&\*]+", child.before.decode("utf-8"))
+
+            token = None
+            try:
+                for match in matches:
+                    _, token = match.group().split("=")
+                    break
+            except ValueError:
+                # if string is malformed it won't split properly and you don't have a token
+                pass
+
+            if not token:
+                child.sendline("")
+            child.close()
+            return token
+
         else:
             return None
 
@@ -324,26 +369,26 @@ class GitLabRepositoryManager(object):
         token = self._check_if_git_credentials_configured(host, username)
 
         if token is None:
-            # Need to init git creds, first select helper
-            out, err = self._call_shell("git config --global credential.helper store")
-            #out, err = self._call_shell("git config --global credential.helper 'cache --timeout=7200'")
-            if err:
-                raise ValueError("Failed to configure git credential helper")
-
-            child = pexpect.spawn("git credential approve")
-            child.expect("")
-            child.sendline("protocol=https")
-            child.expect("")
-            child.sendline(f"host={host}")
-            child.expect("")
-            child.sendline(f"username={username}")
-            child.expect("")
-            child.sendline(f"password={self.user_token}")
-            child.expect("")
-            child.sendline("")
-            child.expect("")
-            child.sendline("")
-            child.close()
+            cwd = os.getcwd()
+            try:
+                os.chdir(os.path.expanduser("~"))
+                child = pexpect.spawn("git credential approve")
+                child.expect("")
+                child.sendline("protocol=https")
+                child.expect("")
+                child.sendline(f"host={host}")
+                child.expect("")
+                child.sendline(f"username={username}")
+                child.expect("")
+                child.sendline(f"password={self.user_token}")
+                child.expect("")
+                child.sendline("")
+                child.expect(["", pexpect.EOF])
+                child.sendline("")
+                child.expect(["", pexpect.EOF])
+                child.close()
+            finally:
+                os.chdir(os.path.expanduser(cwd))
 
             logger.info(f"Configured local git credentials for {host}")
 
@@ -356,16 +401,21 @@ class GitLabRepositoryManager(object):
         Returns:
             None
         """
-        child = pexpect.spawn("git credential reject")
-        child.expect("")
-        child.sendline("protocol=https")
-        child.expect("")
-        child.sendline(f"host={host}")
-        child.expect("")
-        child.sendline("")
-        child.expect("")
-        child.sendline("")
-        child.expect("")
-        child.sendline("")
+        cwd = os.getcwd()
+        try:
+            child = pexpect.spawn("git credential reject")
+            child.expect("")
+            child.sendline("protocol=https")
+            child.expect("")
+            child.sendline(f"host={host}")
+            child.expect("")
+            child.sendline("")
+            child.expect("")
+            child.sendline("")
+            child.expect("")
+            child.sendline("")
+            child.close()
+        finally:
+            os.chdir(os.path.expanduser(cwd))
 
         logger.info(f"Removed local git credentials for {host}")

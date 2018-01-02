@@ -126,6 +126,8 @@ class LabBook(object):
                 try:
                     _check_git_tracked(self.git)
                     n = method_ref(self, *args, **kwargs) #type: ignore
+                except ValueError:
+                    self._sweep_uncommitted_changes()
                 finally:
                     _check_git_tracked(self.git)
             else:
@@ -820,7 +822,10 @@ class LabBook(object):
             # Add collaborator to remote service
             mgr = GitLabRepositoryManager(default_remote, admin_service, access_token=access_token or 'invalid',
                                           username=username, owner=self.owner['username'], labbook_name=self.name)
+            mgr.configure_git_credentials(default_remote, username)
             mgr.create()
+
+            self.add_remote("origin", f"https://{default_remote}/{username}/{self.name}.git")
         except Exception as e:
             logger.exception(e)
             raise
