@@ -17,33 +17,33 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-import abc
-from typing import (Any, Dict, List)
+from typing import (Any, Dict)
 
-from lmcommon.activity import ActivityRecord
-
-
-class StopProcessingException(Exception):
-    """Custom exception to stop activity processing pipeline and bail out from activity process"""
-    pass
+from lmcommon.activity.processors.processor import ActivityProcessor
+from lmcommon.activity import ActivityRecord, ActivityDetailType
 
 
-class ActivityProcessor(metaclass=abc.ABCMeta):
-    """Class to process activity and return content for an ActivityRecord"""
+class ActivityShowBasicProcessor(ActivityProcessor):
+    """Class to simply hide an activity record if it doesn't have any detail records that are set to show=True"""
 
-    def process(self, result_obj: ActivityRecord, code: Dict[str, Any], result: Dict[str, Any],
-                status: Dict[str, Any], metadata: Dict[str, Any]) -> ActivityRecord:
+    def process(self, result_obj: ActivityRecord, code: Dict[str, Any], result: Dict[str, Any], status: Dict[str, Any],
+                metadata: Dict[str, Any]) -> ActivityRecord:
         """Method to update a result object based on code and result data
 
         Args:
-            result_obj(ActivityNote): An object containing the ActivityRecord
+            result_obj(ActivityNote): An object containing the note
             code(dict): A dict containing data specific to the dev env containing code that was executed
             result(dict): A dict containing data specific to the dev env containing the result of code execution
-            status(dict): A dictionary containing the git status
-            metadata(dict): A dictionary containing Dev Env specific or other developer defined data
+            status(dict): A dict containing the result of git status from gitlib
+            metadata(str): A dictionary containing Dev Env specific or other developer defined data
 
         Returns:
             ActivityNote
         """
-        raise NotImplemented
+        result_obj.show = False
+        for detail in result_obj.detail_objects:
+            if detail[0]:
+                result_obj.show = True
+                break
 
+        return result_obj

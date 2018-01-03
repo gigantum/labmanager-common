@@ -31,14 +31,13 @@ from lmcommon.environment.componentmanager import ComponentManager
 from lmcommon.dispatcher import Dispatcher, jobs
 from lmcommon.labbook import LabBook
 from lmcommon.logging import LMLogger
-from lmcommon.notes import NoteLogLevel, NoteStore
+from lmcommon.activity import ActivityDetailType, ActivityType, ActivityRecord, ActivityDetailRecord, ActivityStore
 
 logger = LMLogger.get_logger()
 
 
-def dockerize_volume_path(volpath: str) -> str:
-    # TODO - This must be removed and replaced.
-    if os.path.__name__ == 'ntpath':
+def dockerize_path(volpath: str) -> str:
+    if os.environ.get('WINDOWS_HOST'):
         # for windows switch the slashes and then sub the drive letter
         return re.sub('(^[A-Z]):(.*$)', '//\g<1>\g<2>', volpath.replace('\\', '/'))
     else:
@@ -184,6 +183,7 @@ class ImageBuilder(object):
     def _post_image_hook(self) -> List[str]:
         """Contents that must be after baseimages but before development environments. """
         docker_lines = ["# Post-image creation hooks"]
+        docker_lines.append('RUN apt-get -y update')
         docker_lines.append('RUN apt-get -y install supervisor curl gosu')
         docker_lines.append('COPY entrypoint.sh /usr/local/bin/entrypoint.sh')
         docker_lines.append('RUN chmod u+x /usr/local/bin/entrypoint.sh')
@@ -256,15 +256,22 @@ class ImageBuilder(object):
             lb.git.add(dockerfile_name)
             commit = lb.git.commit(short_message)
 
-            # Create a note record
-            ns = NoteStore(lb)
-            ns.create_note({"linked_commit": commit.hexsha,
-                            "message": short_message,
-                            "level": NoteLogLevel.AUTO_MINOR,
-                            "tags": ["environment", 'dockerfile'],
-                            "free_text": "",
-                            "objects": []
-                            })
+            # Create detail record
+            adr = ActivityDetailRecord(ActivityDetailType.ENVIRONMENT, show=False)
+            adr.add_value('text/plain', short_message)
+
+            # Create activity record
+            ar = ActivityRecord(ActivityType.ENVIRONMENT,
+                                message=short_message,
+                                show=False,
+                                linked_commit=commit.hexsha,
+                                tags=['dockerfile'])
+            ar.add_detail_object(adr)
+
+            # Store
+            ars = ActivityStore(lb)
+            ars.create_activity_record(ar)
+
         else:
             logger.info("Dockerfile NOT being written; write=False; {}".format(dockerfile_name))
 
@@ -364,7 +371,8 @@ class ImageBuilder(object):
         for dev_env in dev_envs_list:
             exposed_ports.update({"{}/tcp".format(port): port for port in dev_env['exposed_tcp_ports']})
 
-        mnt_point = labbook.root_dir.replace('/mnt/gigantum', os.environ['HOST_WORK_DIR'])
+        
+        mnt_point = dockerize_path(labbook.root_dir.replace('/mnt/gigantum', os.environ['HOST_WORK_DIR']))
 
         # Map volumes - The labbook docker container is unaware of labbook name, all labbooks
         # map to /mnt/labbook.

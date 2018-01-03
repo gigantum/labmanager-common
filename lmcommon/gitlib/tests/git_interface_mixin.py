@@ -23,7 +23,7 @@ import os
 import shutil
 import uuid
 import datetime
-from ...gitlib import GitFilesystem, GitAuthor
+from lmcommon.gitlib import GitFilesystem, GitAuthor
 from git import Repo
 from git.exc import GitCommandError
 
@@ -805,6 +805,51 @@ class GitInterfaceMixin(object):
         log_info[0]["message"] = "commit 4"
         log_info[1]["message"] = "commit 2"
 
+    def test_log_page(self, mock_initialized):
+        """Test getting commit history"""
+        git = mock_initialized[0]
+
+        # Create files
+        commit_list = []
+        write_file(git, "test1.txt", "File number 1\n", commit_msg="commit 1")
+        commit_list.append(git.repo.head.commit)
+
+        write_file(git, "test2.txt", "File number 2\n", commit_msg="commit 2")
+        commit_list.append(git.repo.head.commit)
+
+        # Edit file 1 - Add a line
+        write_file(git, "test1.txt", "File 1 has changed\n", commit_msg="commit 3")
+        commit_start = git.repo.head.commit
+        commit_list.append(git.repo.head.commit)
+
+        # Edit file 2
+        write_file(git, "test2.txt", "File 2 has changed\n", commit_msg="commit 4")
+        commit_list.append(git.repo.head.commit)
+
+        # Create another file
+        write_file(git, "test3.txt", "File number 3\n")
+        git.commit("commit 5", author=GitAuthor("U1", "test@gigantum.io"),
+                   committer=GitAuthor("U2", "test2@gigantum.io"))
+        commit_list.append(git.repo.head.commit)
+
+        # Get history
+        log_info = git.log(path_info=commit_start)
+
+        assert len(log_info) == 4
+        assert commit_list[2].hexsha == commit_start.hexsha
+        assert log_info[0]['commit'] == commit_list[2].hexsha
+        assert log_info[1]['commit'] == commit_list[1].hexsha
+        assert log_info[2]['commit'] == commit_list[0].hexsha
+
+        # Get history
+        log_info = git.log(path_info=commit_start, max_count=2)
+
+        assert len(log_info) == 2
+        assert commit_list[2].hexsha == commit_start.hexsha
+        assert log_info[0]['commit'] == commit_list[2].hexsha
+        assert log_info[1]['commit'] == commit_list[1].hexsha
+
+
     def test_log_filter(self, mock_initialized):
         """Test getting commit history with some filtering"""
         git = mock_initialized[0]
@@ -960,11 +1005,18 @@ class GitInterfaceMixin(object):
         """Method to test checkout a branch"""
         git = mock_initialized[0]
 
+
         assert git.repo.head.ref.name == "master"
 
         git.create_branch("test_branch1")
 
-        assert git.repo.head.ref.name == "master"
+        import pprint
+        pprint.pprint(git.repo.head.ref.name)
+
+        # BVB NOTE!! I changed behavior so "create_branch" also checks out that new branch
+        #assert git.repo.head.ref.name == "master"  # <-- Original behavior
+
+        assert git.repo.head.ref.name == "test_branch1" # <-- New behavior following BVB changes
 
         # Checkout branch
         git.checkout("test_branch1")
@@ -974,6 +1026,29 @@ class GitInterfaceMixin(object):
         # Make sure invalid branch names raise an exception
         with pytest.raises(ValueError):
             git.checkout("a;lskjdfas;lkjhdf")
+
+    def test_checkout_branch_context(self, mock_initialized):
+        """Method to test checkout context ID file getting removed """
+        git = mock_initialized[0]
+
+        assert git.repo.head.ref.name == "master"
+
+        git.create_branch("test_branch1")
+
+        assert git.repo.head.ref.name == "test_branch1"
+
+        # Write a checkout context file for this test
+        os.makedirs(os.path.join(git.working_directory, '.gigantum'))
+        checkout_file = os.path.join(git.working_directory, '.gigantum', '.checkout')
+
+        with open(checkout_file, 'wt') as cf:
+            cf.write("dummy_id")
+        assert os.path.exists(checkout_file) is True
+
+        # Checkout branch
+        git.checkout("test_branch1")
+
+        assert os.path.exists(checkout_file) is False
 
     def test_list_branches(self, mock_initialized_remote):
         """Method to test listing branches"""
@@ -1004,6 +1079,7 @@ class GitInterfaceMixin(object):
         assert len(branches["remote"]) == 4
 
         # Delete local branch
+        git.checkout("master")   # <-- BVB Note, this was added for change in create_branch semantics.
         git.delete_branch("test_local_branch")
         branches = git.list_branches()
         assert len(branches["local"]) == 2

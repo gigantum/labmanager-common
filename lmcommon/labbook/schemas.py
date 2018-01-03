@@ -38,6 +38,17 @@ SCHEMA_VERSIONS = {
             'username': str
         },
         'schema': str
+    },
+    '0.2': {
+        'labbook': {
+            'id': str,
+            'name': str,
+            'description': str
+        },
+        'owner': {
+            'username': str
+        },
+        'schema': str
     }
 }
 

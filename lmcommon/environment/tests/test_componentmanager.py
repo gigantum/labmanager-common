@@ -17,57 +17,13 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-
 import pytest
-import tempfile
 import os
-import uuid
-import shutil
 import yaml
 
 from lmcommon.environment import ComponentManager, RepositoryManager
-from lmcommon.fixtures import mock_config_file
+from lmcommon.fixtures import mock_config_file, mock_config_with_repo
 from lmcommon.labbook import LabBook
-
-
-@pytest.fixture(scope="module")
-def setup_labbook_env():
-    """A pytest fixture to create a temp working dir, labbook, and populate it's environment"""
-    # Create a temporary working directory
-    temp_dir = os.path.join(tempfile.tempdir, uuid.uuid4().hex)
-    os.makedirs(temp_dir)
-
-    with tempfile.NamedTemporaryFile(mode="wt") as fp:
-        # Write a temporary config file
-        fp.write("""core:
-  team_mode: false 
-  
-environment:
-  repo_url:
-    - "https://github.com/gig-dev/environment-components.git"
-git:
-  backend: 'filesystem'
-  working_directory: '{}'""".format(temp_dir))
-        fp.seek(0)
-
-        # Build the environment component repo
-        erm = RepositoryManager(fp.name)
-        erm.update_repositories()
-        erm.index_repositories()
-
-        # Create a labook
-        lb = LabBook(fp.name)
-
-        lb.new(name="labbook2", description="my first labbook",
-               owner={"username": "test"})
-
-        # Create Component Manager
-        cm = ComponentManager(lb)
-
-        yield cm
-
-    # Remove the temp_dir
-    shutil.rmtree(temp_dir)
 
 
 class TestComponentManager(object):
@@ -133,13 +89,13 @@ class TestComponentManager(object):
                 for required_field in 'package_manager', 'name', 'version':
                     assert required_field in fields_dict.keys()
 
-        # Verify git/notes
+        # Verify git/activity
         log = lb.git.log()
         assert len(log) == 10
-        assert "gtmNOTE" in log[0]["message"]
-        assert 'docker' in log[0]["message"]
-        assert "gtmNOTE" in log[4]["message"]
-        assert 'requests' in log[4]["message"]
+        assert "_GTM_ACTIVITY_START_" in log[0]["message"]
+        assert 'Added new software package' in log[0]["message"]
+        assert "_GTM_ACTIVITY_START_" in log[4]["message"]
+        assert 'Added new software package' in log[4]["message"]
 
     def test_add_component(self, mock_config_file):
         """Test adding a component to a labbook"""
@@ -175,11 +131,11 @@ class TestComponentManager(object):
         assert data['info']['version_minor'] == 4
         assert data['###namespace###'] == 'gigantum'
 
-        # Verify git/notes
+        # Verify git/activity
         log = lb.git.log()
         assert len(log) == 4
-        assert "gtmNOTE" in log[0]["message"]
-        assert 'ubuntu1604-python3' in log[0]["message"]
+        assert "_GTM_ACTIVITY_START_" in log[0]["message"]
+        assert 'environment component:' in log[0]["message"]
 
     def test_add_duplicate_component(self, mock_config_file):
         """Test adding a duplicate component to a labbook"""
@@ -217,16 +173,21 @@ class TestComponentManager(object):
                          force=True)
         assert os.path.exists(component_file) is True
 
-    def test_get_component_list_base_image(self, setup_labbook_env):
+    def test_get_component_list_base_image(self, mock_config_with_repo):
         """Test listing base images added a to labbook"""
-        # setup_labbook_env is a ComponentManager Instance
-        setup_labbook_env.add_component("base_image",
+        lb = LabBook(mock_config_with_repo[0])
+        lb.new(name="labbook2a", description="my first labbook",
+               owner={"username": "test"})
+        cm = ComponentManager(lb)
+
+        # mock_config_with_repo is a ComponentManager Instance
+        cm.add_component("base_image",
                                         "gig-dev_environment-components",
                                         "gigantum",
                                         "ubuntu1604-python3",
                                         "0.4")
 
-        dev_envs = setup_labbook_env.get_component_list('base_image')
+        dev_envs = cm.get_component_list('base_image')
 
         assert len(dev_envs) == 1
         assert dev_envs[0]['info']['name'] == 'ubuntu1604-python3'
@@ -234,15 +195,20 @@ class TestComponentManager(object):
         assert dev_envs[0]['info']['version_minor'] == 4
         assert dev_envs[0]['###namespace###'] == 'gigantum'
 
-    def test_get_component_list_packages(self, setup_labbook_env):
+    def test_get_component_list_packages(self, mock_config_with_repo):
         """Test listing packages added a to labbook"""
-        # setup_labbook_env is a ComponentManager Instance
-        setup_labbook_env.add_package("apt-get", "ack")
-        setup_labbook_env.add_package("pip3", "requests")
-        setup_labbook_env.add_package("apt-get", "docker")
-        setup_labbook_env.add_package("pip3", "docker")
+        lb = LabBook(mock_config_with_repo[0])
+        lb.new(name="labbook2b", description="my first labbook",
+               owner={"username": "test"})
+        cm = ComponentManager(lb)
 
-        packages = setup_labbook_env.get_component_list('package_manager')
+        # mock_config_with_repo is a ComponentManager Instance
+        cm.add_package("apt-get", "ack")
+        cm.add_package("pip3", "requests")
+        cm.add_package("apt-get", "docker")
+        cm.add_package("pip3", "docker")
+
+        packages = cm.get_component_list('package_manager')
 
         assert len(packages) == 4
         assert packages[0]['package_manager'] == 'apt-get'
@@ -254,21 +220,26 @@ class TestComponentManager(object):
         assert packages[3]['package_manager'] == 'pip3'
         assert packages[3]['name'] == 'requests'
 
-    def test_get_component_list_custom(self, setup_labbook_env):
+    def test_get_component_list_custom(self, mock_config_with_repo):
         """Test listing custom dependencies added a to labbook"""
-        # setup_labbook_env is a ComponentManager Instance
-        setup_labbook_env.add_component("custom",
-                                        "gig-dev_environment-components",
-                                        "gigantum",
-                                        "ubuntu-python3-pillow",
-                                        "0.3")
-        setup_labbook_env.add_component("custom",
-                                        "gig-dev_environment-components",
-                                        "gigantum",
-                                        "ubuntu-python3-pillow-dup",
-                                        "0.2")
+        lb = LabBook(mock_config_with_repo[0])
+        lb.new(name="labbook2c", description="my first labbook",
+               owner={"username": "test"})
+        cm = ComponentManager(lb)
 
-        custom_deps = setup_labbook_env.get_component_list('custom')
+        # mock_config_with_repo is a ComponentManager Instance
+        cm.add_component("custom",
+                         "gig-dev_environment-components",
+                         "gigantum",
+                         "ubuntu-python3-pillow",
+                         "0.3")
+        cm.add_component("custom",
+                         "gig-dev_environment-components",
+                         "gigantum",
+                         "ubuntu-python3-pillow-dup",
+                         "0.2")
+
+        custom_deps = cm.get_component_list('custom')
 
         assert len(custom_deps) == 2
         assert custom_deps[0]['info']['name'] == 'ubuntu-python3-pillow-dup'

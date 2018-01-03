@@ -36,7 +36,7 @@ setup(
             'open science'
         ],
     packages=find_packages(exclude=['docs', '*tests*']),
-    package_data={'lmcommon': ['logging/*.default', 'configuration/config/*.default']},
+    package_data={'lmcommon': ['logging/*.default', 'configuration/config/*.default', 'labbook/*.default']},
     include_package_data=True,
     author='Gigantum/FlashX LLC',
     install_requires=install_requires,

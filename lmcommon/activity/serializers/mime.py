@@ -18,32 +18,46 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 import abc
-from typing import (Any, Dict, List)
-
-from lmcommon.activity import ActivityRecord
+from typing import Any
 
 
-class StopProcessingException(Exception):
-    """Custom exception to stop activity processing pipeline and bail out from activity process"""
-    pass
+class MimeSerializer(metaclass=abc.ABCMeta):
+    """Abstract class for serializers for specific MIME types"""
 
+    @abc.abstractmethod
+    def jsonify(self, data: Any) -> Any:
+        """Method to convert object to something that is able to be sent in a JSON object
 
-class ActivityProcessor(metaclass=abc.ABCMeta):
-    """Class to process activity and return content for an ActivityRecord"""
-
-    def process(self, result_obj: ActivityRecord, code: Dict[str, Any], result: Dict[str, Any],
-                status: Dict[str, Any], metadata: Dict[str, Any]) -> ActivityRecord:
-        """Method to update a result object based on code and result data
+        E.g., no op for text, serialization and base64 encoding for an image
 
         Args:
-            result_obj(ActivityNote): An object containing the ActivityRecord
-            code(dict): A dict containing data specific to the dev env containing code that was executed
-            result(dict): A dict containing data specific to the dev env containing the result of code execution
-            status(dict): A dictionary containing the git status
-            metadata(dict): A dictionary containing Dev Env specific or other developer defined data
+            data(any): Data to convert to something that is able to be encoded by JSON
 
         Returns:
-            ActivityNote
+            Any
         """
         raise NotImplemented
 
+    @abc.abstractmethod
+    def serialize(self, data: Any) -> bytes:
+        """Method to serialize to binary, primarily for file storage
+
+        Args:
+            data(any): Data to convert to byte array
+
+        Returns:
+            bytes
+        """
+        raise NotImplemented
+
+    @abc.abstractmethod
+    def deserialize(self, data: bytes) -> Any:
+        """Method to deserialize from byte array to object type
+
+        Args:
+            data(any): Byte array to convert
+
+        Returns:
+            Any
+        """
+        raise NotImplemented

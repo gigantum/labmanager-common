@@ -22,10 +22,6 @@ import mockredis
 import redis
 from unittest.mock import patch
 import os
-from lmcommon.labbook import LabBook
-import tempfile
-import uuid
-import shutil
 from jupyter_client.manager import start_new_kernel
 import json
 from pkg_resources import resource_filename
@@ -53,38 +49,6 @@ def redis_client(monkeypatch):
     yield redis_conn
 
     redis_conn.flushdb()
-
-
-@pytest.fixture()
-def mock_labbook():
-    """A pytest fixture that creates a temporary directory, config file and lab book"""
-    # Create a temporary working directory
-    temp_dir = os.path.join(tempfile.tempdir, uuid.uuid4().hex)
-    os.makedirs(temp_dir)
-
-    with tempfile.NamedTemporaryFile(mode="wt") as fp:
-        # Write a temporary config file
-        fp.write("""core:
-  team_mode: false 
-  
-git:
-  backend: 'filesystem'
-  working_directory: '{}'""".format(temp_dir))
-        fp.seek(0)
-
-        # Create labbook
-        lb = LabBook(fp.name)
-        lb.new(owner={"username": "default"}, name="test-labbook", description="my first labbook")
-
-        # Create dummy file in lab book
-        dummy_file = os.path.join(lb.root_dir, 'Test.ipynb')
-        with open(dummy_file, 'wt') as tf:
-            tf.write("Dummy file")
-
-        yield lb, fp.name, dummy_file
-
-    # Remove the temp_dir
-    shutil.rmtree(temp_dir)
 
 
 @pytest.fixture()

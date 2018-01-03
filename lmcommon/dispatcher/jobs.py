@@ -57,6 +57,7 @@ def export_labbook_as_zip(labbook_path: str, lb_export_directory: str) -> str:
 
         labbook: LabBook = LabBook()
         labbook.from_directory(labbook_path)
+        labbook.local_sync()
 
         logger.info(f"(Job {p}) Exporting `{labbook.root_dir}` to `{lb_export_directory}`")
         if not os.path.exists(lb_export_directory):
@@ -126,6 +127,20 @@ def import_labboook_from_zip(archive_path: str, username: str, owner: str,
         new_lb_path = os.path.join(lb_containing_dir, inferred_labbook_name)
         if not os.path.isdir(new_lb_path):
             raise ValueError(f"(Job {p}) Expected LabBook not found at {new_lb_path}")
+
+        # Make the user also the new owner of the Labbook on import.
+        lb = LabBook()
+        lb.from_directory(new_lb_path)
+        d = lb.data
+        if d:
+            d['owner']['username'] = owner
+        lb._save_labbook_data()
+
+        # Also, remove any lingering remotes. If it gets re-published, it will be to a new remote.
+        if lb.has_remote:
+            lb.git.remove_remote('origin')
+        # This makes sure the working directory is set properly.
+        lb.local_sync(username=username)
 
         logger.info(f"(Job {p}) LabBook {inferred_labbook_name} imported to {new_lb_path}")
         return new_lb_path

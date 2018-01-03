@@ -24,6 +24,8 @@ import os
 import re
 import shutil
 
+from typing import Dict, List, Optional, Tuple
+
 from lmcommon.logging import LMLogger
 
 logger = LMLogger.get_logger()
@@ -142,11 +144,12 @@ class GitFilesystem(GitRepoInterface):
         logger.info("Initializing Git repository in {}".format(self.working_directory))
         self.repo = Repo.init(self.working_directory, bare=bare)
 
-    def clone(self, source):
+    def clone(self, source, directory: Optional[str] = None):
         """Clone a repo
 
         Args:
             source (str): Git ssh or https string to clone
+            directory(str): Directory to clone into (optional argument)
 
         Returns:
             None
@@ -154,11 +157,11 @@ class GitFilesystem(GitRepoInterface):
         if self.repo:
             raise ValueError("Cannot init an existing git repository. Choose a different working directory")
 
-        logger.info("Cloning Git repository from {} into {}".format(source, self.working_directory))
-        self.repo = Repo.clone_from(source, self.working_directory)
+        logger.info("Cloning Git repository from {} into {}".format(source, directory or self.working_directory))
+        self.repo = Repo.clone_from(source, directory or self.working_directory)
 
     # LOCAL CHANGE METHODS
-    def status(self):
+    def status(self) -> Dict[str, List[Tuple[str, str]]]:
         """Get the status of a repo
 
         Should return a dictionary of lists of tuples of the following format:
@@ -410,7 +413,7 @@ class GitFilesystem(GitRepoInterface):
         return self.repo.index.commit(message, author=self.author, committer=self.committer)
 
     # HISTORY METHODS
-    def log(self, max_count=None, filename=None, skip=None, since=None, author=None):
+    def log(self, path_info=None, max_count=None, filename=None, skip=None, since=None, author=None):
         """Method to get the commit history, optionally for a single file, with pagination support
 
         Returns an ordered list of dictionaries, one entry per commit. Dictionary format:
@@ -424,6 +427,7 @@ class GitFilesystem(GitRepoInterface):
             }
 
         Args:
+            path_info(str): Optional path info to filter (e.g., hash1, hash2..hash1, master)
             filename(str): Optional filename to filter on
             max_count(int): Optional number of commit records to return
             skip(int): Optional number of commit records to skip (supports building pagination)
@@ -450,7 +454,10 @@ class GitFilesystem(GitRepoInterface):
         if author:
             kwargs["author"] = author
 
-        commits = list(self.repo.iter_commits(self.get_current_branch_name(), **kwargs))
+        if path_info:
+            commits = list(self.repo.iter_commits(path_info, **kwargs))
+        else:
+            commits = list(self.repo.iter_commits(self.get_current_branch_name(), **kwargs))
 
         result = []
         for c in commits:
@@ -548,7 +555,13 @@ class GitFilesystem(GitRepoInterface):
         Returns:
             None
         """
-        self.repo.create_head(name)
+        branch_info_dict = self.list_branches()
+        for key in branch_info_dict.keys():
+            for n in branch_info_dict[key]:
+                if name == n:
+                    raise ValueError(f"Existing {key} branch `{n}` already exists")
+        #self.repo.create_head(name)
+        self.repo.git.checkout(b=name)
 
     def publish_branch(self, branch_name, remote_name="origin"):
         """Method to track a remote branch, check it out, and push
@@ -571,7 +584,7 @@ class GitFilesystem(GitRepoInterface):
         self.repo.heads[branch_name].checkout()
         remote.push(branch_name)
 
-    def list_branches(self):
+    def list_branches(self) -> Dict[str, List[str]]:
         """Method to list branches. Should return a dictionary of the format:
 
             {
@@ -644,12 +657,12 @@ class GitFilesystem(GitRepoInterface):
 
         self.repo.heads[old_name].rename(new_name)
 
-    def checkout(self, branch_name, remote="origin"):
+    def checkout(self, branch_name: str, remote: str = "origin"):
         """Method to switch to a different branch
 
         Args:
             branch_name(str): Name of the branch to switch to
-
+            remote(str): Remote to pull from
         Returns:
             None
         """
@@ -665,6 +678,11 @@ class GitFilesystem(GitRepoInterface):
                 self.repo.heads[branch_name].checkout()
         else:
             self.repo.heads[branch_name].checkout()
+
+        # Remove the checkout context id file if one exists
+        checkout_id_file = os.path.join(self.working_directory, '.gigantum', '.checkout')
+        if os.path.exists(checkout_id_file):
+            os.remove(checkout_id_file)
 
     # BRANCH METHODS
 

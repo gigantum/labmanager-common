@@ -66,11 +66,11 @@ class TestLabBookFavorites(object):
             data = json.load(ff)
 
         assert len(data) == 1
-        assert data[0]['key'] == "code/test.txt"
+        assert data[0]['key'] == "test.txt"
         assert data[0]['description'] == "My file with stuff"
         assert data[0]['is_dir'] is False
         assert data[0]['index'] == 0
-        assert result['key'] == "code/test.txt"
+        assert result['key'] == "test.txt"
         assert result['description'] == "My file with stuff"
         assert result['is_dir'] is False
         assert result['index'] == 0
@@ -111,15 +111,15 @@ class TestLabBookFavorites(object):
             data = json.load(ff)
 
         assert len(data) == 2
-        assert data[0]['key'] == "code/test.txt"
+        assert data[0]['key'] == "test.txt"
         assert data[0]['description'] == "My file with stuff"
         assert data[0]['is_dir'] is False
         assert data[0]['index'] == 0
-        assert data[1]['key'] == "code/test2.txt"
+        assert data[1]['key'] == "test2.txt"
         assert data[1]['description'] == "My file with stuff 2"
         assert data[1]['is_dir'] is False
         assert data[1]['index'] == 1
-        assert result['key'] == "code/test2.txt"
+        assert result['key'] == "test2.txt"
         assert result['description'] == "My file with stuff 2"
         assert result['is_dir'] is False
         assert result['index'] == 1
@@ -141,11 +141,11 @@ class TestLabBookFavorites(object):
             data = json.load(ff)
 
         assert len(data) == 2
-        assert data[0]['key'] == "code/test1.txt"
+        assert data[0]['key'] == "test1.txt"
         assert data[0]['description'] == "My file with stuff 1"
         assert data[0]['is_dir'] is False
         assert data[0]['index'] == 0
-        assert data[1]['key'] == "code/test2.txt"
+        assert data[1]['key'] == "test2.txt"
         assert data[1]['description'] == "My file with stuff 2"
         assert data[1]['is_dir'] is False
         assert data[1]['index'] == 1
@@ -163,19 +163,19 @@ class TestLabBookFavorites(object):
             data = json.load(ff)
 
         assert len(data) == 3
-        assert data[0]['key'] == "code/test1.txt"
+        assert data[0]['key'] == "test1.txt"
         assert data[0]['description'] == "My file with stuff 1"
         assert data[0]['is_dir'] is False
         assert data[0]['index'] == 0
-        assert data[1]['key'] == "code/test3.txt"
+        assert data[1]['key'] == "test3.txt"
         assert data[1]['description'] == "My file with stuff 3"
         assert data[1]['is_dir'] is False
         assert data[1]['index'] == 1
-        assert result['key'] == "code/test3.txt"
+        assert result['key'] == "test3.txt"
         assert result['description'] == "My file with stuff 3"
         assert result['is_dir'] is False
         assert result['index'] == 1
-        assert data[2]['key'] == "code/test2.txt"
+        assert data[2]['key'] == "test2.txt"
         assert data[2]['description'] == "My file with stuff 2"
         assert data[2]['is_dir'] is False
         assert data[2]['index'] == 2
@@ -196,7 +196,7 @@ class TestLabBookFavorites(object):
             data = json.load(ff)
 
         assert len(data) == 1
-        assert data[0]['key'] == "code/fav/"
+        assert data[0]['key'] == "fav/"
         assert data[0]['description'] == "Dir with stuff"
         assert data[0]['is_dir'] is True
         assert data[0]['index'] == 0
@@ -222,7 +222,7 @@ class TestLabBookFavorites(object):
         with open(os.path.join(favorites_dir, 'code.json'), 'rt') as ff:
             data = json.load(ff)
         assert len(data) == 1
-        assert data[0]['key'] == "code/test1.txt"
+        assert data[0]['key'] == "test1.txt"
         assert data[0]['description'] == "My file with stuff 1"
         assert data[0]['is_dir'] is False
         assert data[0]['index'] == 0
@@ -230,7 +230,7 @@ class TestLabBookFavorites(object):
         with open(os.path.join(favorites_dir, 'input.json'), 'rt') as ff:
             data = json.load(ff)
         assert len(data) == 1
-        assert data[0]['key'] == "input/test2.txt"
+        assert data[0]['key'] == "test2.txt"
         assert data[0]['description'] == "My file with stuff 2"
         assert data[0]['is_dir'] is False
         assert data[0]['index'] == 0
@@ -238,7 +238,7 @@ class TestLabBookFavorites(object):
         with open(os.path.join(favorites_dir, 'output.json'), 'rt') as ff:
             data = json.load(ff)
         assert len(data) == 1
-        assert data[0]['key'] == "output/test3.txt"
+        assert data[0]['key'] == "test3.txt"
         assert data[0]['description'] == "My file with stuff 3"
         assert data[0]['is_dir'] is False
         assert data[0]['index'] == 0
@@ -279,7 +279,7 @@ class TestLabBookFavorites(object):
             data = json.load(ff)
 
         assert len(data) == 1
-        assert data[0]['key'] == "code/test2.txt"
+        assert data[0]['key'] == "test2.txt"
         assert data[0]['description'] == "My file with stuff 2"
         assert data[0]['is_dir'] is False
         assert data[0]['index'] == 0
@@ -301,15 +301,295 @@ class TestLabBookFavorites(object):
 
         data = mock_labbook[2].get_favorites('code')
         assert len(data) == 3
-        assert data[0]['key'] == "code/test1.txt"
+        assert data[0]['key'] == "test1.txt"
         assert data[0]['description'] == "My file with stuff 1"
         assert data[0]['is_dir'] is False
         assert data[0]['index'] == 0
-        assert data[1]['key'] == "code/test2.txt"
+        assert data[1]['key'] == "test2.txt"
         assert data[1]['description'] == "My file with stuff 2"
         assert data[1]['is_dir'] is False
         assert data[1]['index'] == 1
-        assert data[2]['key'] == "code/tester/"
+        assert data[2]['key'] == "tester/"
         assert data[2]['description'] == "My test dir"
         assert data[2]['is_dir'] is True
         assert data[2]['index'] == 2
+
+    def test_update_description(self, mock_labbook):
+        """Test updating a description"""
+        with open(os.path.join(mock_labbook[1], 'code', 'test1.txt'), 'wt') as test_file:
+            test_file.write("blah1")
+
+        # Expect error since favorite doesn't exist yet
+        with pytest.raises(ValueError):
+            mock_labbook[2].update_favorite('code', 0, new_description="UPDATED")
+
+        # Expect error since `codasdfasdfe` isn't a valid labbook section
+        with pytest.raises(ValueError):
+            mock_labbook[2].update_favorite('codasdfasdfe', 0, new_description="UPDATED")
+
+        # Create favorite
+        mock_labbook[2].create_favorite("code", "test1.txt", description="My fav thingy")
+
+        # Expect errors due to index values
+        with pytest.raises(ValueError):
+            mock_labbook[2].update_favorite('code', 1, new_description="UPDATED")
+
+        with pytest.raises(ValueError):
+            mock_labbook[2].update_favorite('code', -1, new_description="UPDATED")
+
+        fav = mock_labbook[2].update_favorite('code', 0, new_description="UPDATED")
+        assert fav['key'] == "test1.txt"
+        assert fav['description'] == "UPDATED"
+        assert fav['is_dir'] is False
+
+        data = mock_labbook[2].get_favorites('code')
+        assert len(data) == 1
+        assert data[0]['key'] == "test1.txt"
+        assert data[0]['description'] == "UPDATED"
+        assert data[0]['is_dir'] is False
+        assert data[0]['index'] == 0
+
+    def test_update_smaller_index_and_description(self, mock_labbook):
+        """Test updating a description and index"""
+        with open(os.path.join(mock_labbook[1], 'code', 'test1.txt'), 'wt') as test_file:
+            test_file.write("blah1")
+        with open(os.path.join(mock_labbook[1], 'code', 'test2.txt'), 'wt') as test_file:
+            test_file.write("blah2")
+        with open(os.path.join(mock_labbook[1], 'code', 'test3.txt'), 'wt') as test_file:
+            test_file.write("blah3")
+        os.makedirs(os.path.join(mock_labbook[1], 'code', 'tester'))
+
+        mock_labbook[2].create_favorite("code", "test1.txt", description="My file with stuff 1")
+        mock_labbook[2].create_favorite("code", "test2.txt", description="My file with stuff 2")
+        mock_labbook[2].create_favorite("code", "test3.txt", description="My file with stuff 3")
+        mock_labbook[2].create_favorite("code", "tester/", is_dir=True, description="My test dir")
+
+        data = mock_labbook[2].get_favorites('code')
+        assert len(data) == 4
+        assert data[0]['key'] == "test1.txt"
+        assert data[0]['description'] == "My file with stuff 1"
+        assert data[0]['is_dir'] is False
+        assert data[0]['index'] == 0
+        assert data[1]['key'] == "test2.txt"
+        assert data[1]['description'] == "My file with stuff 2"
+        assert data[1]['is_dir'] is False
+        assert data[1]['index'] == 1
+        assert data[2]['key'] == "test3.txt"
+        assert data[2]['description'] == "My file with stuff 3"
+        assert data[2]['is_dir'] is False
+        assert data[2]['index'] == 2
+        assert data[3]['key'] == "tester/"
+        assert data[3]['description'] == "My test dir"
+        assert data[3]['is_dir'] is True
+        assert data[3]['index'] == 3
+
+        fav = mock_labbook[2].update_favorite('code', 2, new_description="UPDATED", new_index=1)
+        assert fav['key'] == "test3.txt"
+        assert fav['description'] == "UPDATED"
+        assert fav['is_dir'] is False
+        assert fav['index'] == 1
+
+        data = mock_labbook[2].get_favorites('code')
+        assert len(data) == 4
+        assert data[0]['key'] == "test1.txt"
+        assert data[0]['description'] == "My file with stuff 1"
+        assert data[0]['is_dir'] is False
+        assert data[0]['index'] == 0
+        assert data[1]['key'] == "test3.txt"
+        assert data[1]['description'] == "UPDATED"
+        assert data[1]['is_dir'] is False
+        assert data[1]['index'] == 1
+        assert data[2]['key'] == "test2.txt"
+        assert data[2]['description'] == "My file with stuff 2"
+        assert data[2]['is_dir'] is False
+        assert data[2]['index'] == 2
+        assert data[3]['key'] == "tester/"
+        assert data[3]['description'] == "My test dir"
+        assert data[3]['is_dir'] is True
+        assert data[3]['index'] == 3
+
+    def test_update_larger_index_and_description(self, mock_labbook):
+        """Test updating a description and index"""
+        with open(os.path.join(mock_labbook[1], 'code', 'test1.txt'), 'wt') as test_file:
+            test_file.write("blah1")
+        with open(os.path.join(mock_labbook[1], 'code', 'test2.txt'), 'wt') as test_file:
+            test_file.write("blah2")
+        with open(os.path.join(mock_labbook[1], 'code', 'test3.txt'), 'wt') as test_file:
+            test_file.write("blah3")
+        os.makedirs(os.path.join(mock_labbook[1], 'code', 'tester'))
+
+        mock_labbook[2].create_favorite("code", "test1.txt", description="My file with stuff 1")
+        mock_labbook[2].create_favorite("code", "test2.txt", description="My file with stuff 2")
+        mock_labbook[2].create_favorite("code", "test3.txt", description="My file with stuff 3")
+        mock_labbook[2].create_favorite("code", "tester/", is_dir=True, description="My test dir")
+
+        data = mock_labbook[2].get_favorites('code')
+        assert len(data) == 4
+        assert data[0]['key'] == "test1.txt"
+        assert data[0]['description'] == "My file with stuff 1"
+        assert data[0]['is_dir'] is False
+        assert data[0]['index'] == 0
+        assert data[1]['key'] == "test2.txt"
+        assert data[1]['description'] == "My file with stuff 2"
+        assert data[1]['is_dir'] is False
+        assert data[1]['index'] == 1
+        assert data[2]['key'] == "test3.txt"
+        assert data[2]['description'] == "My file with stuff 3"
+        assert data[2]['is_dir'] is False
+        assert data[2]['index'] == 2
+        assert data[3]['key'] == "tester/"
+        assert data[3]['description'] == "My test dir"
+        assert data[3]['is_dir'] is True
+        assert data[3]['index'] == 3
+
+        fav = mock_labbook[2].update_favorite('code', 0, new_description="UPDATED", new_index=2)
+        assert fav['key'] == "test1.txt"
+        assert fav['description'] == "UPDATED"
+        assert fav['is_dir'] is False
+        assert fav['index'] == 2
+
+        data = mock_labbook[2].get_favorites('code')
+        assert len(data) == 4
+        assert data[0]['key'] == "test2.txt"
+        assert data[0]['description'] == "My file with stuff 2"
+        assert data[0]['is_dir'] is False
+        assert data[0]['index'] == 0
+        assert data[1]['key'] == "test3.txt"
+        assert data[1]['description'] == "My file with stuff 3"
+        assert data[1]['is_dir'] is False
+        assert data[1]['index'] == 1
+        assert data[2]['key'] == "test1.txt"
+        assert data[2]['description'] == "UPDATED"
+        assert data[2]['is_dir'] is False
+        assert data[2]['index'] == 2
+        assert data[3]['key'] == "tester/"
+        assert data[3]['description'] == "My test dir"
+        assert data[3]['is_dir'] is True
+        assert data[3]['index'] == 3
+
+        fav = mock_labbook[2].update_favorite('code', 0, new_description="UPDATED 2", new_index=3)
+        assert fav['key'] == "test2.txt"
+        assert fav['description'] == "UPDATED 2"
+        assert fav['is_dir'] is False
+        assert fav['index'] == 3
+
+        data = mock_labbook[2].get_favorites('code')
+        assert len(data) == 4
+        assert data[0]['key'] == "test3.txt"
+        assert data[0]['description'] == "My file with stuff 3"
+        assert data[0]['is_dir'] is False
+        assert data[0]['index'] == 0
+        assert data[1]['key'] == "test1.txt"
+        assert data[1]['description'] == "UPDATED"
+        assert data[1]['is_dir'] is False
+        assert data[1]['index'] == 1
+        assert data[2]['key'] == "tester/"
+        assert data[2]['description'] == "My test dir"
+        assert data[2]['is_dir'] is True
+        assert data[2]['index'] == 2
+        assert data[3]['key'] == "test2.txt"
+        assert data[3]['description'] == "UPDATED 2"
+        assert data[3]['is_dir'] is False
+        assert data[3]['index'] == 3
+
+    def test_update_larger_index_and_description_and_key(self, mock_labbook):
+        """Test updating a description and index and key"""
+        with open(os.path.join(mock_labbook[1], 'code', 'test1.txt'), 'wt') as test_file:
+            test_file.write("blah1")
+        with open(os.path.join(mock_labbook[1], 'code', 'test2.txt'), 'wt') as test_file:
+            test_file.write("blah2")
+        with open(os.path.join(mock_labbook[1], 'code', 'test3.txt'), 'wt') as test_file:
+            test_file.write("blah3")
+        os.makedirs(os.path.join(mock_labbook[1], 'code', 'tester'))
+
+        mock_labbook[2].create_favorite("code", "test1.txt", description="My file with stuff 1")
+        mock_labbook[2].create_favorite("code", "test2.txt", description="My file with stuff 2")
+        mock_labbook[2].create_favorite("code", "test3.txt", description="My file with stuff 3")
+        mock_labbook[2].create_favorite("code", "tester/", is_dir=True, description="My test dir")
+
+        data = mock_labbook[2].get_favorites('code')
+        assert len(data) == 4
+        assert data[0]['key'] == "test1.txt"
+        assert data[0]['description'] == "My file with stuff 1"
+        assert data[0]['is_dir'] is False
+        assert data[0]['index'] == 0
+        assert data[1]['key'] == "test2.txt"
+        assert data[1]['description'] == "My file with stuff 2"
+        assert data[1]['is_dir'] is False
+        assert data[1]['index'] == 1
+        assert data[2]['key'] == "test3.txt"
+        assert data[2]['description'] == "My file with stuff 3"
+        assert data[2]['is_dir'] is False
+        assert data[2]['index'] == 2
+        assert data[3]['key'] == "tester/"
+        assert data[3]['description'] == "My test dir"
+        assert data[3]['is_dir'] is True
+        assert data[3]['index'] == 3
+
+        # Expect error since rename hasn't happened yet.
+        with pytest.raises(ValueError):
+            mock_labbook[2].update_favorite('code', 0, new_description="UPDATED", new_index=2,
+                                            new_key="code/UPDATED.txt")
+
+        os.rename(os.path.join(mock_labbook[1], 'code', 'test1.txt'),
+                  os.path.join(mock_labbook[1], 'code', 'UPDATED.txt'))
+        fav = mock_labbook[2].update_favorite('code', 0, new_description="UPDATED", new_index=2,
+                                              new_key="UPDATED.txt")
+        assert fav['key'] == "UPDATED.txt"
+        assert fav['description'] == "UPDATED"
+        assert fav['is_dir'] is False
+        assert fav['index'] == 2
+
+        data = mock_labbook[2].get_favorites('code')
+        assert len(data) == 4
+        assert data[0]['key'] == "test2.txt"
+        assert data[0]['description'] == "My file with stuff 2"
+        assert data[0]['is_dir'] is False
+        assert data[0]['index'] == 0
+        assert data[1]['key'] == "test3.txt"
+        assert data[1]['description'] == "My file with stuff 3"
+        assert data[1]['is_dir'] is False
+        assert data[1]['index'] == 1
+        assert data[2]['key'] == "UPDATED.txt"
+        assert data[2]['description'] == "UPDATED"
+        assert data[2]['is_dir'] is False
+        assert data[2]['index'] == 2
+        assert data[3]['key'] == "tester/"
+        assert data[3]['description'] == "My test dir"
+        assert data[3]['is_dir'] is True
+        assert data[3]['index'] == 3
+
+    def test_favorite_data_prop(self, mock_labbook):
+        """Test accessing the favorites cached data property"""
+        with open(os.path.join(mock_labbook[1], 'code', 'test1.txt'), 'wt') as test_file:
+            test_file.write("blah1")
+        with open(os.path.join(mock_labbook[1], 'input', 'test2.txt'), 'wt') as test_file:
+            test_file.write("blah2")
+        with open(os.path.join(mock_labbook[1], 'output', 'test3.txt'), 'wt') as test_file:
+            test_file.write("blah3")
+
+        os.makedirs(os.path.join(mock_labbook[1], 'code', 'subdir1'))
+        os.makedirs(os.path.join(mock_labbook[1], 'input', 'subdir2'))
+
+        mock_labbook[2].create_favorite("code", "test1.txt", description="My file with stuff 1")
+        mock_labbook[2].create_favorite("input", "test2.txt", description="My file with stuff 2")
+        mock_labbook[2].create_favorite("output", "test3.txt", description="My file with stuff 3")
+        mock_labbook[2].create_favorite("code", "subdir1/", is_dir=True, description="Test dir 1")
+        mock_labbook[2].create_favorite("input", "subdir2/", is_dir=True, description="Test dir 2")
+
+        assert mock_labbook[2]._favorite_keys is None
+
+        favs = mock_labbook[2].favorite_keys
+        assert len(favs['code']) == 2
+        assert len(favs['input']) == 2
+        assert len(favs['output']) == 1
+
+        assert favs['code'][0] == 'test1.txt'
+        assert favs['code'][1] == 'subdir1/'
+        assert favs['input'][0] == 'test2.txt'
+        assert favs['input'][1] == 'subdir2/'
+        assert favs['output'][0] == 'test3.txt'
+
+        mock_labbook[2]._favorite_keys['code'].append("test value added")
+        favs_again = mock_labbook[2].favorite_keys
+        assert "test value added" in favs_again['code']
