@@ -35,6 +35,7 @@ from lmcommon.gitlib import get_git_interface, GitAuthor, GitRepoInterface
 from lmcommon.gitlib.gitlab import GitLabRepositoryManager
 from lmcommon.logging import LMLogger
 from lmcommon.labbook.schemas import validate_schema
+from lmcommon.labbook import shims
 from lmcommon.activity import ActivityStore, ActivityType, ActivityRecord, ActivityDetailType, ActivityDetailRecord
 
 from redis import StrictRedis
@@ -834,6 +835,11 @@ class LabBook(object):
     def publish(self, username: str, access_token: Optional[str] = None, remote: str = "origin") -> None:
         try:
             logger.info(f"Publishing {str(self)} for user {username} to remote {remote}")
+
+            if self.active_branch == 'master':
+                logger.warning(f"Applying shim in {str(self)} to replace branch master")
+                shims.to_workspace_branch(self, username)
+
             if self.has_remote:
                 raise ValueError("Cannot publish Labbook when remote already set.")
             with self.lock_labbook():
@@ -1666,6 +1672,11 @@ class LabBook(object):
         # Load LabBook data file
         self._load_labbook_data()
         self._validate_labbook_data()
+
+        # If an old labbook that still uses master branch
+        # Eventually, this clause will be removed.
+        if self.active_branch == 'master':
+            shims.to_workspace_branch(self)
 
     def from_name(self, username: str, owner: str, labbook_name: str):
         """Method to populate a LabBook instance based on the user and name of the labbook

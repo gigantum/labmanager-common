@@ -31,6 +31,7 @@ from docker.errors import NotFound
 from lmcommon.activity.monitors.devenv import DevEnvMonitorManager
 from lmcommon.configuration import get_docker_client, Configuration
 from lmcommon.labbook import LabBook
+from lmcommon.labbook import shims as labbook_shims
 from lmcommon.logging import LMLogger
 
 
@@ -57,6 +58,11 @@ def export_labbook_as_zip(labbook_path: str, lb_export_directory: str) -> str:
 
         labbook: LabBook = LabBook()
         labbook.from_directory(labbook_path)
+
+        if labbook.active_branch == 'master':
+            logger.warning(f"Using shim to upgrade {str(labbook)}")
+            labbook_shims.to_workspace_branch(labbook)
+
         labbook.local_sync()
 
         logger.info(f"(Job {p}) Exporting `{labbook.root_dir}` to `{lb_export_directory}`")
@@ -109,7 +115,7 @@ def import_labboook_from_zip(archive_path: str, username: str, owner: str,
 
         logger.info(f"(Job {p}) Using {config_file or 'default'} LabManager configuration.")
         lm_config = Configuration(config_file)
-        lm_working_dir: str = lm_config.config['git']['working_directory']
+        lm_working_dir: str = os.path.expanduser(lm_config.config['git']['working_directory'])
 
         # Infer the final labbook name
         inferred_labbook_name = os.path.basename(archive_path).split('_')[0]
