@@ -19,6 +19,7 @@
 # SOFTWARE.
 from datetime import datetime
 from typing import (Any, Callable, cast, Dict, List, Optional, Tuple)
+import os
 
 import redis
 import rq
@@ -60,13 +61,19 @@ class JobKey(object):
 
 
 class JobStatus(object):
-    """ Represents a background job known to the backend processing system. """
+    """ Represents a background job known to the backend processing system. Represents the state of the background
+        job at a particular point in time. Does not re-query to fetch fresher information (Because Jobs may be cleaned
+        up in the backend and information may be lost) """
     def __init__(self, redis_dict: Dict[str, object]) -> None:
+        # Because this captures the state of the Job at a given point in time, it should
+        # carry the timestamp of this snapshot.
+        self.timestamp = datetime.now()
         self.job_key: JobKey = JobKey(cast(str, redis_dict['_key']))
         self.status: Optional[str] = cast(str, redis_dict.get('status'))
         self.result: Optional[object] = cast(str, redis_dict.get('result'))
         self.description: Optional[str] = cast(str, redis_dict.get('description'))
         self.meta: Dict[str, str] = cast(Dict[str, str], redis_dict.get('meta') or {})
+        self.exc_info: Optional[str] = cast(str, redis_dict.get('exc_info'))
         self.started_at: Optional[datetime] = cast(datetime, redis_dict.get('started_at'))
         self.finished_at: Optional[datetime] = cast(datetime, redis_dict.get('finished_at'))
 
@@ -75,6 +82,14 @@ class JobStatus(object):
 
     def __eq__(self, other: object) -> bool:
         return type(other) == type(self) and str(self) == str(other)
+
+    @property
+    def failure_message(self) -> Optional[str]:
+        if self.exc_info:
+            lines = [l for l in self.exc_info.split(os.linesep) if l]
+            return None if len(lines) == 0 else lines[-1]
+        else:
+            return None
 
 
 class Dispatcher(object):

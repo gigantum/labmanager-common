@@ -24,6 +24,7 @@ import time
 import shutil
 import pytest
 import datetime
+import pprint
 
 import multiprocessing
 import tempfile
@@ -105,6 +106,8 @@ class TestDispatcher(object):
         assert res
         assert res.status == 'finished'
         assert res.result == 0
+        assert res.failure_message is None
+
 
         w.terminate()
 
@@ -116,6 +119,7 @@ class TestDispatcher(object):
         res = d.query_task(job_ref)
         assert res
         assert res.status == 'failed'
+        assert res.failure_message == 'Exception: Intentional Exception from job `test_exit_fail`'
 
         w.terminate()
 
