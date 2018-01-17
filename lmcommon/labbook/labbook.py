@@ -29,6 +29,7 @@ import json
 import time
 from contextlib import contextmanager
 from pkg_resources import resource_filename
+import gitdb
 
 from lmcommon.configuration import Configuration
 from lmcommon.gitlib import get_git_interface, GitAuthor, GitRepoInterface
@@ -384,6 +385,7 @@ class LabBook(object):
         with self.lock_labbook():
             with open(os.path.join(self.root_dir, ".gigantum", "labbook.yaml"), 'wt') as lbfile:
                 lbfile.write(yaml.dump(self._data, default_flow_style=False))
+                lbfile.flush()
 
     def _load_labbook_data(self) -> None:
         """Method to load the labbook YAML file to a dictionary
@@ -546,12 +548,15 @@ class LabBook(object):
         """Return true if the Git repo is ready to be push, pulled, or merged. I.e., no uncommitted changes
         or un-tracked files. """
 
-        result_status = self.git.status()
-        for status_key in result_status.keys():
-            n = result_status.get(status_key)
-            if n:
-                return False
-        return True
+        try:
+            result_status = self.git.status()
+            for status_key in result_status.keys():
+                n = result_status.get(status_key)
+                if n:
+                    return False
+            return True
+        except gitdb.exc.BadName:
+            return False
 
     def checkout_branch(self, branch_name: str, new: bool = False) -> None:
         """

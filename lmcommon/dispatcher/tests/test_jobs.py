@@ -61,8 +61,9 @@ class TestJobs(object):
 
             # New path should reflect username of new owner and user.
             assert imported_lb_path == lb_root.replace('/test/test/', '/cat/cat/')
-            import_lb = LabBook()
+            import_lb = LabBook(mock_config_with_repo[0])
             import_lb.from_directory(imported_lb_path)
+            assert import_lb.data['owner']['username'] == 'cat'
             # After importing, the new user (in this case "cat") should be the current, active workspace.
             # And be created, if necessary.
             assert import_lb.active_branch == "gm.workspace-cat"
@@ -74,8 +75,9 @@ class TestJobs(object):
 
             # New path should reflect username of new owner and user.
             assert user_import_lb
-            import_lb2 = LabBook()
+            import_lb2 = LabBook(mock_config_with_repo[0])
             import_lb2.from_directory(user_import_lb)
+            assert import_lb2.data['owner']['username'] == 'test'
             # After importing, the new user (in this case "cat") should be the current, active workspace.
             # And be created, if necessary.
             assert import_lb2.active_branch == "gm.workspace-test"

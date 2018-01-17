@@ -24,6 +24,7 @@ import os
 import time
 from typing import Optional
 import zipfile
+import shutil
 
 from rq import get_current_job
 from docker.errors import NotFound
@@ -135,18 +136,28 @@ def import_labboook_from_zip(archive_path: str, username: str, owner: str,
             raise ValueError(f"(Job {p}) Expected LabBook not found at {new_lb_path}")
 
         # Make the user also the new owner of the Labbook on import.
-        lb = LabBook()
+        lb = LabBook(config_file)
         lb.from_directory(new_lb_path)
-        d = lb.data
-        if d:
-            d['owner']['username'] = owner
-        lb._save_labbook_data()
+        if not lb._data:
+            raise ValueError(f'Could not load data from imported LabBook {lb}')
+        lb._data['owner']['username'] = owner
 
         # Also, remove any lingering remotes. If it gets re-published, it will be to a new remote.
         if lb.has_remote:
             lb.git.remove_remote('origin')
         # This makes sure the working directory is set properly.
         lb.local_sync(username=username)
+
+        if not lb.is_repo_clean:
+            raise ValueError(f'Imported LabBook {lb} should have clean repo after import')
+
+        lb._save_labbook_data()
+        if not lb.is_repo_clean:
+            lb.git.add('.gigantum/labbook.yaml')
+            lb.git.commit(message="Updated owner in labbook.yaml")
+
+        if lb._data['owner']['username'] != owner:
+            raise ValueError(f'Error importing LabBook {lb} - cannot set owner')
 
         logger.info(f"(Job {p}) LabBook {inferred_labbook_name} imported to {new_lb_path}")
         return new_lb_path
