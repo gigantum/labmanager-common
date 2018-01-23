@@ -220,7 +220,10 @@ class RepositoryManager(object):
             components = list(index_data[repo].keys())
 
             for component in components:
-                component_list.append(list(index_data[repo][component].items())[0][1])
+                # Sort based on the revision
+                revs = list(index_data[repo][component].items())
+                sorted(revs, key=operator.itemgetter(0))
+                component_list.append(revs[0][1])
 
         return sorted(component_list, key=lambda n: n['id'])
 
