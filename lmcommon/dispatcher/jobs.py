@@ -286,7 +286,7 @@ def stop_docker_container(image_tag):
         raise
 
 
-def run_dev_env_monitor(dev_env_name, key):
+def run_dev_env_monitor(dev_env_name, key) -> int:
     """Run method to check if new Activity Monitors for a given dev env need to be started/stopped
 
         Args:
@@ -303,6 +303,8 @@ def run_dev_env_monitor(dev_env_name, key):
     try:
         demm = DevEnvMonitorManager()
         dev_env = demm.get_monitor_instance(dev_env_name)
+        if not dev_env:
+            raise ValueError('dev_env is None')
         dev_env.run(key)
         return 0
     except Exception as e:

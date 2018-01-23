@@ -18,7 +18,7 @@ auth:
 # Environment Management Configuration
 environment:
   repo_url:
-    - "https://github.com/gig-dev/environment-components.git"
+    - "https://github.com/gig-dev/components2.git"
 
 # Git Configuration
 git:

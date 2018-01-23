@@ -20,16 +20,43 @@
 import datetime
 import os
 import yaml
-from typing import (Any, List, Dict)
+from typing import (Any, List, Dict, Tuple)
 import glob
+
+from typing import Optional
 
 
 from lmcommon.labbook import LabBook
 from lmcommon.environment import ComponentRepository  # type: ignore
 from lmcommon.logging import LMLogger
 from lmcommon.activity import ActivityStore, ActivityType, ActivityRecord, ActivityDetailType, ActivityDetailRecord
+from lmcommon.labbook.schemas import CURRENT_SCHEMA
 
 logger = LMLogger.get_logger()
+
+
+def strip_package_and_version(package_manager: str, package_str: str) -> Tuple[str, Optional[str]]:
+    """For a particular package encoded with version, this strips off the version and returns a tuple
+    containing (package-name, version). If version is not specified, it is None.
+    """
+    if package_manager not in ['pip3', 'pip2', 'pip', 'conda', 'apt']:
+        raise ValueError(f'Unsupported package manager: {package_manager}')
+
+    if package_manager in ['pip', 'pip2', 'pip3']:
+        if '==' in package_str:
+            t = package_str.split('==')
+            return t[0], t[1]
+        else:
+            return package_str, None
+
+    if package_manager == 'apt' or package_manager == 'conda':
+        if '=' in package_str:
+            t = package_str.split('=')
+            return t[0], t[1]
+        else:
+            return package_str, None
+
+    raise ValueError(f'Unsupported package manager: {package_manager}')
 
 
 class ComponentManager(object):
@@ -61,8 +88,7 @@ class ComponentManager(object):
             None
         """
         # Create/validate directory structure
-        subdirs = ['base_image',
-                   'dev_env',
+        subdirs = ['base',
                    'package_manager',
                    'custom']
 
@@ -101,32 +127,37 @@ exec gosu giguser "$@"
             self.labbook.git.add(entrypoint_file)
             self.labbook.git.commit(short_message)
 
-    def add_package(self, package_manager: str, package_name: str, package_version: str = None,
-                    force: bool = False) -> None:
+    def add_package(self, package_manager: str, package_name: str,
+                    package_version: Optional[str] = None, force: bool = False,
+                    from_base: bool = False) -> str:
         """Add a new yaml file describing the new package and its context to the labbook.
 
         Args:
-            package_manager(str): The package manager (eg., "apt" or "pip3")
-            package_name(str): Name of package (e.g., "docker" or "requests")
-            package_version(str): Unique indentifier or version, for now, can be None
-            force(bool): Force overwriting a component if it already exists (e.g. you want to update the version)
+            package_manager: The package manager (eg., "apt" or "pip3")
+            package_name: Name of package (e.g., "docker" or "requests")
+            package_version: Unique indentifier or version, for now, can be None
+            force: Force overwriting a component if it already exists (e.g. you want to update the version)
+            from_base: If a package in a base image, not deletable. Otherwise, can be deleted by LB user.
 
         Returns:
             None
         """
+
         if not package_manager:
             raise ValueError('Argument package_manager cannot be None or empty')
 
         if not package_name:
             raise ValueError('Argument package_name cannot be None or empty')
 
-        yaml_lines = ['# Generated on: {}'.format(str(datetime.datetime.now())),
-                      'package_manager: {}'.format(package_manager),
-                      'name: {}'.format(package_name),
-                      'version: {}'.format(package_version or 'null')]
+        version_str = f'"{package_version}"' if package_version else 'null'
 
-        version_s = '_{}'.format(package_version) if package_version else ''
-        yaml_filename = '{}_{}{}.yaml'.format(package_manager, package_name, version_s)
+        yaml_lines = ['# Generated on: {}'.format(str(datetime.datetime.now())),
+                      'manager: "{}"'.format(package_manager),
+                      'package: "{}"'.format(package_name),
+                      'version: {}'.format(version_str),
+                      f'from_base: {str(from_base).lower()}',
+                      f'schema: {CURRENT_SCHEMA}']
+        yaml_filename = '{}_{}.yaml'.format(package_manager, package_name)
         package_yaml_path = os.path.join(self.env_dir, 'package_manager', yaml_filename)
 
         # Write the YAML to the file
@@ -141,7 +172,7 @@ exec gosu giguser "$@"
 
         # Add to git
         short_message = "Add {} managed package: {} v{}".format(package_manager, package_name,
-                                                                package_version or 'Latest')
+                                                                package_version)
         self.labbook.git.add(package_yaml_path)
         commit = self.labbook.git.commit(short_message)
 
@@ -151,7 +182,7 @@ exec gosu giguser "$@"
 
         # Create activity record
         ar = ActivityRecord(ActivityType.ENVIRONMENT,
-                            message="Added new software package",
+                            message=f"Added new software package",
                             linked_commit=commit.hexsha,
                             tags=["environment", 'package_manager', package_manager])
         ar.add_detail_object(adr)
@@ -160,16 +191,17 @@ exec gosu giguser "$@"
         ars = ActivityStore(self.labbook)
         ars.create_activity_record(ar)
 
-    def add_component(self, component_class: str, repository: str, namespace: str, component: str, version: str,
+        return package_yaml_path
+
+    def add_component(self, component_class: str, repository: str, component: str, revision: int,
                       force: bool = False) -> None:
         """Method to add a component to a LabBook's environment
 
         Args:
-            component_class(str): The class of component (e.g. "base_image", "dev_env")
+            component_class(str): The class of component (e.g. "base", "custom", etc)
             repository(str): The Environment Component repository the component is in
-            namespace(str): The namespace the component is in
             component(str): The name of the component
-            version(str): The version to use
+            revision(int): The revision to use (r_<revision_) in yaml filename.
             force(bool): Force overwriting a component if it already exists (e.g. you want to update the version)
 
         Returns:
@@ -180,24 +212,20 @@ exec gosu giguser "$@"
             raise ValueError('component_class cannot be None or empty')
 
         if not repository:
-            raise ValueError('component_class cannot be None or empty')
-
-        if not namespace:
-            raise ValueError('namespace cannot be None or empty')
+            raise ValueError('repository cannot be None or empty')
 
         if not component:
             raise ValueError('component cannot be None or empty')
 
-        if not version:
-            raise ValueError('version cannot be None or empty')
+        logger.info(f"Adding {component_class} from {repository}: {component} rev{revision}")
 
         # Get the component
-        component_data = self.components.get_component(component_class, repository, namespace, component, version)
-
-        # Write to /.gigantum/env
-        component_filename = "{}_{}_{}.yaml".format(repository, namespace, component)
+        component_data = self.components.get_component(component_class, repository, component, revision)
+        component_filename = "{}_{}_r{}.yaml".format(repository, component, revision)
         component_file = os.path.join(self.env_dir, component_class, component_filename)
 
+        assert os.path.exists(self.env_dir)
+        assert os.path.exists(os.path.join(self.env_dir, component_class))
         if os.path.exists(component_file):
             if not force:
                 raise ValueError("The component {} already exists in this LabBook." +
@@ -208,21 +236,32 @@ exec gosu giguser "$@"
         with open(component_file, 'wt') as cf:
             cf.write(yaml.dump(component_data, default_flow_style=False))
 
+        if component_class == 'base':
+            preinstalled_packages = component_data['package_managers']
+            for manager in component_data['package_managers']:
+                for p_manager in manager.keys():
+                    for pkg in manager[p_manager]:
+                        pkg_name, pkg_version = strip_package_and_version(p_manager, pkg)
+                        self.add_package(package_manager=p_manager,
+                                         package_name=pkg_name,
+                                         package_version=pkg_version,
+                                         force=True,
+                                         from_base=True)
+
         logger.info(
             "Added {} environment component YAML file to Labbook {}".format(component_class, component_filename))
 
         # Add to git
-        short_message = "Add {} environment component: {} v{}".format(component_class, component, version)
+        short_message = "Add {} environment component: {} r{}".format(component_class, component, revision)
         self.labbook.git.add(component_file)
         commit = self.labbook.git.commit(short_message)
 
         # Create a ActivityRecord
         long_message = "Added a `{}` class environment component {}\n".format(component_class, component)
-        long_message = "{}\n{}\n\n".format(long_message, component_data['info']['description'])
+        long_message = "{}\n{}\n\n".format(long_message, component_data['description'])
         long_message = "{}  - repository: {}\n".format(long_message, repository)
-        long_message = "{}  - namespace: {}\n".format(long_message, namespace)
         long_message = "{}  - component: {}\n".format(long_message, component)
-        long_message = "{}  - version: {}\n".format(long_message, version)
+        long_message = "{}  - revision: {}\n".format(long_message, revision)
 
         # Create detail record
         adr = ActivityDetailRecord(ActivityDetailType.ENVIRONMENT)
@@ -253,10 +292,10 @@ exec gosu giguser "$@"
         if not os.path.exists(component_dir):
             raise ValueError("No components found for component class: {}".format(component_class))
 
+
         # Get all YAML files in dir
         yaml_files = glob.glob(os.path.join(component_dir, "*.yaml"))
         yaml_files = sorted(yaml_files)
-
         data = []
 
         # Read YAML files and write data to dictionary
@@ -264,5 +303,4 @@ exec gosu giguser "$@"
             with open(yf, 'rt') as yf_file:
                 yaml_data = yaml.load(yf_file)
                 data.append(yaml_data)
-
-        return data
+        return sorted(data, key=lambda elt : elt.get('id') or elt.get('manager'))

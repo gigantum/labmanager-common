@@ -34,6 +34,11 @@ from lmcommon.activity.detaildb import ActivityDetailDB
 from lmcommon.activity import ActivityStore
 
 
+ENV_UNIT_TEST_REPO = 'gig-dev_components2'
+ENV_UNIT_TEST_BASE = 'quickstart-jupyterlab'
+ENV_UNIT_TEST_REV = 1
+
+
 def _create_temp_work_dir(override_dict: dict = None):
     """Helper method to create a temporary working directory and associated config file"""
     def merge_dict(d1, d2) -> None:
@@ -56,7 +61,8 @@ def _create_temp_work_dir(override_dict: dict = None):
             'team_mode': False
         },
         'environment': {
-            'repo_url': ["https://github.com/gig-dev/environment-components.git"]
+            #'repo_url': ["https://github.com/gig-dev/environment-components.git"]
+            'repo_url': ["https://github.com/gig-dev/components2.git"]
         },
         'flask': {
             'DEBUG': False
@@ -141,6 +147,24 @@ def mock_config_with_repo():
     erm.update_repositories()
     erm.index_repositories()
     yield conf_file, working_dir
+    shutil.rmtree(working_dir)
+
+
+@pytest.fixture(scope="module")
+def setup_index():
+    """A pytest fixture that creates a temporary directory and a config file to match. Deletes directory after test"""
+    # Create a temporary working directory
+
+    conf_file, working_dir = _create_temp_work_dir()
+
+    # Run clone and index operation
+    erm = RepositoryManager(conf_file)
+    erm.update_repositories()
+    erm.index_repositories()
+
+    yield erm, working_dir, conf_file  # provide the fixture value
+
+    # Remove the temp_dir
     shutil.rmtree(working_dir)
 
 
@@ -261,8 +285,7 @@ def labbook_dir_tree():
 
         subdirs = [['.gigantum'],
                    ['.gigantum', 'env'],
-                   ['.gigantum', 'env', 'base_image'],
-                   ['.gigantum', 'env', 'dev_env'],
+                   ['.gigantum', 'env', 'base'],
                    ['.gigantum', 'env', 'custom'],
                    ['.gigantum', 'env', 'package_manager']]
 
@@ -270,12 +293,10 @@ def labbook_dir_tree():
             os.makedirs(os.path.join(tempdir, "my-temp-labbook", *subdir), exist_ok=True)
 
         with tempfile.TemporaryDirectory() as checkoutdir:
-            repo = git.Repo.clone_from("https://github.com/gig-dev/environment-components-dev.git", checkoutdir)
-            shutil.copy(os.path.join(checkoutdir, "base_image/gigantum/ubuntu1604-python3/ubuntu1604-python3-v0_4.yaml"),
-                        os.path.join(tempdir, "my-temp-labbook", ".gigantum", "env", "base_image"))
-            shutil.copy(os.path.join(checkoutdir, "dev_env/gigantum/jupyter-ubuntu/jupyter-ubuntu-v0_0.yaml"),
-                        os.path.join(tempdir, "my-temp-labbook", ".gigantum", "env", "dev_env"))
-            shutil.copy(os.path.join(checkoutdir, "custom/gigantum/ubuntu-python3-pillow/ubuntu-python3-pillow-v0_3.yaml"),
+            repo = git.Repo.clone_from("https://github.com/gig-dev/components2.git", checkoutdir)
+            shutil.copy(os.path.join(checkoutdir, "base/quickstart-jupyterlab/quickstart-jupyterlab_r0.yaml"),
+                        os.path.join(tempdir, "my-temp-labbook", ".gigantum", "env", "base"))
+            shutil.copy(os.path.join(checkoutdir, "custom/pillow/pillow_r0.yaml"),
                         os.path.join(tempdir, "my-temp-labbook", ".gigantum", "env", "custom"))
 
         yield os.path.join(tempdir, 'my-temp-labbook')

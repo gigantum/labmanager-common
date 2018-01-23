@@ -33,6 +33,9 @@ from lmcommon.labbook import LabBook
 from lmcommon.logging import LMLogger
 from lmcommon.activity import ActivityDetailType, ActivityType, ActivityRecord, ActivityDetailRecord, ActivityStore
 
+from .dockermapper import map_package_to_docker
+
+
 logger = LMLogger.get_logger()
 
 
@@ -68,14 +71,14 @@ class ImageBuilder(object):
             list
         """
         return [x for x in glob.glob("{}{}*.yaml".format(directory, os.path.sep))]
+        #return [n for n in os.listdir(directory) if '.yaml' in n]
 
     def _validate_labbook_tree(self) -> None:
         """Throw exception if labbook directory structure not in expected format. """
         subdirs = [['.gigantum'],
                    ['.gigantum', 'env'],
-                   ['.gigantum', 'env', 'base_image'],
+                   ['.gigantum', 'env', 'base'],
                    ['.gigantum', 'env', 'custom'],
-                   ['.gigantum', 'env', 'dev_env'],
                    ['.gigantum', 'env', 'package_manager']]
 
         for subdir in subdirs:
@@ -84,7 +87,7 @@ class ImageBuilder(object):
 
     def _import_baseimage_fields(self) -> Dict[str, Any]:
         """Load fields from base_image yaml file into a convenient dict. """
-        root_dir = os.path.join(self.labbook_directory, '.gigantum', 'env', 'base_image')
+        root_dir = os.path.join(self.labbook_directory, '.gigantum', 'env', 'base')
         base_images = self._get_yaml_files(root_dir)
 
         logger.debug("Searching {} for base image file".format(root_dir))
@@ -102,43 +105,18 @@ class ImageBuilder(object):
         fields = self._import_baseimage_fields()
         generation_ts = str(datetime.datetime.now())
         docker_owner_ns = fields['image']['namespace']
-        docker_repo = fields['image']['repo']
+        docker_repo = fields['image']['repository']
         docker_tag = fields['image']['tag']
 
         docker_lines: List[str] = []
         docker_lines.append("# Dockerfile generated on {}".format(generation_ts))
-        docker_lines.append("# Name: {}".format(fields["info"]["human_name"]))
-        docker_lines.append("# Description: {}".format(fields["info"]["description"]))
-        docker_lines.append("# Author: {} <{}>, {}".format(fields['author']['name'], fields['author']['email'],
-                                                           fields['author']['organization']))
+        docker_lines.append("# Name: {}".format(fields["name"]))
+        docker_lines.append("# Description: {}".format(fields["description"]))
         docker_lines.append("")
-        docker_lines.append("FROM {}/{}:{}".format(docker_owner_ns, docker_repo, docker_tag))
 
-        return docker_lines
-
-    def _load_devenv(self) -> List[str]:
-        """Load dev environments from yaml file in expected location. """
-
-        root_dir = os.path.join(self.labbook_directory, '.gigantum', 'env', 'dev_env')
-        dev_envs = self._get_yaml_files(root_dir)
-
-        docker_lines = []
-        for dev_env in dev_envs:
-            with open(dev_env) as current_dev_env:
-                fields = yaml.load(current_dev_env)
-
-            docker_lines.append("### Development Environment: {}".format(fields['info']['name']))
-            docker_lines.append("# Description: {}".format(fields['info']['description']))
-            docker_lines.append("# Version {}.{} by {} <{}>".format(fields['info']['version_major'],
-                                                                    fields['info']['version_minor'],
-                                                                    fields['author']['name'],
-                                                                    fields['author']['email']))
-            docker_lines.append("# Environment installation instructions:")
-            docker_lines.extend(["EXPOSE {}".format(port) for port in fields['exposed_tcp_ports']])
-            docker_lines.extend(["RUN {}".format(cmd) for cmd in fields['install_commands']])
-
-            docker_lines.append("# Finished section {}".format(fields['info']['name']))
-            docker_lines.append("")
+        # Must remove '_' if its in docker hub namespace.
+        prefix = '' if '_' in docker_owner_ns else f'{docker_owner_ns}/'
+        docker_lines.append("FROM {}{}:{}".format(prefix, docker_repo, docker_tag))
 
         return docker_lines
 
@@ -154,7 +132,7 @@ class ImageBuilder(object):
             pkg_fields: Dict[str, Any] = {}
             with open(custom) as custom_content:
                 pkg_fields.update(yaml.load(custom_content))
-                docker_lines.append('## Installing {}'.format(pkg_fields['info']['description']))
+                docker_lines.append('## Installing {}'.format(pkg_fields['name']))
                 docker_lines.extend(pkg_fields['docker'].split(os.linesep))
 
         return docker_lines
@@ -163,28 +141,29 @@ class ImageBuilder(object):
         """Load packages from yaml files in expected location in directory tree. """
         """ Contents of docker setup that must be at end of Dockerfile. """
         fields = self._import_baseimage_fields()
-        package_managers = {c['name']: c for c in fields['available_package_managers']}
-
         root_dir = os.path.join(self.labbook_directory, '.gigantum', 'env', 'package_manager')
-        package_files = self._get_yaml_files(root_dir)
+        package_files = [os.path.join(root_dir, n) for n in os.listdir(root_dir) if 'yaml' in n]
 
         docker_lines = ['## Adding individual packages']
         for package in sorted(package_files):
             pkg_fields: Dict[str, Any] = {}
+
             with open(package) as package_content:
                 pkg_fields.update(yaml.load(package_content))
-            manager = pkg_fields.get('package_manager')
-            package_name = pkg_fields.get('name')
+            manager = pkg_fields['manager']
+            package_name = pkg_fields['package']
             package_version = pkg_fields.get('version')
-            docker_lines.append(package_managers[manager]['docker'].replace('$PKG$', package_name))
+            from_base = pkg_fields.get('from_base') or False
+            if True:
+                # Generate the appropriate docker command for the given package info
+                dl = map_package_to_docker(str(manager), str(package_name), package_version)
+                docker_lines.extend(dl)
 
         return docker_lines
 
     def _post_image_hook(self) -> List[str]:
         """Contents that must be after baseimages but before development environments. """
         docker_lines = ["# Post-image creation hooks"]
-        docker_lines.append('RUN apt-get -y update')
-        docker_lines.append('RUN apt-get -y install supervisor curl gosu')
         docker_lines.append('COPY entrypoint.sh /usr/local/bin/entrypoint.sh')
         docker_lines.append('RUN chmod u+x /usr/local/bin/entrypoint.sh')
         docker_lines.append('')
@@ -194,31 +173,19 @@ class ImageBuilder(object):
     def _entrypoint_hooks(self):
         """ Contents of docker setup that must be at end of Dockerfile. """
         try:
-            root_dir = os.path.join(self.labbook_directory, '.gigantum', 'env', 'dev_env')
-            dev_envs = self._get_yaml_files(root_dir)
-
-            assert len(dev_envs) == 1, "Currently only one development environment is supported."
-
-            with open(dev_envs[0]) as dev_env_file:
-                fields = yaml.load(dev_env_file)
-
             docker_lines = ['## Entrypoint hooks']
             docker_lines.append("# Run Environment")
             docker_lines.append('ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]')
             docker_lines.append('WORKDIR /mnt/labbook')
-
-            for cmd in fields['exec_commands']:
-                tokenized_args = [c.strip().replace('"', "'") for c in cmd.split(' ') if c]
-                quoted_args = ['"{}"'.format(arg) for arg in tokenized_args]
-                cmd_str = 'CMD [{}]'.format(", ".join(quoted_args))
-                docker_lines.append(cmd_str)
-
+            docker_lines.append('')
+            docker_lines.append('# Use this command to make the container run indefinitely')
+            docker_lines.append('CMD ["tail", "-f", "/dev/null"]')
+            docker_lines.append('')
         except Exception as e:
             logger.error(e)
-
         return docker_lines
 
-    def assemble_dockerfile(self, write: bool = False) -> str:
+    def assemble_dockerfile(self, write: bool = True) -> str:
         """Create the content of a Dockerfile per the fields in the indexed data.
 
         Returns:
@@ -226,7 +193,6 @@ class ImageBuilder(object):
         """
         assembly_pipeline = [self._load_baseimage,
                              self._post_image_hook,
-                             self._load_devenv,
                              self._load_custom,
                              self._load_packages,
                              self._entrypoint_hooks]
@@ -239,6 +205,7 @@ class ImageBuilder(object):
             raise
         except Exception as e:
             logger.error(e)
+            raise
 
         dockerfile_name = os.path.join(self.labbook_directory, ".gigantum", "env", "Dockerfile")
         if write:
@@ -358,19 +325,11 @@ class ImageBuilder(object):
             raise ValueError("Environment variable HOST_WORK_DIR must be set")
 
         env_manager = ComponentManager(labbook)
-        dev_envs_list = env_manager.get_component_list('dev_env')
-
-        # Ensure that base_image_list is exactly a list of one element.
-        if not dev_envs_list:
-            logger.error('No development environment in labbok at {}'.format(labbook.root_dir))
 
         # Produce port mappings to labbook container.
         # For now, we map host-to-container ports without any indirection
         # (e.g., port 8888 on the host maps to port 8888 in the container)
-        exposed_ports = {}
-        for dev_env in dev_envs_list:
-            exposed_ports.update({"{}/tcp".format(port): port for port in dev_env['exposed_tcp_ports']})
-
+        exposed_ports: Dict[Any, Any] = {}
         
         mnt_point = dockerize_path(labbook.root_dir.replace('/mnt/gigantum', os.environ['HOST_WORK_DIR']))
 

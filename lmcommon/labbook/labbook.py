@@ -35,9 +35,10 @@ from lmcommon.configuration import Configuration
 from lmcommon.gitlib import get_git_interface, GitAuthor, GitRepoInterface
 from lmcommon.gitlib.gitlab import GitLabRepositoryManager
 from lmcommon.logging import LMLogger
-from lmcommon.labbook.schemas import validate_schema
+from lmcommon.labbook.schemas import validate_labbook_schema
 from lmcommon.labbook import shims
 from lmcommon.activity import ActivityStore, ActivityType, ActivityRecord, ActivityDetailType, ActivityDetailRecord
+from lmcommon.labbook.schemas import CURRENT_SCHEMA
 
 from redis import StrictRedis
 import redis_lock
@@ -84,9 +85,6 @@ def _check_git_tracked(repo: GitRepoInterface) -> None:
 class LabBook(object):
     """Class representing a single LabBook"""
 
-    # If this is not defined, implicitly the version is "0.2"
-    LABBOOK_DATA_SCHEMA_VERSION = "0.2"
-
     def __init__(self, config_file: Optional[str] = None) -> None:
         self.labmanager_config = Configuration(config_file)
 
@@ -112,7 +110,6 @@ class LabBook(object):
             return f'<LabBook at `{self._root_dir}`>'
         else:
             return f'<LabBook UNINITIALIZED>'
-
 
     def _validate_git(method_ref): #type: ignore
         """Definition of decorator that validates git operations.
@@ -238,6 +235,13 @@ class LabBook(object):
 
         # Update the root directory to the new directory name
         self._set_root_dir(os.path.join(base_dir, value))
+
+    @property
+    def schema(self) -> int:
+        if self._data:
+            return self._data["schema"]
+        else:
+            raise ValueError("No schema stored in LabBook data.")
 
     @property
     def key(self) -> str:
@@ -411,16 +415,11 @@ class LabBook(object):
         if len(self.name) > 100:
             raise ValueError("Invalid `name`. Max length is 100 characters")
 
-        # TODO: Remove in the future after breaking changes are completed
-        # Skip schema check if it doesn't exist (aka an old labbook)
-        if self.data:
-            if "schema" in self.data:
-                if not validate_schema(self.LABBOOK_DATA_SCHEMA_VERSION, self.data):
-                    errmsg = f"Schema in Labbook {str(self)} does not match indicated version {self.LABBOOK_DATA_SCHEMA_VERSION}"
-                    logger.error(errmsg)
-                    raise ValueError(errmsg)
-            else:
-                logger.info("Skipping schema check on old LabBook")
+        # Validate schema is supported by running version of the software and valid
+        if not validate_labbook_schema(self.schema, self.data):
+            errmsg = f"Schema in Labbook {str(self)} does not match indicated version {self.schema}"
+            logger.error(errmsg)
+            raise ValueError(errmsg)
 
     def _validate_section(self, section: str) -> None:
         """Simple method to validate a user provided section name
@@ -1506,7 +1505,7 @@ class LabBook(object):
                         "name": name,
                         "description": self._santize_input(description or '')},
             "owner": owner,
-            "schema": self.LABBOOK_DATA_SCHEMA_VERSION
+            "schema": CURRENT_SCHEMA
         }
 
         # Validate data
@@ -1553,8 +1552,7 @@ class LabBook(object):
         dirs = [
             'code', 'input', 'output', '.gigantum',
             os.path.join('.gigantum', 'env'),
-            os.path.join('.gigantum', 'env', 'base_image'),
-            os.path.join('.gigantum', 'env', 'dev_env'),
+            os.path.join('.gigantum', 'env', 'base'),
             os.path.join('.gigantum', 'env', 'custom'),
             os.path.join('.gigantum', 'env', 'package_manager'),
             os.path.join('.gigantum', 'activity'),
@@ -1569,11 +1567,6 @@ class LabBook(object):
         # Create labbook.yaml file
         self._save_labbook_data()
 
-        # Create blank Dockerfile
-        # TODO: Add better base dockerfile once environment service defines this
-        with open(os.path.join(self.root_dir, ".gigantum", "env", "Dockerfile"), 'wt') as dockerfile:
-            dockerfile.write("FROM ubuntu:16.04")
-
         # Create .gitignore default file
         shutil.copyfile(os.path.join(resource_filename('lmcommon', 'labbook'), 'gitignore.default'),
                         os.path.join(self.root_dir, ".gitignore"))
@@ -1583,7 +1576,6 @@ class LabBook(object):
         for s in ['code', 'input', 'output', '.gigantum']:
             self.git.add_all(os.path.join(self.root_dir, s))
         self.git.add(os.path.join(self.root_dir, ".gigantum", "labbook.yaml"))
-        self.git.add(os.path.join(self.root_dir, ".gigantum", "env", "Dockerfile"))
         self.git.add(os.path.join(self.root_dir, ".gitignore"))
         self.git.create_branch(name="gm.workspace")
         self.git.commit(f"Creating new empty LabBook: {name}")

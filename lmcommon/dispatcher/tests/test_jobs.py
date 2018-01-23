@@ -29,9 +29,11 @@ import docker
 
 from lmcommon.configuration import get_docker_client
 from lmcommon.dispatcher import jobs
+import lmcommon.fixtures
 from lmcommon.fixtures import mock_config_file, mock_config_with_repo
 from lmcommon.environment import ComponentManager,  RepositoryManager
 from lmcommon.labbook import LabBook
+from lmcommon.imagebuilder import ImageBuilder
 
 
 class TestJobs(object):
@@ -42,8 +44,11 @@ class TestJobs(object):
         labbook_dir = lb.new(name="lb-for-export-import-test", description="Testing import-export.",
                              owner={"username": "test"})
         cm = ComponentManager(lb)
-        cm.add_component("base_image", "gig-dev_environment-components", "gigantum", "ubuntu1604-python3", "0.4")
-        cm.add_component("dev_env", "gig-dev_environment-components", "gigantum", "jupyter-ubuntu", "0.1")
+        cm.add_component("base", lmcommon.fixtures.ENV_UNIT_TEST_REPO, lmcommon.fixtures.ENV_UNIT_TEST_BASE,
+                         lmcommon.fixtures.ENV_UNIT_TEST_REV)
+
+        ib = ImageBuilder(lb.root_dir)
+        ib.assemble_dockerfile()
 
         lb_root = lb.root_dir
         with tempfile.TemporaryDirectory() as temp_dir_path:
@@ -63,7 +68,13 @@ class TestJobs(object):
             assert imported_lb_path == lb_root.replace('/test/test/', '/cat/cat/')
             import_lb = LabBook(mock_config_with_repo[0])
             import_lb.from_directory(imported_lb_path)
+
+            ib = ImageBuilder(import_lb.root_dir)
+            ib.assemble_dockerfile(write=True)
+            assert os.path.exists(os.path.join(imported_lb_path, '.gigantum', 'env', 'Dockerfile'))
+
             assert import_lb.data['owner']['username'] == 'cat'
+
             # After importing, the new user (in this case "cat") should be the current, active workspace.
             # And be created, if necessary.
             assert import_lb.active_branch == "gm.workspace-cat"
@@ -71,7 +82,7 @@ class TestJobs(object):
 
             # Repeat the above, except with the original user (e.g., re-importing their own labbook)
             user_import_lb = jobs.import_labboook_from_zip(archive_path=exported_archive_path, username="test",
-                                                             owner="test", config_file=mock_config_with_repo[0])
+                                                           owner="test", config_file=mock_config_with_repo[0])
 
             # New path should reflect username of new owner and user.
             assert user_import_lb
@@ -103,8 +114,8 @@ class TestJobs(object):
         labbook_dir = lb.new(name="lb-fail-export-import-test", description="Failing import-export.",
                              owner={"username": "test"})
         cm = ComponentManager(lb)
-        cm.add_component("base_image", "gig-dev_environment-components", "gigantum", "ubuntu1604-python3", "0.4")
-        cm.add_component("dev_env", "gig-dev_environment-components", "gigantum", "jupyter-ubuntu", "0.1")
+        cm.add_component("base", lmcommon.fixtures.ENV_UNIT_TEST_REPO, lmcommon.fixtures.ENV_UNIT_TEST_BASE,
+                         lmcommon.fixtures.ENV_UNIT_TEST_REV)
 
         lb_root = lb.root_dir
         with tempfile.TemporaryDirectory() as temp_dir_path:

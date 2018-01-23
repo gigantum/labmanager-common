@@ -23,6 +23,7 @@ from collections import OrderedDict
 import pickle
 import operator
 import requests
+import shutil
 from lmcommon.logging import LMLogger
 
 import os
@@ -134,10 +135,17 @@ class RepositoryManager(object):
                 if not os.path.exists(repo_dir):
                     # Need to clone
                     self._clone_repo(repo_url, repo_dir)
-
                 else:
                     # Need to update
                     self._update_repo(repo_dir)
+
+            for existing_dir in [n for n in os.listdir(self.local_repo_directory)
+                                 if os.path.isdir(os.path.join(self.local_repo_directory, n))]:
+                if existing_dir not in [repo_url_to_name(r) for r in repo_urls]:
+                    # We need to remove old component repos because they may be out of date
+                    # and crash any further processing.
+                    logger.warning(f"Removing old LabManager index repository {existing_dir}")
+                    shutil.rmtree(os.path.join(self.local_repo_directory, existing_dir))
             return True
         else:
             return False
@@ -149,19 +157,17 @@ class RepositoryManager(object):
         The dictionary contains the contents of the YAML files for every version of the component and is strucutured:
 
             {
-              "<repo_name>": {
-                                "info": { repo info stored in repo config.yaml }
-                                "<namespace>": {
-                                                  "<base_image_name>": {
-                                                                          "<Major.Minor>": { YAML contents }, ...
-                                                                       }, ...
-                                               }, ...
-                              }
+                "<repo_name>": {
+                    "info": { repo info stored in repo config.yaml }
+                    "<base_image_name>": {
+                        "<Major.Minor>": { YAML contents }, ...
+                    }, ...
+                }
             }
             
         Args:
-            repo_name(str): The name of the repo cloned locally
-
+            repo_name: The name of the repo cloned locally
+            component: One of 'base' or 'custom'
         Returns:
             OrderedDict
         """
@@ -170,54 +176,32 @@ class RepositoryManager(object):
         component_repo_dir = os.path.join(repo_dir, component)
 
         # Get all base image YAML files
-        yaml_files = glob.glob(os.path.join(component_repo_dir,
-                                            "*",
-                                            "*",
-                                            "*"))
+        # E.g., repo/<base|custom>/*/*
+        yaml_files = glob.glob(os.path.join(component_repo_dir, "*", "*"))
 
         data: OrderedDict[str, Any] = OrderedDict()
         data[repo_name] = OrderedDict()
 
         # Set repository info
-        with open(os.path.join(repo_dir, '.gigantum', 'config.yaml'), 'rt') as cf:
+        with open(os.path.join(repo_dir, 'gigantum.yaml')) as cf:
             repo_info = yaml.load(cf)
-            data[repo_name]['info'] = repo_info
 
         # Read YAML files and write data to dictionary
         for yf in yaml_files:
             with open(yf, 'rt') as yf_file:
                 yaml_data = yaml.load(yf_file)
-                _, namespace, component_name, _ = yf.rsplit(os.path.sep, 3)
+                _, component_name, _ = yf.rsplit(os.path.sep, 2)
 
-                # Save the COMPONENT namespace and repository to aid in accessing components via API
+                # Save the COMPONENT repository to aid in accessing components via API
                 # Will pack this info into the `component` field for use in mutations to access the component
-                yaml_data["###namespace###"] = namespace
                 yaml_data["###repository###"] = repo_name
 
-                if namespace not in data[repo_name]:
-                    data[repo_name][namespace] = OrderedDict()
+                if component_name not in data[repo_name]:
+                    data[repo_name][component_name] = OrderedDict()
 
-                if component_name not in data[repo_name][namespace]:
-                    data[repo_name][namespace][component_name] = OrderedDict()
+                revision = yaml_data['revision']
+                data[repo_name][component_name][revision] = yaml_data
 
-                data[repo_name][namespace][component_name]["{}.{}".format(yaml_data['info']['version_major'],
-                                                                          yaml_data['info']['version_minor']
-                                                                          )] = yaml_data
-
-        # Sort all levels of the index dictionary to provide both deterministic result
-        # For versions, reverse the order with newest (highest version number) first
-        data = OrderedDict(sorted(data.items(), key=operator.itemgetter(0)))
-        for repo in list(data.keys()):
-            data[repo] = OrderedDict(sorted(data[repo].items(), key=operator.itemgetter(0)))
-            for namespace in list(data[repo].keys()):
-                if namespace == 'info':
-                    continue
-                data[repo][namespace] = OrderedDict(sorted(data[repo][namespace].items(), key=operator.itemgetter(0)))
-                for component in list(data[repo][namespace].keys()):
-                    if component == 'info':
-                        continue
-                    data[repo][namespace][component] = OrderedDict(sorted(data[repo][namespace][component].items(),
-                                                                   key=operator.itemgetter(0), reverse=True))
         return data
 
     def build_component_list_index(self, index_data: OrderedDict) -> List:
@@ -229,18 +213,16 @@ class RepositoryManager(object):
         component_list = []
         repos = list(index_data.keys())
         for repo in repos:
-            namespaces = list(index_data[repo].keys())
-            for namespace in namespaces:
-                if namespace == 'info':
-                    # ignore the repository info section
-                    continue
+            if repo == 'info':
+                # ignore the repository info section
+                continue
 
-                components = list(index_data[repo][namespace].keys())
+            components = list(index_data[repo].keys())
 
-                for component in components:
-                    component_list.append(list(index_data[repo][namespace][component].items())[0][1])
+            for component in components:
+                component_list.append(list(index_data[repo][component].items())[0][1])
 
-        return component_list
+        return sorted(component_list, key=lambda n: n['id'])
 
     def index_repositories(self) -> None:
         """Method to index repos using a naive approach
@@ -255,33 +237,23 @@ class RepositoryManager(object):
         repo_names = [repo_url_to_name(x) for x in repo_urls]
 
         base_image_all_repo_data: OrderedDict = OrderedDict()
-        dev_env_all_repo_data: OrderedDict = OrderedDict()
         custom_all_repo_data: OrderedDict = OrderedDict()
         for repo_name in repo_names:
             # Index Base Images
-            base_image_all_repo_data.update(self.index_component_repository(repo_name, 'base_image'))
-
-            # Index Dev Envs
-            dev_env_all_repo_data.update(self.index_component_repository(repo_name, 'dev_env'))
+            base_image_all_repo_data.update(self.index_component_repository(repo_name, 'base'))
 
             # Index Custom Deps
             custom_all_repo_data.update(self.index_component_repository(repo_name, 'custom'))
 
         # Generate list index
         base_image_list_repo_data = self.build_component_list_index(base_image_all_repo_data)
-        dev_env_list_repo_data = self.build_component_list_index(dev_env_all_repo_data)
         custom_list_repo_data = self.build_component_list_index(custom_all_repo_data)
 
         # Write files
-        with open(os.path.join(self.local_repo_directory, "base_image_index.pickle"), 'wb') as fh:
+        with open(os.path.join(self.local_repo_directory, "base_index.pickle"), 'wb') as fh:
             pickle.dump(base_image_all_repo_data, fh)
-        with open(os.path.join(self.local_repo_directory, "base_image_list_index.pickle"), 'wb') as fh:
+        with open(os.path.join(self.local_repo_directory, "base_list_index.pickle"), 'wb') as fh:
             pickle.dump(base_image_list_repo_data, fh)
-
-        with open(os.path.join(self.local_repo_directory, "dev_env_index.pickle"), 'wb') as fh:
-            pickle.dump(dev_env_all_repo_data, fh)
-        with open(os.path.join(self.local_repo_directory, "dev_env_list_index.pickle"), 'wb') as fh:
-            pickle.dump(dev_env_list_repo_data, fh)
 
         with open(os.path.join(self.local_repo_directory, "custom_index.pickle"), 'wb') as fh:
             pickle.dump(custom_all_repo_data, fh)

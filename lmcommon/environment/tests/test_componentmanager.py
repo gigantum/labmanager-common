@@ -20,24 +20,25 @@
 import pytest
 import os
 import yaml
+import pprint
 
 from lmcommon.environment import ComponentManager, RepositoryManager
 from lmcommon.fixtures import mock_config_file, mock_config_with_repo
 from lmcommon.labbook import LabBook
-
+import lmcommon.fixtures
 
 class TestComponentManager(object):
-    def test_initalize_labbook(self, mock_config_file):
+    def test_initalize_labbook(self, mock_config_with_repo):
         """Test preparing an empty labbook"""
 
-        lb = LabBook(mock_config_file[0])
+        lb = LabBook(mock_config_with_repo[0])
 
         labbook_dir = lb.new(name="labbook1", description="my first labbook",
                              owner={"username": "test"})
 
+        pprint.pprint([n[0] for n in os.walk(labbook_dir)])
         # Verify missing dir structure
-        assert os.path.exists(os.path.join(labbook_dir, '.gigantum', 'env', 'base_image')) is True
-        assert os.path.exists(os.path.join(labbook_dir, '.gigantum', 'env', 'dev_env')) is True
+        assert os.path.exists(os.path.join(labbook_dir, '.gigantum', 'env', 'base')) is True
         assert os.path.exists(os.path.join(labbook_dir, '.gigantum', 'env', 'package_manager')) is True
         assert os.path.exists(os.path.join(labbook_dir, '.gigantum', 'env', 'custom')) is True
         assert os.path.exists(os.path.join(labbook_dir, '.gigantum', 'env', 'entrypoint.sh')) is False
@@ -45,8 +46,7 @@ class TestComponentManager(object):
         cm = ComponentManager(lb)
 
         # Verify dir structure
-        assert os.path.exists(os.path.join(labbook_dir, '.gigantum', 'env', 'base_image')) is True
-        assert os.path.exists(os.path.join(labbook_dir, '.gigantum', 'env', 'dev_env')) is True
+        assert os.path.exists(os.path.join(labbook_dir, '.gigantum', 'env', 'base')) is True
         assert os.path.exists(os.path.join(labbook_dir, '.gigantum', 'env', 'package_manager')) is True
         assert os.path.exists(os.path.join(labbook_dir, '.gigantum', 'env', 'custom')) is True
         assert os.path.exists(os.path.join(labbook_dir, '.gigantum', 'env', 'entrypoint.sh')) is True
@@ -68,9 +68,9 @@ class TestComponentManager(object):
         cm = ComponentManager(lb)
 
         # Add some sample components
-        cm.add_package("apt-get", "ack")
+        cm.add_package("apt", "ack")
         cm.add_package("pip3", "requests")
-        cm.add_package("apt-get", "docker")
+        cm.add_package("apt", "docker")
         cm.add_package("pip3", "docker")
 
         package_path = os.path.join(lb._root_dir, '.gigantum', 'env', 'package_manager')
@@ -86,7 +86,7 @@ class TestComponentManager(object):
             full_path = os.path.join(package_path, file)
             with open(full_path) as package_yaml:
                 fields_dict = yaml.load(package_yaml.read())
-                for required_field in 'package_manager', 'name', 'version':
+                for required_field in 'manager', 'package', 'from_base':
                     assert required_field in fields_dict.keys()
 
         # Verify git/activity
@@ -114,26 +114,32 @@ class TestComponentManager(object):
         cm = ComponentManager(lb)
 
         # Add a component
-        cm.add_component("base_image", "gig-dev_environment-components", "gigantum", "ubuntu1604-python3", "0.4")
+        cm.add_component("base", lmcommon.fixtures.ENV_UNIT_TEST_REPO, lmcommon.fixtures.ENV_UNIT_TEST_BASE,
+                         lmcommon.fixtures.ENV_UNIT_TEST_REV)
 
         # Verify file
         component_file = os.path.join(labbook_dir,
                                       '.gigantum',
                                       'env',
-                                      'base_image',
-                                      "gig-dev_environment-components_gigantum_ubuntu1604-python3.yaml")
+                                      'base',
+                                      f"{lmcommon.fixtures.ENV_UNIT_TEST_REPO}_"
+                                      f"{lmcommon.fixtures.ENV_UNIT_TEST_BASE}_"
+                                      f"r{lmcommon.fixtures.ENV_UNIT_TEST_REV}.yaml")
         assert os.path.exists(component_file) is True
         with open(component_file, 'rt') as cf:
             data = yaml.load(cf)
 
-        assert data['info']['name'] == 'ubuntu1604-python3'
-        assert data['info']['version_major'] == 0
-        assert data['info']['version_minor'] == 4
-        assert data['###namespace###'] == 'gigantum'
+        preinstalled_pkgs = os.listdir(os.path.join(labbook_dir,".gigantum/env/package_manager"))
+        for p in [n for n in preinstalled_pkgs if '.yaml' in n]:
+            with open(os.path.join(labbook_dir,".gigantum/env/package_manager", p)) as f:
+                assert 'from_base: true' in f.read()
+
+        assert data['id'] == lmcommon.fixtures.ENV_UNIT_TEST_BASE
+        assert data['revision'] == lmcommon.fixtures.ENV_UNIT_TEST_REV
 
         # Verify git/activity
         log = lb.git.log()
-        assert len(log) == 4
+        assert len(log) >= 4
         assert "_GTM_ACTIVITY_START_" in log[0]["message"]
         assert 'environment component:' in log[0]["message"]
 
@@ -153,27 +159,30 @@ class TestComponentManager(object):
         # Create Component Manager
         cm = ComponentManager(lb)
 
-        # Add a component
-        cm.add_component("base_image", "gig-dev_environment-components", "gigantum", "ubuntu1604-python3", "0.4")
+        # Add a component;
+        cm.add_component("base", lmcommon.fixtures.ENV_UNIT_TEST_REPO, lmcommon.fixtures.ENV_UNIT_TEST_BASE,
+                         lmcommon.fixtures.ENV_UNIT_TEST_REV)
 
+        c = f"{lmcommon.fixtures.ENV_UNIT_TEST_REPO}_{lmcommon.fixtures.ENV_UNIT_TEST_BASE}_r{lmcommon.fixtures.ENV_UNIT_TEST_REV}.yaml"
         # Verify file
         component_file = os.path.join(labbook_dir,
                                       '.gigantum',
                                       'env',
-                                      'base_image',
-                                      "gig-dev_environment-components_gigantum_ubuntu1604-python3.yaml")
+                                      'base',
+                                      c)
         assert os.path.exists(component_file) is True
 
         # Add a component
         with pytest.raises(ValueError):
-            cm.add_component("base_image", "gig-dev_environment-components", "gigantum", "ubuntu1604-python3", "0.4")
+            cm.add_component("base", lmcommon.fixtures.ENV_UNIT_TEST_REPO, lmcommon.fixtures.ENV_UNIT_TEST_BASE,
+                             lmcommon.fixtures.ENV_UNIT_TEST_REV)
 
         # Force add a component
-        cm.add_component("base_image", "gig-dev_environment-components", "gigantum", "ubuntu1604-python3", "0.4",
-                         force=True)
+        cm.add_component("base", lmcommon.fixtures.ENV_UNIT_TEST_REPO, lmcommon.fixtures.ENV_UNIT_TEST_BASE,
+                         lmcommon.fixtures.ENV_UNIT_TEST_REV, force=True)
         assert os.path.exists(component_file) is True
 
-    def test_get_component_list_base_image(self, mock_config_with_repo):
+    def test_get_component_list_base(self, mock_config_with_repo):
         """Test listing base images added a to labbook"""
         lb = LabBook(mock_config_with_repo[0])
         lb.new(name="labbook2a", description="my first labbook",
@@ -181,19 +190,14 @@ class TestComponentManager(object):
         cm = ComponentManager(lb)
 
         # mock_config_with_repo is a ComponentManager Instance
-        cm.add_component("base_image",
-                                        "gig-dev_environment-components",
-                                        "gigantum",
-                                        "ubuntu1604-python3",
-                                        "0.4")
+        cm.add_component("base", lmcommon.fixtures.ENV_UNIT_TEST_REPO, lmcommon.fixtures.ENV_UNIT_TEST_BASE,
+                         lmcommon.fixtures.ENV_UNIT_TEST_REV)
 
-        dev_envs = cm.get_component_list('base_image')
+        bases = cm.get_component_list('base')
 
-        assert len(dev_envs) == 1
-        assert dev_envs[0]['info']['name'] == 'ubuntu1604-python3'
-        assert dev_envs[0]['info']['version_major'] == 0
-        assert dev_envs[0]['info']['version_minor'] == 4
-        assert dev_envs[0]['###namespace###'] == 'gigantum'
+        assert len(bases) == 1
+        assert bases[0]['id'] == lmcommon.fixtures.ENV_UNIT_TEST_BASE
+        assert bases[0]['revision'] == lmcommon.fixtures.ENV_UNIT_TEST_REV
 
     def test_get_component_list_packages(self, mock_config_with_repo):
         """Test listing packages added a to labbook"""
@@ -203,22 +207,24 @@ class TestComponentManager(object):
         cm = ComponentManager(lb)
 
         # mock_config_with_repo is a ComponentManager Instance
-        cm.add_package("apt-get", "ack")
-        cm.add_package("pip3", "requests")
-        cm.add_package("apt-get", "docker")
+        cm.add_package("apt", "ack")
+        cm.add_package("pip3", "requests", package_version='2.18.4')
+        cm.add_package("apt", "docker")
         cm.add_package("pip3", "docker")
 
         packages = cm.get_component_list('package_manager')
 
         assert len(packages) == 4
-        assert packages[0]['package_manager'] == 'apt-get'
-        assert packages[0]['name'] == 'ack'
-        assert packages[1]['package_manager'] == 'apt-get'
-        assert packages[1]['name'] == 'docker'
-        assert packages[2]['package_manager'] == 'pip3'
-        assert packages[2]['name'] == 'docker'
-        assert packages[3]['package_manager'] == 'pip3'
-        assert packages[3]['name'] == 'requests'
+        assert packages[0]['manager'] == 'apt'
+        assert packages[0]['package'] == 'ack'
+        assert packages[1]['manager'] == 'apt'
+        assert packages[1]['package'] == 'docker'
+        assert packages[2]['manager'] == 'pip3'
+        assert packages[2]['package'] == 'docker'
+        assert packages[2].get('version') is None
+        assert packages[3]['manager'] == 'pip3'
+        assert packages[3]['package'] == 'requests'
+        assert packages[3]['version'] == '2.18.4'
 
     def test_get_component_list_custom(self, mock_config_with_repo):
         """Test listing custom dependencies added a to labbook"""
@@ -229,26 +235,12 @@ class TestComponentManager(object):
 
         # mock_config_with_repo is a ComponentManager Instance
         cm.add_component("custom",
-                         "gig-dev_environment-components",
-                         "gigantum",
-                         "ubuntu-python3-pillow",
-                         "0.3")
-        cm.add_component("custom",
-                         "gig-dev_environment-components",
-                         "gigantum",
-                         "ubuntu-python3-pillow-dup",
-                         "0.2")
+                         lmcommon.fixtures.ENV_UNIT_TEST_REPO,
+                         "pillow",
+                         0)
 
         custom_deps = cm.get_component_list('custom')
 
-        assert len(custom_deps) == 2
-        assert custom_deps[0]['info']['name'] == 'ubuntu-python3-pillow-dup'
-        assert custom_deps[0]['info']['version_major'] == 0
-        assert custom_deps[0]['info']['version_minor'] == 2
-        assert custom_deps[0]['###namespace###'] == 'gigantum'
-        assert custom_deps[1]['info']['name'] == 'ubuntu-python3-pillow'
-        assert custom_deps[1]['info']['version_major'] == 0
-        assert custom_deps[1]['info']['version_minor'] == 3
-        assert custom_deps[1]['###namespace###'] == 'gigantum'
-
-
+        assert len(custom_deps) == 1
+        assert custom_deps[0]['id'] == 'pillow'
+        assert custom_deps[0]['revision'] == 0

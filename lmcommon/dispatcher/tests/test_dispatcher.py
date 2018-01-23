@@ -38,6 +38,7 @@ from lmcommon.imagebuilder import ImageBuilder
 from lmcommon.configuration import get_docker_client
 from lmcommon.environment import ComponentManager, RepositoryManager
 from lmcommon.fixtures import mock_config_file
+import lmcommon.fixtures
 from lmcommon.dispatcher import Dispatcher
 from lmcommon.labbook import LabBook
 
@@ -178,12 +179,13 @@ class TestDispatcher(object):
         cm = ComponentManager(lb)
 
         # Add a component
-        cm.add_component("base_image", "gig-dev_environment-components", "gigantum", "ubuntu1604-python3", "0.4")
-        cm.add_component("dev_env", "gig-dev_environment-components", "gigantum", "jupyter-ubuntu", "0.1")
+        cm.add_component("base", lmcommon.fixtures.ENV_UNIT_TEST_REPO, 'ut-busybox',
+                         0)
 
         ib = ImageBuilder(lb.root_dir)
+        ib.assemble_dockerfile(write=True)
         unit_test_tag = "background-unit-test-delete-this"
-
+        assert os.path.exists(os.path.join(labbook_dir, '.gigantum', 'env', 'Dockerfile'))
         docker_kwargs = {
             'path': os.path.join(labbook_dir, '.gigantum', 'env'),
             'tag': unit_test_tag ,
@@ -230,10 +232,10 @@ class TestDispatcher(object):
         cm = ComponentManager(lb)
 
         # Add a component
-        cm.add_component("base_image", "gig-dev_environment-components", "gigantum", "ubuntu1604-python3", "0.4")
-        cm.add_component("dev_env", "gig-dev_environment-components", "gigantum", "jupyter-ubuntu", "0.1")
+        cm.add_component("base", lmcommon.fixtures.ENV_UNIT_TEST_REPO, 'ut-busybox', 0)
 
         ib = ImageBuilder(lb.root_dir)
+        ib.assemble_dockerfile(write=True)
         unit_test_tag = "background-unit-test-delete-this"
 
         # Start building image.
@@ -256,7 +258,8 @@ class TestDispatcher(object):
         m = {'method': 'build_image',
              'labbook': 'test-test-catbook-test-dockerbuild'}
 
-        job_ref = d.dispatch_task(bg_jobs.build_docker_image, kwargs=docker_kwargs, metadata=m)
+        job_ref = d.dispatch_task(bg_jobs.build_docker_image,
+                                  kwargs=docker_kwargs, metadata=m)
 
         j = d.query_task(job_ref)
         assert hasattr(j, 'meta')

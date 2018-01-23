@@ -23,6 +23,7 @@ import tempfile
 import os
 import shutil
 import yaml
+import pprint
 
 import git
 
@@ -63,12 +64,6 @@ class TestLabBook(object):
         assert "id" in data["labbook"]
         assert data["owner"]["username"] == "test"
 
-        # Validate baseline dockerfile
-        with open(os.path.join(labbook_dir, ".gigantum", "env", "Dockerfile"), "rt") as docker_file:
-            data = docker_file.readlines()
-
-        assert data[0] == "FROM ubuntu:16.04"
-
     def test_create_labbook_no_username(self, mock_config_file):
         """Test creating an empty labbook"""
         lb = LabBook(mock_config_file[0])
@@ -98,11 +93,6 @@ class TestLabBook(object):
         assert "id" in data["labbook"]
         assert data["owner"]["username"] == "test"
 
-        # Validate baseline dockerfile
-        with open(os.path.join(labbook_dir, ".gigantum", "env", "Dockerfile"), "rt") as docker_file:
-            data = docker_file.readlines()
-
-        assert data[0] == "FROM ubuntu:16.04"
 
     def test_create_labbook_that_exists(self, mock_config_file):
         """Test trying to create a labbook with a name that already exists locally"""
@@ -675,6 +665,32 @@ class TestLabBook(object):
         lb2 = LabBook(mock_config_file[0])
         lb2.from_key(lb1key)
         assert lb.active_branch == 'gm.workspace-test'
+
+    def test_sweep_uncommitted_changes(self, mock_config_file):
+        """ Test sweep covers Added, Removed, and """
+        lb = LabBook(mock_config_file[0])
+        lb.new(owner={"username": "test"}, name="test-insert-files-1", description="validate tests.")
+
+        with open(os.path.join(lb.root_dir, 'input', 'sillyfile'), 'wb') as newf:
+            newf.write(os.urandom(2**24))
+
+        assert 'input/sillyfile' in lb.git.status()['untracked']
+        lb._sweep_uncommitted_changes()
+        s = lb.git.status()
+        assert all([len(s[key]) == 0 for key in s.keys()])
+
+        with open(os.path.join(lb.root_dir, 'input', 'sillyfile'), 'wb') as newf:
+            newf.write(os.urandom(2**16))
+        assert 'input/sillyfile' in [n[0] for n in lb.git.status()['unstaged']]
+        lb._sweep_uncommitted_changes()
+        s = lb.git.status()
+        assert all([len(s[key]) == 0 for key in s.keys()])
+        os.remove(os.path.join(lb.root_dir, 'input', 'sillyfile'))
+        assert 'input/sillyfile' in [n[0] for n in lb.git.status()['unstaged']]
+
+        lb._sweep_uncommitted_changes()
+        s = lb.git.status()
+        assert all([len(s[key]) == 0 for key in s.keys()])
 
     def test_walkdir_with_favorites(self, mock_config_file, sample_src_file):
         lb = LabBook(mock_config_file[0])

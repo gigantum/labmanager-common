@@ -39,39 +39,3 @@ LBK_ARCHIVE_PATH = '/home/circleci/project/lmcommon/labbook/tests/test-export_20
 LBK_FS_PATH = '/home/circleci/gigantum/test/test/labbooks/test-export' \
     if os.environ.get('CIRCLECI') else '/mnt/gigantum/test/test/labbooks/test-export'
 
-
-class TestLabbookShims(object):
-    def test_lbk_exists(self):
-        # Just make sure that the archive exists in the local dir.
-        assert os.path.isfile(LBK_ARCHIVE_PATH)
-
-    def test_import_from_archive(self, mock_config_file):
-        """"""
-        shutil.rmtree(LBK_FS_PATH, ignore_errors=True)
-        p = import_labboook_from_zip(archive_path=LBK_ARCHIVE_PATH, username='test',
-                                     owner='test')
-        l = LabBook(mock_config_file[0])
-        l.from_directory(p)
-        assert l.active_branch == 'gm.workspace-test'
-
-    @mock.patch('lmcommon.labbook.LabBook._create_remote_repo', new=_MOCK_create_remote_repo)
-    def test_shim_on_publish(self, mock_config_file):
-        """"""
-        shutil.rmtree(LBK_FS_PATH, ignore_errors=True)
-        p = import_labboook_from_zip(archive_path=LBK_ARCHIVE_PATH, username='test',
-                                     owner='test')
-        l = LabBook(mock_config_file[0])
-        l.from_directory(p)
-        assert l.active_branch == 'gm.workspace-test'
-
-        l.git.checkout('master')
-        l.git.merge('gm.workspace-test')
-        l.git.add_all()
-        l.git.commit('m')
-        l.git.delete_branch('gm.workspace')
-        l.git.delete_branch('gm.workspace-test')
-        assert l.active_branch == 'master'
-        l.publish(username='test')
-
-        # Validate that the workspace branch is created
-        assert l.active_branch == 'gm.workspace-test'
