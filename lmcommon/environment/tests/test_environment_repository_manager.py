@@ -87,4 +87,3 @@ class TestEnvironmentRepositoryManager(object):
 
         assert len(data) >= 1
         assert any(d['id'] == 'pillow' for d in data)
-

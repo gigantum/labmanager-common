@@ -677,7 +677,7 @@ class LabBook(object):
 
         Args:
             username(str): Active username
-        
+
         Returns:
             None
 

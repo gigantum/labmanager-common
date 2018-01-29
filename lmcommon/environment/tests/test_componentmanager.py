@@ -33,7 +33,7 @@ class TestComponentManager(object):
 
         lb = LabBook(mock_config_with_repo[0])
 
-        labbook_dir = lb.new(name="labbook1", description="my first labbook",
+        labbook_dir = lb.new(name="labbook-test-init", description="my first labbook",
                              owner={"username": "test"})
 
         pprint.pprint([n[0] for n in os.walk(labbook_dir)])
@@ -51,17 +51,11 @@ class TestComponentManager(object):
         assert os.path.exists(os.path.join(labbook_dir, '.gigantum', 'env', 'custom')) is True
         assert os.path.exists(os.path.join(labbook_dir, '.gigantum', 'env', 'entrypoint.sh')) is True
 
-    def test_add_package(self, mock_config_file):
+    def test_add_package(self, mock_config_with_repo):
         """Test adding a package such as one from apt-get or pip3. """
-
-        # Build the environment component repo
-        erm = RepositoryManager(mock_config_file[0])
-        erm.update_repositories()
-        erm.index_repositories()
-
         # Create a labook
-        lb = LabBook(mock_config_file[0])
-        labbook_dir = lb.new(name="labbook1", description="my first labbook",
+        lb = LabBook(mock_config_with_repo[0])
+        labbook_dir = lb.new(name="labbook1-test-add-pkg", description="my first labbook",
                              owner={"username": "test"})
 
         # Create Component Manager
@@ -93,21 +87,50 @@ class TestComponentManager(object):
         log = lb.git.log()
         assert len(log) == 10
         assert "_GTM_ACTIVITY_START_" in log[0]["message"]
-        assert 'Added new software package' in log[0]["message"]
+        assert 'managed package: ' in log[0]["message"]
         assert "_GTM_ACTIVITY_START_" in log[4]["message"]
-        assert 'Added new software package' in log[4]["message"]
+        assert 'managed package: ' in log[4]["message"]
 
-    def test_add_component(self, mock_config_file):
-        """Test adding a component to a labbook"""
-        # Build the environment component repo
-        erm = RepositoryManager(mock_config_file[0])
-        erm.update_repositories()
-        erm.index_repositories()
-
+    def test_add_duplicate_package(self, mock_config_with_repo):
+        """Test adding a duplicate package to a labbook"""
         # Create a labook
-        lb = LabBook(mock_config_file[0])
+        lb = LabBook(mock_config_with_repo[0])
 
-        labbook_dir = lb.new(name="labbook1", description="my first labbook",
+        labbook_dir = lb.new(name="labbook-add-package-dup", description="my first labbook",
+                             owner={"username": "test"})
+
+        # Create Component Manager
+        cm = ComponentManager(lb)
+
+        # Add a component;
+        cm.add_package('pip', 'requests', '2.18.4')
+
+        # Verify file
+        package_file = os.path.join(labbook_dir,
+                                      '.gigantum',
+                                      'env',
+                                      'package_manager',
+                                      'pip_requests.yaml')
+        assert os.path.exists(package_file) is True
+
+        # Add a component
+        with pytest.raises(ValueError):
+            cm.add_package('pip', 'requests', '2.18.4')
+
+        # Force add a component
+        cm.add_package('pip', 'requests', '2.18.2', force=True)
+        assert os.path.exists(package_file) is True
+
+        with open(package_file, 'rt') as pf:
+            data = yaml.load(pf)
+            assert data['version'] == '2.18.2'
+
+    def test_add_component(self, mock_config_with_repo):
+        """Test adding a component to a labbook"""
+        # Create a labook
+        lb = LabBook(mock_config_with_repo[0])
+
+        labbook_dir = lb.new(name="labbook-test-add-component", description="my first labbook",
                              owner={"username": "test"})
 
         # Create Component Manager
@@ -123,8 +146,7 @@ class TestComponentManager(object):
                                       'env',
                                       'base',
                                       f"{lmcommon.fixtures.ENV_UNIT_TEST_REPO}_"
-                                      f"{lmcommon.fixtures.ENV_UNIT_TEST_BASE}_"
-                                      f"r{lmcommon.fixtures.ENV_UNIT_TEST_REV}.yaml")
+                                      f"{lmcommon.fixtures.ENV_UNIT_TEST_BASE}.yaml")
         assert os.path.exists(component_file) is True
         with open(component_file, 'rt') as cf:
             data = yaml.load(cf)
@@ -143,17 +165,12 @@ class TestComponentManager(object):
         assert "_GTM_ACTIVITY_START_" in log[0]["message"]
         assert 'environment component:' in log[0]["message"]
 
-    def test_add_duplicate_component(self, mock_config_file):
+    def test_add_duplicate_component(self, mock_config_with_repo):
         """Test adding a duplicate component to a labbook"""
-        # Build the environment component repo
-        erm = RepositoryManager(mock_config_file[0])
-        erm.update_repositories()
-        erm.index_repositories()
-
         # Create a labook
-        lb = LabBook(mock_config_file[0])
+        lb = LabBook(mock_config_with_repo[0])
 
-        labbook_dir = lb.new(name="labbook1", description="my first labbook",
+        labbook_dir = lb.new(name="labbook-add-dup", description="my first labbook",
                              owner={"username": "test"})
 
         # Create Component Manager
@@ -163,7 +180,7 @@ class TestComponentManager(object):
         cm.add_component("base", lmcommon.fixtures.ENV_UNIT_TEST_REPO, lmcommon.fixtures.ENV_UNIT_TEST_BASE,
                          lmcommon.fixtures.ENV_UNIT_TEST_REV)
 
-        c = f"{lmcommon.fixtures.ENV_UNIT_TEST_REPO}_{lmcommon.fixtures.ENV_UNIT_TEST_BASE}_r{lmcommon.fixtures.ENV_UNIT_TEST_REV}.yaml"
+        c = f"{lmcommon.fixtures.ENV_UNIT_TEST_REPO}_{lmcommon.fixtures.ENV_UNIT_TEST_BASE}.yaml"
         # Verify file
         component_file = os.path.join(labbook_dir,
                                       '.gigantum',
@@ -244,3 +261,134 @@ class TestComponentManager(object):
         assert len(custom_deps) == 1
         assert custom_deps[0]['id'] == 'pillow'
         assert custom_deps[0]['revision'] == 0
+
+    def test_remove_package_errors(self, mock_config_with_repo):
+        """Test removing a package with expected errors"""
+
+        # Create a labook
+        lb = LabBook(mock_config_with_repo[0])
+        labbook_dir = lb.new(name="labbook-remove-pkg-errors", description="testing package removal errors",
+                             owner={"username": "test"})
+
+        # Create Component Manager
+        cm = ComponentManager(lb)
+
+        # Try removing package that doesn't exist
+        with pytest.raises(ValueError):
+            cm.remove_package('apt', 'ack')
+
+        # Add a package as if it's from the base
+        cm.add_package("pip3", "requests", from_base=True)
+
+        # Try removing package that you can't because it comes from a base
+        with pytest.raises(ValueError):
+            cm.remove_package('pip3', 'requests')
+
+    def test_remove_package(self, mock_config_with_repo):
+        """Test removing a package such as one from apt-get or pip3. """
+        # Create a labook
+        lb = LabBook(mock_config_with_repo[0])
+        labbook_dir = lb.new(name="test-remove-pkg", description="test removing packages",
+                             owner={"username": "test"})
+
+        # Create Component Manager
+        cm = ComponentManager(lb)
+
+        # Add some sample components
+        cm.add_package("apt", "ack")
+        cm.add_package("pip", "requests")
+        cm.add_package("apt", "docker")
+        cm.add_package("pip", "docker", package_version="1.3")
+        cm.add_package("pip", "matplotlib", from_base=True)
+
+        package_path = os.path.join(lb._root_dir, '.gigantum', 'env', 'package_manager')
+        assert os.path.exists(package_path)
+
+        # Ensure all four packages exist
+        assert os.path.exists(os.path.join(package_path, "apt_ack.yaml"))
+        assert os.path.exists(os.path.join(package_path, "pip_requests.yaml"))
+        assert os.path.exists(os.path.join(package_path, "apt_docker.yaml"))
+        assert os.path.exists(os.path.join(package_path, "pip_docker.yaml"))
+        assert os.path.exists(os.path.join(package_path, "pip_matplotlib.yaml"))
+
+        # Remove packages
+        cm.remove_package("apt", "ack")
+        cm.remove_package("pip", "requests")
+        cm.remove_package("apt", "docker")
+        cm.remove_package("pip", "docker")
+
+        with pytest.raises(ValueError):
+            cm.remove_package("pip", "matplotlib")
+
+        # Ensure files are gone
+        assert not os.path.exists(os.path.join(package_path, "apt_ack.yaml"))
+        assert not os.path.exists(os.path.join(package_path, "pip_requests.yaml"))
+        assert not os.path.exists(os.path.join(package_path, "apt_docker.yaml"))
+        assert not os.path.exists(os.path.join(package_path, "pip_docker.yaml"))
+        assert os.path.exists(os.path.join(package_path, "pip_matplotlib.yaml"))
+
+        # Ensure git is clean
+        status = lb.git.status()
+        assert status['untracked'] == []
+        assert status['staged'] == []
+        assert status['unstaged'] == []
+
+        # Ensure activity is being written
+        log = lb.git.log()
+        assert "_GTM_ACTIVITY_START_" in log[0]["message"]
+        assert 'Remove pip managed package' in log[0]["message"]
+
+    def test_remove_component_errors(self, mock_config_with_repo):
+        """Test removing a component from a labbook expecting errors"""
+        # Create a labook
+        lb = LabBook(mock_config_with_repo[0])
+
+        labbook_dir = lb.new(name="labbook-test-remove-component-errors", description="my first labbook",
+                             owner={"username": "test"})
+
+        # Create Component Manager
+        cm = ComponentManager(lb)
+
+        # Add a component
+        cm.add_component("base", lmcommon.fixtures.ENV_UNIT_TEST_REPO, lmcommon.fixtures.ENV_UNIT_TEST_BASE,
+                         lmcommon.fixtures.ENV_UNIT_TEST_REV)
+
+        with pytest.raises(ValueError):
+            cm.remove_component("base", lmcommon.fixtures.ENV_UNIT_TEST_REPO, "adfasdfasdfasdf")
+
+    def test_remove_component(self, mock_config_with_repo):
+        """Test removing a component from a labbook"""
+        # Create a labook
+        lb = LabBook(mock_config_with_repo[0])
+
+        labbook_dir = lb.new(name="labbook-test-remove-component", description="my first labbook",
+                             owner={"username": "test"})
+
+        # Create Component Manager
+        cm = ComponentManager(lb)
+
+        # Add a component
+        cm.add_component("base", lmcommon.fixtures.ENV_UNIT_TEST_REPO, lmcommon.fixtures.ENV_UNIT_TEST_BASE,
+                         lmcommon.fixtures.ENV_UNIT_TEST_REV)
+
+        component_filename = "{}_{}.yaml".format(lmcommon.fixtures.ENV_UNIT_TEST_REPO,
+                                                     lmcommon.fixtures.ENV_UNIT_TEST_BASE)
+        component_path = os.path.join(lb._root_dir, '.gigantum', 'env', 'base', component_filename)
+        assert os.path.exists(component_path)
+
+        # Remove component
+        cm.remove_component("base", lmcommon.fixtures.ENV_UNIT_TEST_REPO, lmcommon.fixtures.ENV_UNIT_TEST_BASE)
+
+        # Ensure file is gone
+        assert not os.path.exists(component_path)
+
+        # Ensure git is clean
+        status = lb.git.status()
+        assert status['untracked'] == []
+        assert status['staged'] == []
+        assert status['unstaged'] == []
+
+        # Ensure activity is being written
+        log = lb.git.log()
+        assert "_GTM_ACTIVITY_START_" in log[0]["message"]
+        assert 'Remove base component' in log[0]["message"]

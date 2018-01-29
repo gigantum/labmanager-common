@@ -120,7 +120,7 @@ export JUPYTER_RUNTIME_DIR=/mnt/share/jupyter/runtime
 chown -R giguser:root /mnt/share/
 
 # Run the Docker Command
-exec gosu giguser "$@"      
+exec gosu giguser "$@"
 """)
 
             short_message = "Adding missing entrypoint.sh, required for container automation"
@@ -160,6 +160,21 @@ exec gosu giguser "$@"
         yaml_filename = '{}_{}.yaml'.format(package_manager, package_name)
         package_yaml_path = os.path.join(self.env_dir, 'package_manager', yaml_filename)
 
+        # Set activity message
+        short_message = "Add {} managed package: {} v{}".format(package_manager, package_name,
+                                                                package_version)
+
+        # Check if package already exists
+        if os.path.exists(package_yaml_path):
+            if force:
+                # You are updating, since force is set and package already exists.
+                logger.warning("Updating package file at {}".format(package_yaml_path))
+                short_message = "Update {} managed package: {} v{}".format(package_manager, package_name,
+                                                                           package_version)
+            else:
+                raise ValueError("The package {} already exists in this LabBook.".format(package_name) +
+                                 " Use `force` to overwrite")
+
         # Write the YAML to the file
         with open(package_yaml_path, 'w') as package_yaml_file:
             package_yaml_file.write(os.linesep.join(yaml_lines))
@@ -171,18 +186,16 @@ exec gosu giguser "$@"
         logger.info("Added package {} to labbook at {}".format(package_name, self.labbook.root_dir))
 
         # Add to git
-        short_message = "Add {} managed package: {} v{}".format(package_manager, package_name,
-                                                                package_version)
         self.labbook.git.add(package_yaml_path)
         commit = self.labbook.git.commit(short_message)
 
         # Create detail record
-        adr = ActivityDetailRecord(ActivityDetailType.ENVIRONMENT)
+        adr = ActivityDetailRecord(ActivityDetailType.ENVIRONMENT, show=False)
         adr.add_value('text/plain', short_message)
 
         # Create activity record
         ar = ActivityRecord(ActivityType.ENVIRONMENT,
-                            message=f"Added new software package",
+                            message=short_message,
                             linked_commit=commit.hexsha,
                             tags=["environment", 'package_manager', package_manager])
         ar.add_detail_object(adr)
@@ -192,6 +205,60 @@ exec gosu giguser "$@"
         ars.create_activity_record(ar)
 
         return package_yaml_path
+
+    def remove_package(self, package_manager: str, package_name: str) -> None:
+        """Remove yaml file describing a package and its context to the labbook.
+
+        Args:
+            package_manager: The package manager (eg., "apt" or "pip3")
+            package_name: Name of package (e.g., "docker" or "requests")
+
+        Returns:
+            None
+        """
+        yaml_filename = '{}_{}.yaml'.format(package_manager, package_name)
+        package_yaml_path = os.path.join(self.env_dir, 'package_manager', yaml_filename)
+
+        # Check for package to exist
+        if not os.path.exists(package_yaml_path):
+            raise ValueError(f"{package_manager} installed package {package_name} does not exist.")
+
+        # Check to make sure package isn't from the base. You cannot remove packages from the base yet.
+        with open(package_yaml_path, 'rt') as cf:
+            package_data = yaml.load(cf)
+
+        if not package_data:
+            raise IOError("Failed to load package description")
+
+        if package_data['from_base'] is True:
+            raise ValueError("Cannot remove a package installed in the Base")
+
+        # Delete the yaml file, which on next Dockerfile gen/rebuild will remove the dependency
+        os.remove(package_yaml_path)
+        if os.path.exists(package_yaml_path):
+            raise ValueError(f"Failed to remove package.")
+
+        # Add to git
+        short_message = "Remove {} managed package: {}".format(package_manager, package_name)
+        self.labbook.git.remove(package_yaml_path)
+        commit = self.labbook.git.commit(short_message)
+
+        # Create detail record
+        adr = ActivityDetailRecord(ActivityDetailType.ENVIRONMENT, show=False)
+        adr.add_value('text/plain', short_message)
+
+        # Create activity record
+        ar = ActivityRecord(ActivityType.ENVIRONMENT,
+                            message=short_message,
+                            linked_commit=commit.hexsha,
+                            tags=["environment", 'package_manager', package_manager])
+        ar.add_detail_object(adr)
+
+        # Store
+        ars = ActivityStore(self.labbook)
+        ars.create_activity_record(ar)
+
+        logger.info("Removed package {}".format(package_name))
 
     def add_component(self, component_class: str, repository: str, component: str, revision: int,
                       force: bool = False) -> None:
@@ -217,27 +284,24 @@ exec gosu giguser "$@"
         if not component:
             raise ValueError('component cannot be None or empty')
 
-        logger.info(f"Adding {component_class} from {repository}: {component} rev{revision}")
-
         # Get the component
         component_data = self.components.get_component(component_class, repository, component, revision)
-        component_filename = "{}_{}_r{}.yaml".format(repository, component, revision)
+        component_filename = "{}_{}.yaml".format(repository, component, revision)
         component_file = os.path.join(self.env_dir, component_class, component_filename)
 
-        assert os.path.exists(self.env_dir)
-        assert os.path.exists(os.path.join(self.env_dir, component_class))
+        short_message = "Add {} environment component: {}".format(component_class, component)
         if os.path.exists(component_file):
             if not force:
                 raise ValueError("The component {} already exists in this LabBook." +
                                  " Use `force` to overwrite".format(component))
             else:
-                logger.warning("Overwriting component file at {}".format(component_file))
+                logger.warning("Updating component file at {}".format(component_file))
+                short_message = "Update {} environment component: {} ".format(component_class, component)
 
         with open(component_file, 'wt') as cf:
             cf.write(yaml.dump(component_data, default_flow_style=False))
 
         if component_class == 'base':
-            preinstalled_packages = component_data['package_managers']
             for manager in component_data['package_managers']:
                 for p_manager in manager.keys():
                     for pkg in manager[p_manager]:
@@ -248,11 +312,9 @@ exec gosu giguser "$@"
                                          force=True,
                                          from_base=True)
 
-        logger.info(
-            "Added {} environment component YAML file to Labbook {}".format(component_class, component_filename))
+        logger.info(f"Added {component_class} from {repository}: {component} rev{revision}")
 
         # Add to git
-        short_message = "Add {} environment component: {} r{}".format(component_class, component, revision)
         self.labbook.git.add(component_file)
         commit = self.labbook.git.commit(short_message)
 
@@ -264,8 +326,62 @@ exec gosu giguser "$@"
         long_message = "{}  - revision: {}\n".format(long_message, revision)
 
         # Create detail record
-        adr = ActivityDetailRecord(ActivityDetailType.ENVIRONMENT)
+        adr = ActivityDetailRecord(ActivityDetailType.ENVIRONMENT, show=False)
         adr.add_value('text/plain', long_message)
+
+        # Create activity record
+        ar = ActivityRecord(ActivityType.ENVIRONMENT,
+                            message=short_message,
+                            linked_commit=commit.hexsha,
+                            tags=["environment", component_class],
+                            show=True)
+        ar.add_detail_object(adr)
+
+        # Store
+        ars = ActivityStore(self.labbook)
+        ars.create_activity_record(ar)
+
+    def remove_component(self, component_class: str, repository: str, component: str) -> None:
+        """Remove yaml file describing a custom component and its context to the labbook.
+
+        Args:
+            component_class(str): The class of component (e.g. "base", "custom", etc)
+            repository(str): The Environment Component repository the component is in
+            component(str): The name of the component
+            revision(int): The revision to use (r_<revision_) in yaml filename.
+
+        Returns:
+            None
+        """
+        if not component_class:
+            raise ValueError('component_class cannot be None or empty')
+
+        if not repository:
+            raise ValueError('repository cannot be None or empty')
+
+        if not component:
+            raise ValueError('component cannot be None or empty')
+
+        component_filename = "{}_{}.yaml".format(repository, component)
+        component_file = os.path.join(self.env_dir, component_class, component_filename)
+
+        # Check for package to exist
+        if not os.path.exists(component_file):
+            raise ValueError(f"{component_class} {component_file} does not exist. Failed to remove")
+
+        # Delete the yaml file, which on next Dockerfile gen/rebuild will remove the dependency
+        os.remove(component_file)
+        if os.path.exists(component_file):
+            raise ValueError(f"Failed to remove {component_class} {component}.")
+
+        # Add to git
+        short_message = f"Remove {component_class} component {component}"
+        self.labbook.git.remove(component_file)
+        commit = self.labbook.git.commit(short_message)
+
+        # Create detail record
+        adr = ActivityDetailRecord(ActivityDetailType.ENVIRONMENT, show=False)
+        adr.add_value('text/plain', short_message)
 
         # Create activity record
         ar = ActivityRecord(ActivityType.ENVIRONMENT,
@@ -277,6 +393,8 @@ exec gosu giguser "$@"
         # Store
         ars = ActivityStore(self.labbook)
         ars.create_activity_record(ar)
+
+        logger.info(f"Removed {component_class} from {repository}: {component}")
 
     def get_component_list(self, component_class: str) -> List[Dict[str, Any]]:
         """Method to get the YAML contents for a given component class

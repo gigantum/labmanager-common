@@ -93,7 +93,7 @@ class RepositoryManager(object):
         """
         # Create the directory to clone into
         try:
-            requests.head('https://github.com', timeout=5)
+            requests.head('https://github.com', timeout=15)
         except requests.exceptions.ConnectionError:
             return False
 
@@ -164,7 +164,7 @@ class RepositoryManager(object):
                     }, ...
                 }
             }
-            
+
         Args:
             repo_name: The name of the repo cloned locally
             component: One of 'base' or 'custom'
@@ -181,10 +181,6 @@ class RepositoryManager(object):
 
         data: OrderedDict[str, Any] = OrderedDict()
         data[repo_name] = OrderedDict()
-
-        # Set repository info
-        with open(os.path.join(repo_dir, 'gigantum.yaml')) as cf:
-            repo_info = yaml.load(cf)
 
         # Read YAML files and write data to dictionary
         for yf in yaml_files:
