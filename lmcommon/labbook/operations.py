@@ -200,8 +200,8 @@ class ContainerOps(object):
                 raise ValueError('Jupyter Lab failed to start')
 
             pmap = PortMap(labbook.labmanager_config)
-            port = pmap.lookup(labbook.key)
-            tool_url = f'http://localhost:{port}/lab?token={token}'
+            host, port = pmap.lookup(labbook.key)
+            tool_url = f'http://{host}:{port}/lab?token={token}'
             logger.info(f"Jupyer Lab up at {tool_url}")
             return labbook, tool_url
 
