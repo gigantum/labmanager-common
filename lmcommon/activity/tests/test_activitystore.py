@@ -207,6 +207,8 @@ class TestActivityStore:
         # Create Activity Record
         ar_written = mock_config_with_activitystore[0].create_activity_record(ar)
         assert ar.commit is not None
+        assert ar.username == 'default'
+        assert ar.email == 'default@test.com'
 
         # Get Note and check
         stored_ar = mock_config_with_activitystore[0].get_activity_record(ar_written.commit)
@@ -230,6 +232,9 @@ class TestActivityStore:
 
         assert stored_ar.detail_objects[0][3].is_loaded is False
         assert stored_ar.detail_objects[1][3].is_loaded is False
+
+        assert stored_ar.username == 'default'
+        assert stored_ar.email == 'default@test.com'
 
     def test_put_get_activity_record_with_tag(self, mock_config_with_activitystore):
         """Method to test creating and getting an individual activity record with a tag"""
@@ -268,6 +273,10 @@ class TestActivityStore:
         assert ar.tags == stored_ar.tags
         assert ar.type == stored_ar.type
         assert len(ar.detail_objects) == len(stored_ar.detail_objects)
+        assert stored_ar.username == 'default'
+        assert stored_ar.email == 'default@test.com'
+        assert stored_ar.username == ar.username
+        assert stored_ar.email == ar.email
 
         assert ar.detail_objects[0][0] == stored_ar.detail_objects[0][0]
         assert ar.detail_objects[0][1] == stored_ar.detail_objects[0][1]
@@ -383,6 +392,8 @@ class TestActivityStore:
         assert activity_records[2].commit == record1.commit
         assert activity_records[2].linked_commit == record1.linked_commit
         assert activity_records[2].message == record1.message
+        assert activity_records[2].username == 'default'
+        assert activity_records[2].email == 'default@test.com'
 
         # Verify the timestamp is getting set properly
         assert type(activity_records[0].timestamp) == datetime

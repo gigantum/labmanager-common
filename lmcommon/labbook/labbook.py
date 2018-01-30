@@ -85,11 +85,15 @@ def _check_git_tracked(repo: GitRepoInterface) -> None:
 class LabBook(object):
     """Class representing a single LabBook"""
 
-    def __init__(self, config_file: Optional[str] = None) -> None:
+    def __init__(self, config_file: Optional[str] = None, author: Optional[GitAuthor] = None) -> None:
         self.labmanager_config = Configuration(config_file)
 
         # Create gitlib instance
         self.git = get_git_interface(self.labmanager_config.config["git"])
+
+        # If author is set, update git interface
+        if author:
+            self.git.update_author(author=author)
 
         # LabBook Properties
         self._root_dir: Optional[str] = None  # The root dir is the location of the labbook this instance represents

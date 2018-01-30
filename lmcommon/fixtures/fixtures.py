@@ -32,6 +32,7 @@ from lmcommon.environment import RepositoryManager
 from lmcommon.labbook import LabBook
 from lmcommon.activity.detaildb import ActivityDetailDB
 from lmcommon.activity import ActivityStore
+from lmcommon.gitlib.git import GitAuthor
 
 
 ENV_UNIT_TEST_REPO = 'gig-dev_components2'
@@ -199,7 +200,7 @@ def mock_config_with_activitystore():
     """A pytest fixture that creates a ActivityStore (and labbook) and deletes directory after test"""
     # Create a temporary working directory
     conf_file, working_dir = _create_temp_work_dir()
-    lb = LabBook(conf_file)
+    lb = LabBook(conf_file, author=GitAuthor("default", "default@test.com"))
     lb.new({"username": "default"}, "labbook1", username="default", description="my first labbook")
     store = ActivityStore(lb)
 

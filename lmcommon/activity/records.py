@@ -287,7 +287,8 @@ class ActivityRecord(object):
 
     def __init__(self, activity_type: ActivityType, show: bool = True, message: str = None,
                  importance: Optional[int] = None, tags: Optional[List[str]] = None,
-                 linked_commit: Optional[str] = None, timestamp: Optional[datetime.datetime] = None) -> None:
+                 linked_commit: Optional[str] = None, timestamp: Optional[datetime.datetime] = None,
+                 username: Optional[str] = None, email: Optional[str] = None) -> None:
         """Constructor
 
         Args:
@@ -320,14 +321,23 @@ class ActivityRecord(object):
         # A list of tags for the entire record
         self.tags = tags
 
+        # Username of the user who created the activity record
+        self.username = username
+
+        # Email of the user who created the activity record
+        self.email = email
+
     @staticmethod
-    def from_log_str(log_str: str, commit: str, timestamp: datetime.datetime) -> 'ActivityRecord':
+    def from_log_str(log_str: str, commit: str, timestamp: datetime.datetime,
+                     username: Optional[str] = None, email: Optional[str] = None) -> 'ActivityRecord':
         """Static method to create a ActivityRecord instance from the identifying string stored in the git log
 
         Args:
             log_str(str): the identifying string stored in the git lo
             commit(str): Optional commit hash for this activity record
             timestamp(datetime.datetime): datetime the record was written to the git log
+            username(str): Username of the user who created the commit
+            email(str): email of the user who created the commit
 
         Returns:
             ActivityRecord
@@ -344,7 +354,9 @@ class ActivityRecord(object):
                                              importance=metadata["importance"],
                                              timestamp=timestamp,
                                              tags=metadata["tags"],
-                                             linked_commit=metadata['linked_commit'])
+                                             linked_commit=metadata['linked_commit'],
+                                             username=username,
+                                             email=email)
             if commit:
                 activity_record.commit = commit
 

@@ -43,7 +43,9 @@ class TestActivityRecord(object):
                             message="message 1",
                             importance=23,
                             tags=['a', 'b'],
-                            linked_commit='aadfadff')
+                            linked_commit='aadfadff',
+                            username="user1",
+                            email="user1@test.com")
 
         assert type(ar) == ActivityRecord
         assert ar.type == ActivityType.CODE
@@ -54,6 +56,8 @@ class TestActivityRecord(object):
         assert ar.importance == 23
         assert ar.tags == ['a', 'b']
         assert ar.detail_objects == []
+        assert ar.username == 'user1'
+        assert ar.email == 'user1@test.com'
 
     def test_add_detail_object(self):
         """Test adding values to the detail object"""

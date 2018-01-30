@@ -95,13 +95,14 @@ class ActivityStore(object):
         return [tag.strip().translate({ord(c): None for c in '\`;'}) for tag in tags]
 
     def _get_log_records(self, after: Optional[str]=None, before: Optional[str]=None,
-                         first: Optional[int]=None, last: Optional[int]=None) -> List[Tuple[str, str, datetime.datetime]]:
+                         first: Optional[int]=None,
+                         last: Optional[int]=None) -> List[Tuple[str, str, datetime.datetime, str, str]]:
         """Method to get ACTIVITY records from the git log with pagination support
 
         Returns:
-            list: List of tuples of the format (log string, commit hash, commit datetime)
+            list: List of tuples of the format (log string, commit hash, commit datetime, username, email)
         """
-        log_entries: List[Tuple[str, str, datetime.datetime]] = []
+        log_entries: List[Tuple[str, str, datetime.datetime, str, str]] = []
         kwargs = dict()
 
         # TODO: Add support for reverse paging
@@ -122,7 +123,9 @@ class ActivityStore(object):
         for entry in self.labbook.git.log(path_info=path_info, **kwargs):
             m = self.note_regex.match(entry['message'])
             if m:
-                log_entries.append((m.group(0), entry['commit'], entry['committed_on']))
+                log_entries.append((m.group(0), entry['commit'], entry['committed_on'],
+                                    entry['author']['name'],
+                                    entry['author']['email']))
 
         return log_entries
 
@@ -152,6 +155,10 @@ class ActivityStore(object):
         commit = self.labbook.git.commit(record.log_str)
         record.commit = commit.hexsha
 
+        # Update record with username and email
+        record.username = self.labbook.git.author.name
+        record.email = self.labbook.git.author.email
+
         logger.debug(f"Successfully created ActivityRecord {commit.hexsha}")
         return record
 
@@ -167,7 +174,8 @@ class ActivityStore(object):
         entry = self.labbook.git.log_entry(commit)
         m = self.note_regex.match(entry["message"])
         if m:
-            ar = ActivityRecord.from_log_str(m.group(0), commit, entry['committed_on'])
+            ar = ActivityRecord.from_log_str(m.group(0), commit, entry['committed_on'],
+                                             username=entry['author']['name'], email=entry['author']['email'])
             return ar
         else:
             raise ValueError("Activity data not found in commit {}".format(commit))
@@ -203,7 +211,7 @@ class ActivityStore(object):
                 log_data = log_data[:first]
 
         if log_data:
-            return [ActivityRecord.from_log_str(x[0], x[1], x[2]) for x in log_data]
+            return [ActivityRecord.from_log_str(x[0], x[1], x[2], username=x[3], email=x[4]) for x in log_data]
         else:
             return []
 

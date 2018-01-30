@@ -17,7 +17,6 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-
 import pytest
 import tempfile
 import os
@@ -28,9 +27,8 @@ import pprint
 import git
 
 from lmcommon.labbook import LabBook, LabbookException
+from lmcommon.gitlib.git import GitAuthor
 from lmcommon.fixtures import mock_config_file, mock_labbook, remote_labbook_repo, sample_src_file
-
-
 
 
 class TestLabBook(object):
@@ -740,3 +738,38 @@ class TestLabBook(object):
         assert dir_walks[3]['is_dir'] is False
         assert dir_walks[4]['is_favorite'] is True
         assert dir_walks[4]['is_dir'] is False
+
+    def test_create_labbook_with_author(self, mock_config_file):
+        """Test creating an empty labbook with the author set"""
+        lb = LabBook(mock_config_file[0], author=GitAuthor(name="username", email="user1@test.com"))
+
+        labbook_dir = lb.new(username="test", name="labbook1", description="my first labbook",
+                             owner={"username": "test"})
+
+        assert labbook_dir == os.path.join(mock_config_file[1], "test", "test", "labbooks", "labbook1")
+        assert type(lb) == LabBook
+
+        # Validate directory structure
+        assert os.path.isdir(os.path.join(labbook_dir, "code")) is True
+        assert os.path.isdir(os.path.join(labbook_dir, "input")) is True
+        assert os.path.isdir(os.path.join(labbook_dir, "output")) is True
+        assert os.path.isdir(os.path.join(labbook_dir, ".gigantum")) is True
+        assert os.path.isdir(os.path.join(labbook_dir, ".gigantum", "env")) is True
+        assert os.path.isdir(os.path.join(labbook_dir, ".gigantum", "activity")) is True
+        assert os.path.isdir(os.path.join(labbook_dir, ".gigantum", "activity", "log")) is True
+        assert os.path.isdir(os.path.join(labbook_dir, ".gigantum", "activity", "index")) is True
+
+        # Validate labbook data file
+        with open(os.path.join(labbook_dir, ".gigantum", "labbook.yaml"), "rt") as data_file:
+            data = yaml.load(data_file)
+
+        assert data["labbook"]["name"] == "labbook1"
+        assert data["labbook"]["description"] == "my first labbook"
+        assert "id" in data["labbook"]
+        assert data["owner"]["username"] == "test"
+
+        log_data = lb.git.log()
+        assert log_data[0]['author']['name'] == "username"
+        assert log_data[0]['author']['email'] == "user1@test.com"
+        assert log_data[0]['committer']['name'] == "Gigantum AutoCommit"
+        assert log_data[0]['committer']['email'] == "noreply@gigantum.io"
