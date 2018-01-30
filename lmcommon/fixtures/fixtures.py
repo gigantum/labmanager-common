@@ -27,11 +27,13 @@ import git
 from pkg_resources import resource_filename
 import pytest
 
-from lmcommon.configuration import Configuration
-from lmcommon.environment import RepositoryManager
+from lmcommon.configuration import Configuration, get_docker_client
+from lmcommon.environment import RepositoryManager, ComponentManager
 from lmcommon.labbook import LabBook
+from lmcommon.labbook.operations import ContainerOps
 from lmcommon.activity.detaildb import ActivityDetailDB
 from lmcommon.activity import ActivityStore
+from lmcommon.imagebuilder import ImageBuilder
 from lmcommon.gitlib.git import GitAuthor
 
 
@@ -238,6 +240,20 @@ def mock_labbook():
 
 
 @pytest.fixture()
+def mock_labbook_with_populated_env():
+    """A pytest fixture that creates a temporary directory and a config file to match. Deletes directory after test"""
+
+    conf_file, working_dir = _create_temp_work_dir()
+    lb = LabBook(conf_file)
+    labbook_dir = lb.new(username="test", name="labbook1", description="my first labbook",
+                             owner={"username": "test"})
+    env = ComponentManager(lb)
+    env.add
+    yield conf_file, labbook_dir, lb
+    shutil.rmtree(working_dir)
+
+
+@pytest.fixture()
 def mock_duplicate_labbook():
     """A pytest fixture that creates a temporary directory and a config file to match. Deletes directory after test"""
 
@@ -301,3 +317,38 @@ def labbook_dir_tree():
                         os.path.join(tempdir, "my-temp-labbook", ".gigantum", "env", "custom"))
 
         yield os.path.join(tempdir, 'my-temp-labbook')
+
+
+@pytest.fixture(scope='function')
+def build_lb_image_for_jupyterlab(mock_config_with_repo):
+    # Create a labook
+    lb = LabBook(mock_config_with_repo[0])
+    labbook_dir = lb.new(name="catbook-test-dockerbuild", description="Testing docker building.",
+                         owner={"username": "test"})
+    # Create Component Manager
+    cm = ComponentManager(lb)
+    # Add a component
+    cm.add_component("base", ENV_UNIT_TEST_REPO, ENV_UNIT_TEST_BASE, ENV_UNIT_TEST_REV)
+    n = cm.add_package("pip3", "requests", "2.18.4")
+
+    ib = ImageBuilder(lb.root_dir)
+    docker_lines = ib.assemble_dockerfile(write=True)
+    assert 'RUN pip3 install requests==2.18.4' in docker_lines
+    assert all(['==None' not in l for l in docker_lines.split()])
+    unit_test_tag = "unit-test-please-delete"
+    client = get_docker_client()
+    client.containers.prune()
+
+    assert os.path.exists(os.path.join(lb.root_dir, '.gigantum', 'env', 'entrypoint.sh'))
+
+    docker_image_id = ib.build_image(docker_client=client, image_tag=unit_test_tag,
+                                     nocache=False, username='test', assemble=False)['docker_image_id']
+
+    lb, keys, port_maps = ContainerOps.start_container(lb, override_docker_image=docker_image_id)
+    container_id = keys['docker_container_id']
+
+    yield lb, ib, client, docker_image_id, container_id, keys, port_maps
+
+    shutil.rmtree(lb.root_dir)
+    client.containers.get(container_id=container_id).stop(timeout=2)
+    client.images.remove(docker_image_id, force=True, noprune=False)

@@ -31,7 +31,7 @@ from contextlib import contextmanager
 from pkg_resources import resource_filename
 import gitdb
 
-from lmcommon.configuration import Configuration
+from lmcommon.configuration import Configuration, get_docker_client
 from lmcommon.gitlib import get_git_interface, GitAuthor, GitRepoInterface
 from lmcommon.gitlib.gitlab import GitLabRepositoryManager
 from lmcommon.logging import LMLogger

@@ -21,6 +21,7 @@ import datetime
 import functools
 import glob
 import os
+import time
 import re
 from typing import (Any, Dict, List, Optional, Union)
 import yaml
@@ -32,6 +33,7 @@ from lmcommon.dispatcher import Dispatcher, jobs
 from lmcommon.labbook import LabBook
 from lmcommon.logging import LMLogger
 from lmcommon.activity import ActivityDetailType, ActivityType, ActivityRecord, ActivityDetailRecord, ActivityStore
+from lmcommon.portmap import PortMap
 
 from .dockermapper import map_package_to_docker
 
@@ -71,7 +73,6 @@ class ImageBuilder(object):
             list
         """
         return [x for x in glob.glob("{}{}*.yaml".format(directory, os.path.sep))]
-        #return [n for n in os.listdir(directory) if '.yaml' in n]
 
     def _validate_labbook_tree(self) -> None:
         """Throw exception if labbook directory structure not in expected format. """
@@ -113,7 +114,7 @@ class ImageBuilder(object):
         docker_lines.append("# Name: {}".format(fields["name"]))
         docker_lines.append("# Description: {}".format(fields["description"]))
         docker_lines.append("")
-
+        
         # Must remove '_' if its in docker hub namespace.
         prefix = '' if '_' in docker_owner_ns else f'{docker_owner_ns}/'
         docker_lines.append("FROM {}{}:{}".format(prefix, docker_repo, docker_tag))
@@ -300,104 +301,8 @@ class ImageBuilder(object):
             return_keys['background_job_key'] = job_key.key_str
         else:
             docker_image = docker_client.images.build(path=env_dir, tag=image_tag, pull=True, nocache=nocache)
-            return_keys['docker_image_id'] = docker_image.id
+            return_keys['docker_image_id'] = docker_image.short_id.split(':')[1]
 
-        return return_keys
-
-    def run_container(self, docker_client, docker_image_id: str, labbook: LabBook,
-                      background: bool = False) -> Dict[str, Optional[str]]:
-        """Launch docker container from image that was just (re-)built.
-
-        Args:
-            docker_client(docker.client): Docker context
-            docker_image_id(str): Docker image to be launched.
-            labbook(LabBook): Labbook context.
-            background(bool): Run the task in the background using the dispatcher
-
-        Returns:
-            dict: Sets keys 'background_job_key' or 'docker_container_id' if background is True, respectively.
-        """
-
-        if not docker_image_id:
-            raise ValueError("docker_image_id cannot be None or empty")
-
-        if not os.environ.get('HOST_WORK_DIR'):
-            raise ValueError("Environment variable HOST_WORK_DIR must be set")
-
-        env_manager = ComponentManager(labbook)
-
-        # Produce port mappings to labbook container.
-        # For now, we map host-to-container ports without any indirection
-        # (e.g., port 8888 on the host maps to port 8888 in the container)
-        exposed_ports: Dict[Any, Any] = {}
-        
-        mnt_point = dockerize_path(labbook.root_dir.replace('/mnt/gigantum', os.environ['HOST_WORK_DIR']))
-
-        # Map volumes - The labbook docker container is unaware of labbook name, all labbooks
-        # map to /mnt/labbook.
-        volumes_dict = {
-            mnt_point: {'bind': '/mnt/labbook', 'mode': 'cached'},
-            'labmanager_share_vol':  {'bind': '/mnt/share', 'mode': 'rw'}
-        }
-
-        # If re-mapping permissions, be sure to configure the container
-        if 'LOCAL_USER_ID' in os.environ:
-            env_var = ["LOCAL_USER_ID={}".format(os.environ['LOCAL_USER_ID'])]
-            logger.info("Starting labbook container with user: {}".format(env_var))
-        else:
-            env_var = ["WINDOWS_HOST=1"]
-
-        # If using Jupyter, set work dir (TEMPORARY HARD CODE)
-        if 'JUPYTER_RUNTIME_DIR' in os.environ:
-            env_var.append("JUPYTER_RUNTIME_DIR={}".format(os.environ['JUPYTER_RUNTIME_DIR']))
-
-        logger.info("Starting labbook container with environment variables: {}".format(env_var))
-
-        # Finally, run the image in a container.
-        logger.info(
-            "Running container id {} -- ports {} -- volumes {}".format(docker_image_id, ', '.join(exposed_ports.keys()),
-                                                                       ', '.join(volumes_dict.keys())))
-
-        return_keys: Dict[str, Optional[str]] = {
-            'background_job_key': None,
-            'docker_container_id': None
-        }
-
-        if background:
-            logger.info("Launching container in background for container {}".format(docker_image_id))
-            job_dispatcher = Dispatcher()
-            # FIXME XXX TODO -- Note that labbook.user throws an excpetion, so putting in labbook.owner for now
-            job_metadata = {'labbook': '{}-{}-{}'.format(labbook.owner, labbook.owner, labbook.name),
-                            'method': 'run_container'}
-
-            try:
-                key = job_dispatcher.dispatch_task(jobs.start_docker_container,
-                                                   args=(docker_image_id, exposed_ports, volumes_dict, env_var),
-                                                   metadata=job_metadata)
-            except Exception as e:
-                logger.exception(e, exc_info=True)
-                raise
-
-            logger.info(f"Background job key for run_container: {key}")
-            return_keys['background_job_key'] = key.key_str
-        else:
-            logger.info("Launching container in-process for container {}".format(docker_image_id))
-            if float(docker_client.version()['ApiVersion']) < 1.25:
-                container = docker_client.containers.run(docker_image_id,
-                                                         detach=True,
-                                                         name=docker_image_id,
-                                                         ports=exposed_ports,
-                                                         environment=env_var,
-                                                         volumes=volumes_dict)
-            else:
-                container = docker_client.containers.run(docker_image_id,
-                                                         detach=True,
-                                                         init=True,
-                                                         name=docker_image_id,
-                                                         ports=exposed_ports,
-                                                         environment=env_var,
-                                                         volumes=volumes_dict)
-            return_keys['docker_container_id'] = container.id
         return return_keys
 
 

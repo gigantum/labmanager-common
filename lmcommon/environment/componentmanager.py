@@ -26,7 +26,7 @@ import glob
 from typing import Optional
 
 
-from lmcommon.labbook import LabBook
+from lmcommon.labbook import LabBook, LabbookException
 from lmcommon.environment import ComponentRepository  # type: ignore
 from lmcommon.logging import LMLogger
 from lmcommon.activity import ActivityStore, ActivityType, ActivityRecord, ActivityDetailType, ActivityDetailRecord
@@ -422,3 +422,16 @@ exec gosu giguser "$@"
                 yaml_data = yaml.load(yf_file)
                 data.append(yaml_data)
         return sorted(data, key=lambda elt : elt.get('id') or elt.get('manager'))
+
+    @property
+    def base_fields(self) -> Dict[str, Any]:
+        # Infer the base YAML
+        base_file = [n for n in os.listdir(os.path.join(self.env_dir, 'base')) if n and '.yaml' in n]
+        if len(base_file) != 1:
+            print(base_file)
+            raise LabbookException('There should only be one base YAML file')
+
+        with open(os.path.join(self.env_dir, 'base', base_file[0])) as yf_file:
+            yaml_data = yaml.load(yf_file)
+
+        return yaml_data
