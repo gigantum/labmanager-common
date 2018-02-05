@@ -18,7 +18,7 @@ auth:
 # Environment Management Configuration
 environment:
   repo_url:
-    - "https://github.com/gigantum/environment-components"
+    - "https://github.com/gigantum/environment-components.git"
 
 # Git Configuration
 git:
