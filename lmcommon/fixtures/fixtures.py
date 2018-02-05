@@ -25,12 +25,14 @@ import uuid
 import collections
 import git
 from pkg_resources import resource_filename
+import docker.errors
 import pytest
 
 from lmcommon.configuration import Configuration, get_docker_client
+from lmcommon.container import ContainerOperations
 from lmcommon.environment import RepositoryManager, ComponentManager
 from lmcommon.labbook import LabBook
-from lmcommon.labbook.operations import ContainerOps
+from lmcommon.container import ContainerOperations
 from lmcommon.activity.detaildb import ActivityDetailDB
 from lmcommon.activity import ActivityStore
 from lmcommon.imagebuilder import ImageBuilder
@@ -323,8 +325,8 @@ def labbook_dir_tree():
 def build_lb_image_for_jupyterlab(mock_config_with_repo):
     # Create a labook
     lb = LabBook(mock_config_with_repo[0])
-    labbook_dir = lb.new(name="catbook-test-dockerbuild", description="Testing docker building.",
-                         owner={"username": "test"})
+    labbook_dir = lb.new(name="containerunittestbook", description="Testing docker building.",
+                         owner={"username": "unittester"})
     # Create Component Manager
     cm = ComponentManager(lb)
     # Add a component
@@ -335,20 +337,35 @@ def build_lb_image_for_jupyterlab(mock_config_with_repo):
     docker_lines = ib.assemble_dockerfile(write=True)
     assert 'RUN pip3 install requests==2.18.4' in docker_lines
     assert all(['==None' not in l for l in docker_lines.split()])
-    unit_test_tag = "unit-test-please-delete"
     client = get_docker_client()
     client.containers.prune()
 
     assert os.path.exists(os.path.join(lb.root_dir, '.gigantum', 'env', 'entrypoint.sh'))
 
-    docker_image_id = ib.build_image(docker_client=client, image_tag=unit_test_tag,
-                                     nocache=False, username='test', assemble=False)['docker_image_id']
+    try:
+        lb, docker_image_id = ContainerOperations.build_image(labbook=lb, username="unittester")
+        lb, container_id, port_maps = ContainerOperations.start_container(lb, username="unittester")
 
-    lb, keys, port_maps = ContainerOps.start_container(lb, override_docker_image=docker_image_id)
-    container_id = keys['docker_container_id']
+        assert isinstance(container_id, str)
+        yield lb, ib, client, docker_image_id, container_id, port_maps
 
-    yield lb, ib, client, docker_image_id, container_id, keys, port_maps
+        try:
+            _, s = ContainerOperations.stop_container(labbook=lb, username="unittester")
+        except docker.errors.APIError:
+            client.containers.get(container_id=container_id).stop(timeout=2)
+            s = False
+        assert s, f"ContainerOperations.stop_container did properly stop container {container_id}"
+    finally:
+        shutil.rmtree(lb.root_dir)
+        # Stop and remove container if it's still there
+        try:
+            client.containers.get(container_id=container_id).stop(timeout=2)
+            client.containers.get(container_id=container_id).remove()
+        except:
+            pass
 
-    shutil.rmtree(lb.root_dir)
-    client.containers.get(container_id=container_id).stop(timeout=2)
-    client.images.remove(docker_image_id, force=True, noprune=False)
+        # Remove image if it's still there
+        try:
+            client.images.remove(docker_image_id, force=True, noprune=False)
+        except:
+            pass

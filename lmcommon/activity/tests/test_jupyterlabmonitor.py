@@ -38,7 +38,7 @@ class TestJupyterLabMonitor(object):
         monitor = JupyterLabMonitor()
 
         assert len(monitor.get_dev_env_name()) == 1
-        assert monitor.get_dev_env_name()[0] == 'jupyterlab-ubuntu1604'
+        assert 'jupyterlab' in monitor.get_dev_env_name()
 
     def test_get_sessions(self, redis_client, monkeypatch):
         """Test getting the session information from jupyterlab"""

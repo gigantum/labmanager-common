@@ -46,7 +46,7 @@ class JupyterLabMonitor(DevEnvMonitor):
     def get_dev_env_name() -> List[str]:
         """Method to return a list of names of the development environments that this class interfaces with.
         Should be the value used in the `name` attribute of the Dev Env Environment Component"""
-        return ["jupyterlab-ubuntu1604"]
+        return ["jupyterlab"]
 
     @staticmethod
     def get_sessions() -> Dict[str, Any]:

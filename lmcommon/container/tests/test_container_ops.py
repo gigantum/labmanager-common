@@ -17,33 +17,20 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-
 import pytest
-import tempfile
-import os
-import shutil
-import yaml
 import pprint
 import getpass
-import requests
-import time
 
-import git
-
-import lmcommon
-from lmcommon.configuration import get_docker_client
-from lmcommon.labbook import LabBook, LabbookException
-from lmcommon.dispatcher import jobs
-from lmcommon.imagebuilder import ImageBuilder
-from lmcommon.environment import ComponentManager
-from lmcommon.labbook.operations import ContainerOps
-from lmcommon.fixtures import (mock_config_file, mock_labbook, mock_config_with_repo,
-                               remote_labbook_repo, sample_src_file, ENV_UNIT_TEST_BASE,
-                               ENV_UNIT_TEST_REV, ENV_UNIT_TEST_REPO, build_lb_image_for_jupyterlab)
+from lmcommon.container import ContainerOperations
+from lmcommon.fixtures import build_lb_image_for_jupyterlab, mock_config_with_repo
 
 
 @pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Cannot build images on CircleCI")
 class TestContainerOps(object):
+    def test_build_image_fixture(self, build_lb_image_for_jupyterlab):
+        # Note, the test is in the fixure (the fixture is needed by other tests around here).
+        pass
+
     def test_start_jupyterlab(self, build_lb_image_for_jupyterlab):
         container_id = build_lb_image_for_jupyterlab[4]
         docker_image_id = build_lb_image_for_jupyterlab[3]
@@ -55,16 +42,14 @@ class TestContainerOps(object):
             'sh -c "ps aux | grep jupyter | grep -v \' grep \'"', user='giguser').decode().split('\n') if a]
         assert len(l) == 0
 
-        lb, info = ContainerOps.start_dev_tool(labbook=lb, dev_tool_name='jupyterlab', username='test',
-                                               tag=docker_image_id)
+        lb, info = ContainerOperations.start_dev_tool(labbook=lb, dev_tool_name='jupyterlab', username='unittester')
 
         l = [a for a in client.containers.get(container_id=container_id).exec_run(
             'sh -c "ps aux | grep jupyter-lab | grep -v \' grep \'"', user='giguser').decode().split('\n') if a]
         assert len(l) == 1
 
         # Now, we test the second path through, start jupyterlab when it's already running.
-        lb, info = ContainerOps.start_dev_tool(labbook=lb, dev_tool_name='jupyterlab', username='test',
-                                               tag=docker_image_id)
+        lb, info = ContainerOperations.start_dev_tool(labbook=lb, dev_tool_name='jupyterlab', username='unittester')
 
         # Validate there is only one instance running.
         l = [a for a in client.containers.get(container_id=container_id).exec_run(
@@ -73,8 +58,8 @@ class TestContainerOps(object):
 
     def test_start_container(self, build_lb_image_for_jupyterlab):
         # Check the resulting port mapping to confirm there are some mapped ports in there.
-        # At the momoent, I don't know how to connect to these from the driver container.
+        # At the moment, I don't know how to connect to these from the driver container.
         # Maybe randal can figure it out.
-        r = build_lb_image_for_jupyterlab[6]
+        r = build_lb_image_for_jupyterlab[5]
         pprint.pprint(f'{r} ({type(r)})')
         assert any(k == '8888/tcp' and r[k] for k in r.keys())

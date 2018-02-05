@@ -172,8 +172,8 @@ class TestDispatcher(object):
         # Create a labook
         lb = LabBook(mock_config_file[0])
 
-        labbook_dir = lb.new(name="catbook-test-dockerbuild", description="Testing docker building.",
-                             owner={"username": "test"})
+        labbook_dir = lb.new(name="unittest-dispatcher-build-image", description="Testing docker building.",
+                             owner={"username": "unittester"})
 
         # Create Component Manager
         cm = ComponentManager(lb)
@@ -184,22 +184,21 @@ class TestDispatcher(object):
 
         ib = ImageBuilder(lb.root_dir)
         ib.assemble_dockerfile(write=True)
-        unit_test_tag = "background-unit-test-delete-this"
         assert os.path.exists(os.path.join(labbook_dir, '.gigantum', 'env', 'Dockerfile'))
         docker_kwargs = {
-            'path': os.path.join(labbook_dir, '.gigantum', 'env'),
-            'tag': unit_test_tag ,
-            'pull': True,
+            'path': labbook_dir,
             'nocache': True
         }
 
-        job_ref = d.dispatch_task(bg_jobs.build_docker_image, kwargs=docker_kwargs)
+        job_ref = d.dispatch_task(bg_jobs.build_labbook_image, kwargs=docker_kwargs)
 
         elapsed_time = 0
         while True:
             status = d.query_task(job_ref).status
             print(status)
             if status in ['success', 'failed', 'finished']:
+                r = d.query_task(job_ref)
+                print(r.exc_info)
                 break
             if elapsed_time > 30:
                 w.terminate()
@@ -224,52 +223,47 @@ class TestDispatcher(object):
 
         # Create a labook
         lb = LabBook(mock_config_file[0])
+        labbook_dir = lb.new(name="unittest-start-stop-job", description="Testing docker building.",
+                             owner={"username": "unittester"})
 
-        labbook_dir = lb.new(name="catbook-test-dockerbuild", description="Testing docker building.",
-                             owner={"username": "test"})
-
-        # Create Component Manager
         cm = ComponentManager(lb)
-
-        # Add a component
         cm.add_component("base", lmcommon.fixtures.ENV_UNIT_TEST_REPO, 'ut-busybox', 0)
 
         ib = ImageBuilder(lb.root_dir)
         ib.assemble_dockerfile(write=True)
-        unit_test_tag = "background-unit-test-delete-this"
-
-        # Start building image.
 
         docker_kwargs = {
-            'path': os.path.join(labbook_dir, '.gigantum', 'env'),
-            'tag': unit_test_tag,
-            'pull': True,
-            'nocache': True
+            'path': labbook_dir,
+            'nocache': True,
+            'username': 'unittester'
         }
 
         client = get_docker_client()
         img_list = client.images.list()
 
         try:
-            client.images.remove("{}".format(unit_test_tag))
+            from lmcommon.container.utils import infer_docker_image_name
+            client.images.remove(infer_docker_image_name(labbook_name=lb.name, owner=lb.owner['username'],
+                                                         username='unittester'))
         except:
             pass
 
         m = {'method': 'build_image',
-             'labbook': 'test-test-catbook-test-dockerbuild'}
+             'labbook': "unittest-start-stop-job"}
 
-        job_ref = d.dispatch_task(bg_jobs.build_docker_image,
+        job_ref = d.dispatch_task(bg_jobs.build_labbook_image,
                                   kwargs=docker_kwargs, metadata=m)
 
         j = d.query_task(job_ref)
         assert hasattr(j, 'meta')
-        assert j.meta.get('labbook') == 'test-test-catbook-test-dockerbuild'
+        assert j.meta.get('labbook') == "unittest-start-stop-job"
 
         elapsed_time = 0
         while True:
             status = d.query_task(job_ref).status
             print(status)
             if status in ['success', 'failed', 'finished']:
+                print(d.query_task(job_ref).exc_info)
                 break
             if elapsed_time > 30:
                 w.terminate()
@@ -286,21 +280,20 @@ class TestDispatcher(object):
 
         ## Finish building image
 
-        docker_kwargs = {
-            'docker_image_id': "{}".format(unit_test_tag),
-            'ports': {},
-            'volumes': {},
-            'environment': {}
+        startc_kwargs = {
+            'root': lb.root_dir,
+            'config_path': lb.labmanager_config.config_file,
+            'username': 'unittester'
         }
-
         ## Start the docker container, and then wait till it's done.
-        start_ref = d.dispatch_task(bg_jobs.start_docker_container, kwargs=docker_kwargs)
+        start_ref = d.dispatch_task(bg_jobs.start_labbook_container, kwargs=startc_kwargs)
 
         elapsed_time = 0
         while True:
             status = d.query_task(start_ref).status
             print(status)
             if status in ['success', 'failed', 'finished']:
+                print(d.query_task(job_ref).exc_info)
                 break
             if elapsed_time > 8:
                 w.terminate()
@@ -310,16 +303,18 @@ class TestDispatcher(object):
 
         res = d.query_task(start_ref)
         assert res
+        print(res.exc_info)
         assert res.status == 'finished'
 
         ## Stop the docker container, and wait until that is done.
-        stop_ref = d.dispatch_task(bg_jobs.stop_docker_container, args=(unit_test_tag,))
+        stop_ref = d.dispatch_task(bg_jobs.stop_labbook_container, args=(res.result,))
 
         elapsed_time = 0
         while True:
             status = d.query_task(stop_ref).status
             print(status)
             if status in ['success', 'failed', 'finished']:
+                print(d.query_task(stop_ref).exc_info)
                 break
             if elapsed_time > 8:
                 w.terminate()

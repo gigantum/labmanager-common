@@ -21,32 +21,17 @@ import datetime
 import functools
 import glob
 import os
-import time
-import re
-from typing import (Any, Dict, List, Optional, Union)
+
+from typing import (Any, Dict, List)
 import yaml
 
-from docker.errors import NotFound
-
-from lmcommon.environment.componentmanager import ComponentManager
-from lmcommon.dispatcher import Dispatcher, jobs
 from lmcommon.labbook import LabBook
 from lmcommon.logging import LMLogger
 from lmcommon.activity import ActivityDetailType, ActivityType, ActivityRecord, ActivityDetailRecord, ActivityStore
-from lmcommon.portmap import PortMap
-
-from .dockermapper import map_package_to_docker
+from lmcommon.imagebuilder.dockermapper import map_package_to_docker
 
 
 logger = LMLogger.get_logger()
-
-
-def dockerize_path(volpath: str) -> str:
-    if os.environ.get('WINDOWS_HOST'):
-        # for windows switch the slashes and then sub the drive letter
-        return re.sub('(^[A-Z]):(.*$)', '//\g<1>\g<2>', volpath.replace('\\', '/'))
-    else:
-        return volpath
 
 
 class ImageBuilder(object):
@@ -244,66 +229,6 @@ class ImageBuilder(object):
             logger.info("Dockerfile NOT being written; write=False; {}".format(dockerfile_name))
 
         return os.linesep.join(docker_lines)
-
-    def build_image(self, docker_client, image_tag: str, username: str, assemble: bool = True, nocache: bool = False,
-                    background: bool = False, owner: Optional[str] = None) -> Dict[str, Optional[str]]:
-        """Build docker image according to the Dockerfile just assembled.
-
-        Args:
-            docker_client(docker.client): Docker context
-            image_tag(str): Tag of docker image
-            assemble(bool): Re-assemble the docker file using assemble_dockerfile if True
-            nocache(bool): Don't user the Docker cache if True
-            background(bool): Run the task in the background using the dispatcher.
-            username(str): The current logged in username
-            owner(str): The owner of the lab book
-
-        Returns:
-            dict: Contains the following keys, 'background_job_key' and 'docker_image_id', depending
-                  if run in the background or foreground, respectively.
-        """
-        # Make sure image isn't running in container currently. If so, stop it.
-        try:
-            build_container = docker_client.containers.get(image_tag)
-            build_container.stop()
-            build_container.remove()
-        except NotFound:
-            # Container isn't running, so just move on
-            # TODO: Add logging.info to indicate building a non-running container
-            pass
-
-        if not image_tag:
-            raise ValueError("image_tag cannot be None or empty")
-
-        env_dir = os.path.join(self.labbook_directory, '.gigantum', 'env')
-        logger.info("Building labbook image (tag {}) from Dockerfile in {}".format(image_tag, env_dir))
-        if not os.path.exists(env_dir):
-            raise ValueError('Expected env directory `{}` does not exist.'.format(env_dir))
-
-        if assemble:
-            self.assemble_dockerfile(write=True)
-
-        return_keys: Dict[str, Optional[str]] = {
-            'background_job_key': None,
-            'docker_image_id': None
-        }
-
-        if background:
-            job_dispatcher = Dispatcher()
-            # No owner provided, assume user's namespace
-            if not owner:
-                owner = username
-            job_metadata = {
-                'labbook': "{}-{}-{}".format(username, owner, self.labbook_directory.split('/')[-1]),
-                'method': 'build_image'}
-            job_key = job_dispatcher.dispatch_task(jobs.build_docker_image, args=(env_dir, image_tag, True, nocache),
-                                                   metadata=job_metadata)
-            return_keys['background_job_key'] = job_key.key_str
-        else:
-            docker_image = docker_client.images.build(path=env_dir, tag=image_tag, pull=True, nocache=nocache)
-            return_keys['docker_image_id'] = docker_image.short_id.split(':')[1]
-
-        return return_keys
 
 
 if __name__ == '__main__':

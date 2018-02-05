@@ -41,8 +41,8 @@ class TestJobs(object):
 
         # Create new LabBook to be exported
         lb = LabBook(mock_config_with_repo[0])
-        labbook_dir = lb.new(name="lb-for-export-import-test", description="Testing import-export.",
-                             owner={"username": "test"})
+        labbook_dir = lb.new(name="unittest-lb-for-export-import-test", description="Testing import-export.",
+                             owner={"username": 'unittester'})
         cm = ComponentManager(lb)
         cm.add_component("base", lmcommon.fixtures.ENV_UNIT_TEST_REPO, lmcommon.fixtures.ENV_UNIT_TEST_BASE,
                          lmcommon.fixtures.ENV_UNIT_TEST_REV)
@@ -61,11 +61,11 @@ class TestJobs(object):
             assert not os.path.exists(lb_root), f"LabBook at {lb_root} should not exist."
 
             # Now import the labbook as a new user, validating that the change of namespace works properly.
-            imported_lb_path = jobs.import_labboook_from_zip(archive_path=exported_archive_path, username="cat",
-                                                             owner="cat", config_file=mock_config_with_repo[0])
+            imported_lb_path = jobs.import_labboook_from_zip(archive_path=exported_archive_path, username='unittester2',
+                                                             owner='unittester2', config_file=mock_config_with_repo[0])
 
             # New path should reflect username of new owner and user.
-            assert imported_lb_path == lb_root.replace('/test/test/', '/cat/cat/')
+            assert imported_lb_path == lb_root.replace('/unittester/unittester/', '/unittester2/unittester2/')
             import_lb = LabBook(mock_config_with_repo[0])
             import_lb.from_directory(imported_lb_path)
 
@@ -73,36 +73,40 @@ class TestJobs(object):
             ib.assemble_dockerfile(write=True)
             assert os.path.exists(os.path.join(imported_lb_path, '.gigantum', 'env', 'Dockerfile'))
 
-            assert import_lb.data['owner']['username'] == 'cat'
+            assert import_lb.data['owner']['username'] == 'unittester2'
 
             # After importing, the new user (in this case "cat") should be the current, active workspace.
             # And be created, if necessary.
-            assert import_lb.active_branch == "gm.workspace-cat"
+            assert import_lb.active_branch == "gm.workspace-unittester2"
             assert not import_lb.has_remote
 
             # Repeat the above, except with the original user (e.g., re-importing their own labbook)
-            user_import_lb = jobs.import_labboook_from_zip(archive_path=exported_archive_path, username="test",
-                                                           owner="test", config_file=mock_config_with_repo[0])
+            user_import_lb = jobs.import_labboook_from_zip(archive_path=exported_archive_path, username="unittester",
+                                                           owner="unittester", config_file=mock_config_with_repo[0])
 
             # New path should reflect username of new owner and user.
             assert user_import_lb
             import_lb2 = LabBook(mock_config_with_repo[0])
             import_lb2.from_directory(user_import_lb)
-            assert import_lb2.data['owner']['username'] == 'test'
+            assert import_lb2.data['owner']['username'] == 'unittester'
             # After importing, the new user (in this case "cat") should be the current, active workspace.
             # And be created, if necessary.
-            assert import_lb2.active_branch == "gm.workspace-test"
+            assert import_lb2.active_branch == "gm.workspace-unittester"
             assert not import_lb2.has_remote
 
             # Do not build image in CircleCI, just return now.
             if getpass.getuser() == 'circleci':
                 return
 
-            docker_image_id = jobs.build_docker_image(os.path.join(imported_lb_path, '.gigantum', 'env'),
-                                                      "import-export-test-delete-this", True, True)
+            build_kwargs = {
+                'path': labbook_dir,
+                'username': 'unittester',
+                'nocache': True
+            }
+            docker_image_id = jobs.build_labbook_image(**build_kwargs)
             try:
                 client = get_docker_client()
-                client.images.remove("import-export-test-delete-this")
+                client.images.remove(docker_image_id)
             except Exception as e:
                 pprint.pprint(e)
                 raise
