@@ -39,7 +39,7 @@ def strip_package_and_version(package_manager: str, package_str: str) -> Tuple[s
     """For a particular package encoded with version, this strips off the version and returns a tuple
     containing (package-name, version). If version is not specified, it is None.
     """
-    if package_manager not in ['pip3', 'pip2', 'pip', 'conda', 'apt']:
+    if package_manager not in ['pip3', 'pip2', 'pip', 'apt', 'conda', 'conda2', 'conda3']:
         raise ValueError(f'Unsupported package manager: {package_manager}')
 
     if package_manager in ['pip', 'pip2', 'pip3']:
@@ -49,7 +49,7 @@ def strip_package_and_version(package_manager: str, package_str: str) -> Tuple[s
         else:
             return package_str, None
 
-    if package_manager == 'apt' or package_manager == 'conda':
+    if package_manager == 'apt' or package_manager in ['conda', 'conda2', 'conda3']:
         if '=' in package_str:
             t = package_str.split('=')
             return t[0], t[1]
@@ -304,13 +304,14 @@ exec gosu giguser "$@"
         if component_class == 'base':
             for manager in component_data['package_managers']:
                 for p_manager in manager.keys():
-                    for pkg in manager[p_manager]:
-                        pkg_name, pkg_version = strip_package_and_version(p_manager, pkg)
-                        self.add_package(package_manager=p_manager,
-                                         package_name=pkg_name,
-                                         package_version=pkg_version,
-                                         force=True,
-                                         from_base=True)
+                    if manager[p_manager]:
+                        for pkg in manager[p_manager]:
+                            pkg_name, pkg_version = strip_package_and_version(p_manager, pkg)
+                            self.add_package(package_manager=p_manager,
+                                             package_name=pkg_name,
+                                             package_version=pkg_version,
+                                             force=True,
+                                             from_base=True)
 
         logger.info(f"Added {component_class} from {repository}: {component} rev{revision}")
 
