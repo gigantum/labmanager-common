@@ -27,6 +27,7 @@ from lmcommon.portmap import PortMap
 from lmcommon.environment import ComponentManager
 from lmcommon.labbook import LabBook
 from lmcommon.container.utils import dockerize_path, infer_docker_image_name
+from lmcommon.container.exceptions import ContainerBuildException
 
 
 def build_docker_image(root_dir: str, override_image_tag: Optional[str], nocache: bool = False,
@@ -49,6 +50,9 @@ def build_docker_image(root_dir: str, override_image_tag: Optional[str], nocache
 
     Returns:
         A string container the short docker id of the newly built image.
+
+    Raises:
+        ContainerBuildException if container build fails.
     """
 
     if not os.path.exists(root_dir):
@@ -70,7 +74,11 @@ def build_docker_image(root_dir: str, override_image_tag: Optional[str], nocache
     except docker.errors.ImageNotFound:
         pass
 
-    docker_image = get_docker_client().images.build(path=env_dir, tag=image_name, pull=True, nocache=nocache)
+    try:
+        docker_image = get_docker_client().images.build(path=env_dir, tag=image_name, pull=True, nocache=nocache)
+    except docker.errors.BuildError as e:
+        raise ContainerBuildException(e)
+
     return docker_image.short_id.split(':')[1]
 
 

@@ -132,6 +132,9 @@ class TestDispatcher(object):
 
         assert job_ref in [j.job_key for j in d.failed_jobs]
         assert job_ref not in [j.job_key for j in d.finished_jobs]
+
+        t = d.query_task(job_ref)
+        t.failure_message == 'Exception: Intentional Exception from job `test_exit_fail`'
         w.terminate()
 
     def test_query_complete_tasks(self, temporary_worker):

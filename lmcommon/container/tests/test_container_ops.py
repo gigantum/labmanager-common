@@ -28,7 +28,7 @@ from lmcommon.configuration import get_docker_client
 from lmcommon.container import ContainerOperations
 from lmcommon.container.utils import infer_docker_image_name
 from lmcommon.fixtures import build_lb_image_for_jupyterlab, mock_config_with_repo
-
+from lmcommon.container.exceptions import ContainerBuildException
 
 @pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Cannot build images on CircleCI")
 class TestContainerOps(object):
@@ -83,7 +83,7 @@ class TestContainerOps(object):
             dockerfile.write('\n'.join(olines))
             dockerfile.write('\nRUN /bin/false')
 
-        with pytest.raises(docker.errors.BuildError):
+        with pytest.raises(ContainerBuildException):
             ContainerOperations.build_image(labbook=my_lb, username="unittester")
 
         with pytest.raises(docker.errors.ImageNotFound):
