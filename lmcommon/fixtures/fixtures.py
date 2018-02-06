@@ -354,7 +354,6 @@ def build_lb_image_for_jupyterlab(mock_config_with_repo):
         except docker.errors.APIError:
             client.containers.get(container_id=container_id).stop(timeout=2)
             s = False
-        assert s, f"ContainerOperations.stop_container did properly stop container {container_id}"
     finally:
         shutil.rmtree(lb.root_dir)
         # Stop and remove container if it's still there

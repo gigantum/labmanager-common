@@ -18,10 +18,15 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 import pytest
+import os
 import pprint
 import getpass
+import docker
+import requests
 
+from lmcommon.configuration import get_docker_client
 from lmcommon.container import ContainerOperations
+from lmcommon.container.utils import infer_docker_image_name
 from lmcommon.fixtures import build_lb_image_for_jupyterlab, mock_config_with_repo
 
 
@@ -63,3 +68,28 @@ class TestContainerOps(object):
         r = build_lb_image_for_jupyterlab[5]
         pprint.pprint(f'{r} ({type(r)})')
         assert any(k == '8888/tcp' and r[k] for k in r.keys())
+
+    def test_old_dockerfile_removed_when_new_build_fails(self, build_lb_image_for_jupyterlab):
+        # Test that when a new build fails, old images are removed so they cannot be launched.
+        my_lb = build_lb_image_for_jupyterlab[0]
+        docker_image_id = build_lb_image_for_jupyterlab[3]
+
+        my_lb, stopped = ContainerOperations.stop_container(my_lb, username="unittester")
+
+        assert stopped
+
+        olines = open(os.path.join(my_lb.root_dir, '.gigantum/env/Dockerfile')).readlines()[:6]
+        with open(os.path.join(my_lb.root_dir, '.gigantum/env/Dockerfile'), 'w') as dockerfile:
+            dockerfile.write('\n'.join(olines))
+            dockerfile.write('\nRUN /bin/false')
+
+        with pytest.raises(docker.errors.BuildError):
+            ContainerOperations.build_image(labbook=my_lb, username="unittester")
+
+        with pytest.raises(docker.errors.ImageNotFound):
+            get_docker_client().images.get(infer_docker_image_name(labbook_name=my_lb.name, owner=my_lb.owner['username'],
+                                                      username="unittester"))
+
+        with pytest.raises(requests.exceptions.HTTPError):
+            # Image not found so container cannot be started
+            ContainerOperations.start_container(labbook=my_lb, username="unittester")

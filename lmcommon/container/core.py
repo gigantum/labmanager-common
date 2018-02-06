@@ -38,6 +38,9 @@ def build_docker_image(root_dir: str, override_image_tag: Optional[str], nocache
     Note! This method is static, it should **NOT** use any global variables or any other
     reference to global state.
 
+    Also note - This will delete any existing image pertaining to the given labbook.
+    Thus if this call fails, there will be no docker images pertaining to that labbook.
+
     Args:
         root_dir: LabBook root directory (obtained by LabBook.root_dir)
         override_image_tag: Tag of docker image; in general this should not be explicitly set.
@@ -50,6 +53,7 @@ def build_docker_image(root_dir: str, override_image_tag: Optional[str], nocache
 
     if not os.path.exists(root_dir):
         raise ValueError(f'Expected env directory `{root_dir}` does not exist.')
+
     env_dir = os.path.join(root_dir, '.gigantum', 'env')
     lb = LabBook()
     lb.from_directory(root_dir)
@@ -58,6 +62,14 @@ def build_docker_image(root_dir: str, override_image_tag: Optional[str], nocache
     image_name = override_image_tag or infer_docker_image_name(labbook_name=lb.name,
                                                                owner=lb.owner['username'],
                                                                username=username)
+
+    # We need to remove any images pertaining to this labbook before triggering a build.
+    try:
+        get_docker_client().images.get(name=image_name)
+        get_docker_client().images.remove(image_name)
+    except docker.errors.ImageNotFound:
+        pass
+
     docker_image = get_docker_client().images.build(path=env_dir, tag=image_name, pull=True, nocache=nocache)
     return docker_image.short_id.split(':')[1]
 
