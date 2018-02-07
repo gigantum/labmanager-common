@@ -22,6 +22,7 @@ import pip
 from io import StringIO
 import requests
 import json
+from natsort import natsorted
 
 from distutils.version import StrictVersion
 from distutils.version import LooseVersion
@@ -69,10 +70,16 @@ class PipPackageManager(PackageManager):
 
         versions = list(result.json()["releases"].keys())
         try:
+            # First attempt to sort by StrictVersion which enforces a standard version convention
             versions.sort(key=StrictVersion)
         except ValueError as e:
             if 'invalid version number' in str(e):
-                versions.sort(key=LooseVersion)
+                try:
+                    # If this failed, try LooseVersion, which is much more flexible, but can fail sometimes
+                    versions.sort(key=LooseVersion)
+                except:
+                    # Finally, try natural sorting the version strings if you still have a problem
+                    versions = natsorted(versions, key=lambda x: x.replace('.', '~') + 'z')
             else:
                 raise e
 

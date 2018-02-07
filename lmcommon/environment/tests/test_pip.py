@@ -137,3 +137,23 @@ class TestPipPackageManager(object):
 
         assert result.package is True
         assert result.version is True
+
+        result = mrg.is_valid("numpy")
+
+        assert result.package is True
+        assert result.version is False
+
+        result = mrg.is_valid("numpy", "1.11.2rc1")
+
+        assert result.package is True
+        assert result.version is True
+
+        result = mrg.is_valid("numpy", "1.12.1")
+
+        assert result.package is True
+        assert result.version is True
+
+        result = mrg.is_valid("numpy", "10000000")
+
+        assert result.package is True
+        assert result.version is False

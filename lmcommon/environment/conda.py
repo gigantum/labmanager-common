@@ -23,6 +23,7 @@ from collections import OrderedDict
 from io import StringIO
 import requests
 import json
+from natsort import natsorted
 
 from distutils.version import StrictVersion
 from distutils.version import LooseVersion
@@ -109,9 +110,13 @@ class CondaPackageManagerBase(PackageManager):
             versions.sort(key=StrictVersion)
         except ValueError as e:
             if 'invalid version number' in str(e):
-                versions.sort(key=LooseVersion)
+                try:
+                    versions.sort(key=LooseVersion)
+                except:
+                    versions = natsorted(versions, key=lambda x: x.replace('.', '~') + 'z')
             else:
                 raise e
+
         versions.reverse()
 
         return versions
