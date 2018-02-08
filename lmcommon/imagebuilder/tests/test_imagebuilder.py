@@ -64,16 +64,16 @@ class TestImageBuilder(object):
             content = os.linesep.join([
                 'manager: apt',
                 'package: docker',
-                'version: null',
+                'version: 1.2.3',
                 'from_base: true'
             ])
             apt_dep.write(content)
 
         ib = ImageBuilder(labbook_dir_tree)
         pkg_lines = [l for l in ib._load_packages() if 'RUN' in l]
-        assert 'RUN apt-get -y install docker' in pkg_lines
+        assert 'RUN apt-get -y install docker=1.2.3' in pkg_lines
 
-    def test_package_pip3(self, labbook_dir_tree):
+    def test_package_pip(self, labbook_dir_tree):
         package_manager_dir = os.path.join(labbook_dir_tree, '.gigantum', 'env', 'package_manager')
         with open(os.path.join(package_manager_dir, 'pip3_docker.yaml'), 'w') as apt_dep:
             content = os.linesep.join([
@@ -86,7 +86,20 @@ class TestImageBuilder(object):
 
         ib = ImageBuilder(labbook_dir_tree)
         pkg_lines = [l for l in ib._load_packages() if 'RUN' in l]
-        assert 'RUN pip3 install docker==2.0.1' in pkg_lines
+        assert 'RUN pip install docker==2.0.1' in pkg_lines
+
+        with open(os.path.join(package_manager_dir, 'pip3_docker.yaml'), 'w') as apt_dep:
+            content = os.linesep.join([
+                'manager: pip',
+                'package: docker',
+                'version: "2.0.1"',
+                'from_base: true'
+            ])
+            apt_dep.write(content)
+
+        ib = ImageBuilder(labbook_dir_tree)
+        pkg_lines = [l for l in ib._load_packages() if 'RUN' in l]
+        assert 'RUN pip install docker==2.0.1' in pkg_lines
 
     def test_validate_dockerfile(self, labbook_dir_tree):
         """Test if the Dockerfile builds and can launch the image. """
@@ -95,7 +108,7 @@ class TestImageBuilder(object):
             content = os.linesep.join([
                 'manager: pip3',
                 'package: docker',
-                'version: null',
+                'version: 2.0.1',
                 'from_base: true'
             ])
             apt_dep.write(content)
@@ -104,7 +117,7 @@ class TestImageBuilder(object):
             content = os.linesep.join([
                 'manager: apt',
                 'package: docker',
-                'version: null',
+                'version: 1.2.3',
                 'from_base: true'
             ])
             apt_dep.write(content)
@@ -121,15 +134,14 @@ class TestImageBuilder(object):
         ib = ImageBuilder(labbook_dir_tree)
         n = ib.assemble_dockerfile(write=False)
         pprint.pprint(n)
-        with open(os.path.join(labbook_dir_tree, ".gigantum", "env", "Dockerfile"), "w") \
-            as dockerfile:
+        with open(os.path.join(labbook_dir_tree, ".gigantum", "env", "Dockerfile"), "w") as dockerfile:
             dockerfile_text = ib.assemble_dockerfile(write=False)
             dockerfile.write(dockerfile_text)
 
         test_lines = ['## Adding individual packages',
-                      'RUN apt-get -y install docker',
-                      'RUN pip3 install docker',
-                      'RUN pip3 install requests==2.18.4']
+                      'RUN apt-get -y install docker=1.2.3',
+                      'RUN pip install docker==2.0.1',
+                      'RUN pip install requests==2.18.4']
 
         for line in test_lines:
             assert line in dockerfile_text.split(os.linesep)

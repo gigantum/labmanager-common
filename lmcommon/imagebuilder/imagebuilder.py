@@ -28,7 +28,7 @@ import yaml
 from lmcommon.labbook import LabBook
 from lmcommon.logging import LMLogger
 from lmcommon.activity import ActivityDetailType, ActivityType, ActivityRecord, ActivityDetailRecord, ActivityStore
-from lmcommon.imagebuilder.dockermapper import map_package_to_docker
+from lmcommon.environment import get_package_manager
 
 
 logger = LMLogger.get_logger()
@@ -126,7 +126,6 @@ class ImageBuilder(object):
     def _load_packages(self) -> List[str]:
         """Load packages from yaml files in expected location in directory tree. """
         """ Contents of docker setup that must be at end of Dockerfile. """
-        fields = self._import_baseimage_fields()
         root_dir = os.path.join(self.labbook_directory, '.gigantum', 'env', 'package_manager')
         package_files = [os.path.join(root_dir, n) for n in os.listdir(root_dir) if 'yaml' in n]
 
@@ -136,14 +135,11 @@ class ImageBuilder(object):
 
             with open(package) as package_content:
                 pkg_fields.update(yaml.load(package_content))
-            manager = pkg_fields['manager']
-            package_name = pkg_fields['package']
-            package_version = pkg_fields.get('version')
-            from_base = pkg_fields.get('from_base') or False
-            if True:
-                # Generate the appropriate docker command for the given package info
-                dl = map_package_to_docker(str(manager), str(package_name), package_version)
-                docker_lines.extend(dl)
+
+            # Generate the appropriate docker command for the given package info
+            pkg_info = {"name": str(pkg_fields['package']),
+                        "version": str(pkg_fields.get('version'))}
+            docker_lines.extend(get_package_manager(pkg_fields['manager']).generate_docker_install_snippet([pkg_info]))
 
         return docker_lines
 
