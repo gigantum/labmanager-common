@@ -1,4 +1,4 @@
-# Copyright (c) 2017 FlashX, LLC
+# Copyright (c) 2018 FlashX, LLC
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -19,45 +19,10 @@
 # SOFTWARE.
 
 import os
-from typing import Optional
 
-from lmcommon.logging import LMLogger
-
-logger = LMLogger.get_logger()
-
-
-def to_workspace_branch(labbook, username: Optional[str] = None) -> str:
-    """Shim to upgrade old labbook (schema v0.1) to new labbook branches.
-
-    This change only involves getting rid of master and using the new gm.workspace branch model.
-
-    Input:
-        labbook: Labbook that must be upgraded.
-        username: username for creating name of active branch.
-    Returns:
-        str: Name of new labbook active branch.
-    Raises:
-        ValueError if labbook's current branch is not master.
-    """
-
-    if labbook.active_branch != 'master':
-        raise ValueError('Shim expects LabBook {str(labbook)} active branch as master')
-
-    with labbook.lock_labbook():
-        logger.warning(f"Upgrading {str(labbook)} to new gm.workspace branch model")
-        labbook._sweep_uncommitted_changes()
-        labbook.checkout_branch('gm.workspace', new=True)
-
-        if username:
-            labbook.checkout_branch(f'gm.workspace-{username}', new=True)
-
-    return labbook.active_branch
 
 def in_untracked(labbook_root: str, section: str) -> bool:
     """ Query whether the given section for a labbook root dir is tracked in Git.
-
-    THIS IS A DUPLICATE TO AVOID A CIRCULAR DEPENDENCY.
-    This will get removed once the file operations are factored out of labbook.py
 
     Args:
          labbook_root: Root directory of labbook

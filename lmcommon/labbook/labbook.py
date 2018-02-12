@@ -919,37 +919,38 @@ class LabBook(object):
                 raise ValueError(f"Target dir `{os.path.join(self.root_dir, dst_dir.replace('..', ''))}` does not exist")
 
             # Copy file to destination
+            rel_path = dst_path.replace(os.path.join(self.root_dir, section), '')
             logger.info(f"Inserting new file for {str(self)} from `{src_file}` to `{dst_path}")
             shutil.copyfile(src_file, dst_path)
 
-            # Get LabBook section info
-            activity_type, activity_detail_type, section_str = self.get_activity_type_from_section(section)
+            if not shims.in_untracked(self.root_dir, section):
+                # If we are setting this section to be untracked
+                activity_type, activity_detail_type, section_str = self.get_activity_type_from_section(section)
 
-            # Create commit
-            rel_path = dst_path.replace(os.path.join(self.root_dir, section), '')
-            commit_msg = f"Added new {section_str} file {rel_path}"
-            self.git.add(dst_path)
-            commit = self.git.commit(commit_msg)
+                # Create commit
+                commit_msg = f"Added new {section_str} file {rel_path}"
+                self.git.add(dst_path)
+                commit = self.git.commit(commit_msg)
 
-            # Create Activity record and detail
-            _, ext = os.path.splitext(rel_path) or 'file'
+                # Create Activity record and detail
+                _, ext = os.path.splitext(rel_path) or 'file'
 
-            # Create detail record
-            adr = ActivityDetailRecord(activity_detail_type, show=False, importance=0)
-            adr.add_value('text/plain', commit_msg)
+                # Create detail record
+                adr = ActivityDetailRecord(activity_detail_type, show=False, importance=0)
+                adr.add_value('text/plain', commit_msg)
 
-            # Create activity record
-            ar = ActivityRecord(activity_type,
-                                message=commit_msg,
-                                show=True,
-                                importance=255,
-                                linked_commit=commit.hexsha,
-                                tags=[ext])
-            ar.add_detail_object(adr)
+                # Create activity record
+                ar = ActivityRecord(activity_type,
+                                    message=commit_msg,
+                                    show=True,
+                                    importance=255,
+                                    linked_commit=commit.hexsha,
+                                    tags=[ext])
+                ar.add_detail_object(adr)
 
-            # Store
-            ars = ActivityStore(self)
-            ars.create_activity_record(ar)
+                # Store
+                ars = ActivityStore(self)
+                ars.create_activity_record(ar)
 
             return self.get_file_info(section, rel_path)
 
@@ -993,6 +994,9 @@ class LabBook(object):
                     errmsg = f"File at {target_path} neither file nor directory"
                     logger.error(errmsg)
                     raise ValueError(errmsg)
+
+                if shims.in_untracked(self.root_dir, section=section):
+                    return True
 
                 commit_msg = f"Removed {target_type} {relative_path}."
                 self.git.remove(target_path)
@@ -1043,6 +1047,7 @@ class LabBook(object):
         if not dst_rel_path:
             raise ValueError("dst_rel_path cannot be None or empty")
 
+        is_untracked = shims.in_untracked(self.root_dir, section)
         with self.lock_labbook():
             src_rel_path = LabBook._make_path_relative(src_rel_path)
             dst_rel_path = LabBook._make_path_relative(dst_rel_path)
@@ -1057,37 +1062,40 @@ class LabBook(object):
                 src_type = 'directory' if os.path.isdir(src_abs_path) else 'file'
                 logger.info(f"Moving {src_type} `{src_abs_path}` to `{dst_abs_path}`")
 
-                self.git.remove(src_abs_path, keep_file=True)
+                if not is_untracked:
+                    self.git.remove(src_abs_path, keep_file=True)
 
                 shutil.move(src_abs_path, dst_abs_path)
-                commit_msg = f"Moved {src_type} `{src_rel_path}` to `{dst_rel_path}`"
 
-                if os.path.isdir(dst_abs_path):
-                    self.git.add_all(dst_abs_path)
-                else:
-                    self.git.add(dst_abs_path)
+                if not is_untracked:
+                    commit_msg = f"Moved {src_type} `{src_rel_path}` to `{dst_rel_path}`"
 
-                commit = self.git.commit(commit_msg)
+                    if os.path.isdir(dst_abs_path):
+                        self.git.add_all(dst_abs_path)
+                    else:
+                        self.git.add(dst_abs_path)
 
-                # Get LabBook section
-                activity_type, activity_detail_type, section_str = self.get_activity_type_from_section(section)
+                    commit = self.git.commit(commit_msg)
 
-                # Create detail record
-                adr = ActivityDetailRecord(activity_detail_type, show=False, importance=0)
-                adr.add_value('text/markdown', commit_msg)
+                    # Get LabBook section
+                    activity_type, activity_detail_type, section_str = self.get_activity_type_from_section(section)
 
-                # Create activity record
-                ar = ActivityRecord(activity_type,
-                                    message=commit_msg,
-                                    linked_commit=commit.hexsha,
-                                    show=True,
-                                    importance=255,
-                                    tags=['file-move'])
-                ar.add_detail_object(adr)
+                    # Create detail record
+                    adr = ActivityDetailRecord(activity_detail_type, show=False, importance=0)
+                    adr.add_value('text/markdown', commit_msg)
 
-                # Store
-                ars = ActivityStore(self)
-                ars.create_activity_record(ar)
+                    # Create activity record
+                    ar = ActivityRecord(activity_type,
+                                        message=commit_msg,
+                                        linked_commit=commit.hexsha,
+                                        show=True,
+                                        importance=255,
+                                        tags=['file-move'])
+                    ar.add_detail_object(adr)
+
+                    # Store
+                    ars = ActivityStore(self)
+                    ars.create_activity_record(ar)
 
                 return self.get_file_info(section, dst_rel_path)
             except Exception as e:
@@ -1114,11 +1122,16 @@ class LabBook(object):
         with self.lock_labbook():
             relative_path = LabBook._make_path_relative(relative_path)
             new_directory_path = os.path.join(self.root_dir, relative_path)
+            section = relative_path.split(os.sep)[0]
+            git_untracked = shims.in_untracked(self.root_dir, section)
             if os.path.exists(new_directory_path):
                 raise ValueError(f'Directory `{new_directory_path}` already exists')
             else:
                 logger.info(f"Making new directory in `{new_directory_path}`")
                 os.makedirs(new_directory_path, exist_ok=make_parents)
+                if git_untracked:
+                    logger.warning(f'New {str(self)} untracked directory `{new_directory_path}`')
+                    return
                 new_dir = ''
                 for d in relative_path.split(os.sep):
                     new_dir = os.path.join(new_dir, d)
@@ -1127,6 +1140,7 @@ class LabBook(object):
                         gitkeep.write("This file is necessary to keep this directory tracked by Git"
                                       " and archivable by compression tools. Do not delete or modify!")
                     self.git.add_all(new_directory_path)
+
 
                 if create_activity_record:
                     # Create detail record
