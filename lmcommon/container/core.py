@@ -26,7 +26,7 @@ from lmcommon.configuration import get_docker_client
 from lmcommon.portmap import PortMap
 from lmcommon.environment import ComponentManager
 from lmcommon.labbook import LabBook
-from lmcommon.container.utils import dockerize_path, infer_docker_image_name
+from lmcommon.container.utils import infer_docker_image_name
 from lmcommon.container.exceptions import ContainerBuildException
 
 
@@ -114,7 +114,7 @@ def start_labbook_container(labbook_root: str, config_path: str, override_image_
 
     exposed_p, portmap = opened_ports, PortMap(lb.labmanager_config)
     exposed_ports = {f"{port}/tcp": portmap.assign(lb.key, "0.0.0.0", port) for port in exposed_p}
-    mnt_point = dockerize_path(labbook_root.replace('/mnt/gigantum', os.environ['HOST_WORK_DIR']))
+    mnt_point = labbook_root.replace('/mnt/gigantum', os.environ['HOST_WORK_DIR'])
 
     volumes_dict = {
         mnt_point: {'bind': '/mnt/labbook', 'mode': 'cached'},

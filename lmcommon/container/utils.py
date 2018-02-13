@@ -38,11 +38,3 @@ def infer_docker_image_name(labbook_name: str, owner: str, username: Optional[st
         a known string is substituted. Note the prefix "gmlb" means "Gigantum-Managed LabBook".
     """
     return f"gmlb-{username or 'nouser'}-{owner}-{labbook_name}"
-
-
-def dockerize_path(volpath: str) -> str:
-    if os.environ.get('WINDOWS_HOST'):
-        # for windows switch the slashes and then sub the drive letter
-        return re.sub('(^[A-Z]):(.*$)', '//\g<1>\g<2>', volpath.replace('\\', '/'))
-    else:
-        return volpath
