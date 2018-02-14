@@ -75,3 +75,5 @@ class TestIdentity(object):
         assert mgr.config == config
         assert mgr.auth_dir == os.path.join(mock_config_file_with_auth[1], '.labmanager', 'identity')
         assert mgr.user is None
+        assert mgr.rsa_key is None
+        assert mgr._user is None

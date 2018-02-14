@@ -1,0 +1,108 @@
+# Copyright (c) 2017 FlashX, LLC
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+import os
+import requests
+
+from typing import Optional
+from lmcommon.logging import LMLogger
+
+from lmcommon.auth.identity import IdentityManager, User, AuthenticationError
+from lmcommon.configuration import Configuration
+
+logger = LMLogger.get_logger()
+
+
+class BrowserIdentityManager(IdentityManager):
+    """Class for authenticating a user and accessing user identity in a no-cache mode suitable for web hosting. """
+
+    def __init__(self, config_obj: Configuration) -> None:
+        """Constructor"""
+        # Call super constructor
+        IdentityManager.__init__(self, config_obj=config_obj)
+        self.auth_dir = os.path.join(self.config.config['git']['working_directory'], '.labmanager', 'identity')
+
+    def is_authenticated(self, access_token: Optional[str] = None) -> bool:
+        """Method to check if the user is currently authenticated in the context of this identity manager
+
+        Returns:
+            bool
+        """
+        return self.is_token_valid(access_token)
+
+    def is_token_valid(self, access_token: Optional[str] = None) -> bool:
+        """Method to check if the user's Auth0 session is still valid
+
+        Returns:
+            bool
+        """
+        if not access_token:
+            return False
+        else:
+            try:
+                _ = self.validate_access_token(access_token)
+            except AuthenticationError:
+                return False
+
+            return True
+
+    def get_user_profile(self, access_token: Optional[str] = None) -> Optional[User]:
+        """Method to authenticate a user by verifying the jwt signiture OR loading from backend storage
+
+        Args:
+            access_token(str): JSON web token from Auth0
+
+        Returns:
+            User
+        """
+        if not access_token:
+            err_dict = {"code": "missing_token",
+                        "description": "JWT must be provided to authenticate user if no local "
+                                       "stored identity is available"}
+            raise AuthenticationError(err_dict, 401)
+
+        # Validate JWT signature
+        _ = self.validate_access_token(access_token)
+
+        # Go get the user profile data
+        url = "https://" + self.config.config['auth']['provider_domain'] + "/userinfo"
+        response = requests.get(url, headers={'Authorization': f'Bearer {access_token}'})
+        if response.status_code != 200:
+            AuthenticationError({"code": "profile_unauthorized",
+                                 "description": "Failed to get user profile data"}, 401)
+        user_profile = response.json()
+
+        # Create user identity
+        self.user = User()
+        self.user.email = self._get_profile_attribute(user_profile, "email", required=True)
+        self.user.username = self._get_profile_attribute(user_profile, "nickname", required=True)
+        self.user.given_name = self._get_profile_attribute(user_profile, "given_name", required=False)
+        self.user.family_name = self._get_profile_attribute(user_profile, "family_name", required=False)
+
+        return self.user
+
+    def logout(self) -> None:
+        """Method to logout a user if applicable
+
+        Returns:
+            None
+        """
+        self.user = None
+        self.rsa_key = None
+        logger.info("Logout No-Op.")

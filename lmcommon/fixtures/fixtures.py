@@ -201,6 +201,32 @@ def mock_config_file_with_auth():
 
 
 @pytest.fixture()
+def mock_config_file_with_auth_browser():
+    """A pytest fixture that creates a temporary directory and a config file to match. Deletes directory after test"""
+    # Load auth config for testing
+    test_auth_file = os.path.join(resource_filename('lmcommon',
+                                                    'auth{}tests'.format(os.path.sep)), 'auth_config.json')
+    if not os.path.exists(test_auth_file):
+        test_auth_file = f"{test_auth_file}.example"
+
+    with open(test_auth_file, 'rt') as conf:
+        auth_data = json.load(conf)
+
+    overrides = {
+        'auth': {
+            'provider_domain': 'gigantum.auth0.com',
+            'signing_algorithm': 'RS256',
+            'audience': auth_data['audience'],
+            'identity_manager': 'browser'
+        }
+    }
+
+    conf_file, working_dir = _create_temp_work_dir(override_dict=overrides)
+    yield conf_file, working_dir, auth_data  # provide the fixture value
+    shutil.rmtree(working_dir)
+
+
+@pytest.fixture()
 def mock_config_with_activitystore():
     """A pytest fixture that creates a ActivityStore (and labbook) and deletes directory after test"""
     # Create a temporary working directory

@@ -19,8 +19,10 @@
 # SOFTWARE.
 import abc
 import importlib
+import requests
+from jose import jwt
 
-from typing import (Optional)
+from typing import (Optional, Dict, Any)
 
 from lmcommon.configuration import Configuration
 from lmcommon.logging import LMLogger
@@ -30,7 +32,10 @@ logger = LMLogger.get_logger()
 
 
 # Dictionary of supported implementations.
-SUPPORTED_IDENTITY_MANAGERS = {'local': ["lmcommon.auth.local", "LocalIdentityManager"]}
+SUPPORTED_IDENTITY_MANAGERS = {
+    'local': ["lmcommon.auth.local", "LocalIdentityManager"],
+    'browser': ["lmcommon.auth.browser", "BrowserIdentityManager"]
+}
 
 
 # Custom error for errors when trying to authenticate a user
@@ -41,10 +46,13 @@ class AuthenticationError(Exception):
 
 
 class IdentityManager(metaclass=abc.ABCMeta):
-    """Abstract class for authenticating a user and accessing user identity"""
+    """Abstract class for authenticating a user and accessing user identity using Auth0 backend"""
 
     def __init__(self, config_obj: Configuration) -> None:
         self.config: Configuration = config_obj
+
+        # The RSA Access key used to validate a JWT
+        self.rsa_key: Optional[Dict[str, str]] = None
 
         # The User instance containing user details
         self._user: Optional[User] = None
@@ -60,17 +68,132 @@ class IdentityManager(metaclass=abc.ABCMeta):
     def user(self, value: User) -> None:
         self._user = value
 
-    def authenticate(self, jwt: Optional[str] = None) -> Optional[User]:
+    def _get_jwt_public_key(self, id_token: str) -> Optional[Dict[str, str]]:
+        """Method to get the public key for JWT signing
+
+        Args:
+            id_token(str): The JSON Web Token recieved from the identity provider
+
+        Returns:
+            dict
+        """
+        url = "https://" + self.config.config['auth']['provider_domain'] + "/.well-known/jwks.json"
+        response = requests.get(url)
+        jwks = response.json()
+        try:
+            unverified_header = jwt.get_unverified_header(id_token)
+        except jwt.JWTError as err:
+            raise AuthenticationError(str(err), 401)
+
+        rsa_key: dict = {}
+        for key in jwks["keys"]:
+            if key["kid"] == unverified_header["kid"]:
+                rsa_key = {
+                    "kty": key["kty"],
+                    "kid": key["kid"],
+                    "use": key["use"],
+                    "n": key["n"],
+                    "e": key["e"]
+                }
+
+        return rsa_key
+
+    @staticmethod
+    def _get_profile_attribute(profile_data: Dict[str, str], attribute: str,
+                               required: bool = True) -> Optional[str]:
+        """Method to get a profile attribute, and if required, raise exception if missing.
+
+        Args:
+            profile_data(dict): Dictionary of data returned from /userinfo query
+            attribute(str): Name of the attribute to get
+            required(bool): If True, will raise exception if param is missing or not set
+
+        Returns:
+            str
+        """
+        if attribute in profile_data.keys():
+            if profile_data[attribute]:
+                return profile_data[attribute]
+            else:
+                if required:
+                    raise AuthenticationError({"code": "missing_data",
+                                "description": f"The required field `{attribute}` was missing from the user profile"},
+                                        401)
+                else:
+                    return None
+        else:
+            if required:
+                raise AuthenticationError({"code": "missing_data",
+                          "description": f"The required field `{attribute}` was missing from the user profile"}, 401)
+            else:
+                return None
+
+    def validate_access_token(self, access_token: str) -> Optional[Dict[str, str]]:
+        """Method to parse and validate an access token
+
+        Args:
+            access_token(str):
+
+        Returns:
+            User
+        """
+        # Get public RSA key
+        if not self.rsa_key:
+            self.rsa_key = self._get_jwt_public_key(access_token)
+
+        if self.rsa_key:
+            try:
+                payload = jwt.decode(access_token, self.rsa_key,
+                                     algorithms=self.config.config['auth']['signing_algorithm'],
+                                     audience=self.config.config['auth']['audience'],
+                                     issuer="https://" + self.config.config['auth']['provider_domain'] + "/")
+
+                return payload
+
+            except jwt.ExpiredSignatureError:
+                raise AuthenticationError({"code": "token_expired",
+                                           "description": "token is expired"}, 401)
+            except jwt.JWTClaimsError:
+                raise AuthenticationError({"code": "invalid_claims",
+                                           "description":
+                                               "incorrect claims, please check the audience and issuer"}, 401)
+            except Exception:
+                raise AuthenticationError({"code": "invalid_header",
+                                           "description": "Unable to parse authentication token."}, 400)
+        else:
+            raise AuthenticationError({"code": "invalid_header", "description": "Unable to find appropriate key"}, 400)
+
+    @abc.abstractmethod
+    def is_authenticated(self, access_token: Optional[str] = None) -> bool:
+        """Method to check if the user is currently authenticated in the context of this identity manager
+
+        Returns:
+            bool
+        """
+        raise NotImplemented
+
+    @abc.abstractmethod
+    def is_token_valid(self, access_token: Optional[str] = None) -> bool:
+        """Method to check if the user's Auth0 session is still valid
+
+        Returns:
+            bool
+        """
+        raise NotImplemented
+
+    @abc.abstractmethod
+    def get_user_profile(self, access_token: Optional[str] = None) -> Optional[User]:
         """Method to authenticate a user
 
         Args:
-            jwt(str):
+            access_token(str):
 
         Returns:
             User
         """
         raise NotImplemented
 
+    @abc.abstractmethod
     def logout(self) -> None:
         """Method to logout a user if applicable
 
