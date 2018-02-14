@@ -65,7 +65,7 @@ class TestImageBuilder(object):
                 'manager: apt',
                 'package: docker',
                 'version: 1.2.3',
-                'from_base: true'
+                'from_base: false'
             ])
             apt_dep.write(content)
 
@@ -80,7 +80,7 @@ class TestImageBuilder(object):
                 'manager: pip3',
                 'package: docker',
                 'version: "2.0.1"',
-                'from_base: true'
+                'from_base: false'
             ])
             apt_dep.write(content)
 
@@ -99,7 +99,7 @@ class TestImageBuilder(object):
 
         ib = ImageBuilder(labbook_dir_tree)
         pkg_lines = [l for l in ib._load_packages() if 'RUN' in l]
-        assert 'RUN pip install docker==2.0.1' in pkg_lines
+        assert 'RUN pip install docker==2.0.1' not in pkg_lines
 
     def test_validate_dockerfile(self, labbook_dir_tree):
         """Test if the Dockerfile builds and can launch the image. """
@@ -109,7 +109,7 @@ class TestImageBuilder(object):
                 'manager: pip3',
                 'package: docker',
                 'version: 2.0.1',
-                'from_base: true'
+                'from_base: false'
             ])
             apt_dep.write(content)
 
@@ -118,7 +118,7 @@ class TestImageBuilder(object):
                 'manager: apt',
                 'package: docker',
                 'version: 1.2.3',
-                'from_base: true'
+                'from_base: false'
             ])
             apt_dep.write(content)
 
@@ -127,7 +127,7 @@ class TestImageBuilder(object):
                 'manager: pip3',
                 'package: requests',
                 'version: "2.18.4"',
-                'from_base: true'
+                'from_base: false'
             ])
             apt_dep.write(content)
 

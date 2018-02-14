@@ -139,7 +139,9 @@ class ImageBuilder(object):
             # Generate the appropriate docker command for the given package info
             pkg_info = {"name": str(pkg_fields['package']),
                         "version": str(pkg_fields.get('version'))}
-            docker_lines.extend(get_package_manager(pkg_fields['manager']).generate_docker_install_snippet([pkg_info]))
+            if not pkg_fields.get('from_base'):
+                docker_lines.extend(
+                    get_package_manager(pkg_fields['manager']).generate_docker_install_snippet([pkg_info]))
 
         return docker_lines
 

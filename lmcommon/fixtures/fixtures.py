@@ -27,6 +27,7 @@ import git
 from pkg_resources import resource_filename
 import docker.errors
 import pytest
+import pprint
 
 from lmcommon.configuration import Configuration, get_docker_client
 from lmcommon.container import ContainerOperations
@@ -331,12 +332,14 @@ def build_lb_image_for_jupyterlab(mock_config_with_repo):
     cm = ComponentManager(lb)
     # Add a component
     cm.add_component("base", ENV_UNIT_TEST_REPO, ENV_UNIT_TEST_BASE, ENV_UNIT_TEST_REV)
-    n = cm.add_package("pip3", "requests", "2.18.4")
+    n = cm.add_package("pip", "requests", "2.18.4")
 
     ib = ImageBuilder(lb.root_dir)
     docker_lines = ib.assemble_dockerfile(write=True)
-    assert 'RUN pip3 install requests==2.18.4' in docker_lines
+    pprint.pprint(docker_lines)
+    assert 'RUN pip install requests==2.18.4' in docker_lines
     assert all(['==None' not in l for l in docker_lines.split()])
+    assert all(['=None' not in l for l in docker_lines.split()])
     client = get_docker_client()
     client.containers.prune()
 
