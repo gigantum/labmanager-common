@@ -27,6 +27,8 @@ import jupyter_client
 import redis
 import requests
 
+from lmcommon.configuration import get_docker_client
+from lmcommon.container.utils import infer_docker_image_name
 from lmcommon.activity.monitors.devenv import DevEnvMonitor
 from lmcommon.activity.monitors.activity import ActivityMonitor
 from lmcommon.activity.processors.processor import StopProcessingException
@@ -49,14 +51,43 @@ class JupyterLabMonitor(DevEnvMonitor):
         return ["jupyterlab"]
 
     @staticmethod
-    def get_sessions() -> Dict[str, Any]:
+    def get_container_ip(container_name: str) -> str:
+        """Method to get a container IP address
+
+        Args:
+            container_name(str): Name of the container to query
+
+        Returns:
+            str
+        """
+        client = get_docker_client()
+        container = client.containers.get(container_name)
+        return container.attrs['NetworkSettings']['Networks']['bridge']['IPAddress']
+
+    @staticmethod
+    def get_sessions(key: str, redis_conn: redis.Redis) -> Dict[str, Any]:
         """Method to get and reformat session info from JupyterLab
+
+        Args:
+            key(str): The unique string used as the key in redis to track this DevEnvMonitor instance
+            redis_conn(redis.Redis): A redis client
+
 
         Returns:
             dict
         """
+        # Break key into parts
+        _, username, owner, labbook_name, _ = key.split(':')
+
+        # Get container IP address
+        lb_key = infer_docker_image_name(labbook_name, owner, username)
+        ip = JupyterLabMonitor.get_container_ip(lb_key)
+
+        # Get jupyter token
+        token = redis_conn.get(f"{lb_key}-jupyter-token").decode()
+
         # Get List of active sessions
-        r = requests.get('http://172.17.0.1:8888/api/sessions')
+        r = requests.get(f'http://{ip}:8888/api/sessions?token={token}')
         if r.status_code != 200:
             raise IOError("Failed to get session listing from JupyterLab")
         sessions = r.json()
@@ -80,13 +111,17 @@ class JupyterLabMonitor(DevEnvMonitor):
             os.makedirs(os.environ['JUPYTER_RUNTIME_DIR'])
             logger.info("Created Jupyter shared runtime dir: {}".format(os.environ['JUPYTER_RUNTIME_DIR']))
 
-        # Get session info from Jupyter API
-        sessions = self.get_sessions()
-
         # Get list of active Activity Monitor Instances from redis
         redis_conn = redis.Redis(db=database)
         activity_monitors = redis_conn.keys('{}:activity_monitor:*'.format(key))
         activity_monitors = [x.decode('utf-8') for x in activity_monitors]
+
+        # Get author info
+        author_name = redis_conn.hget(key, "author_name").decode()
+        author_email = redis_conn.hget(key, "author_email").decode()
+
+        # Get session info from Jupyter API
+        sessions = self.get_sessions(key, redis_conn)
 
         # Check for exited kernels
         for am in activity_monitors:
@@ -113,6 +148,8 @@ class JupyterLabMonitor(DevEnvMonitor):
                             "owner": owner,
                             "labbook_name": labbook_name,
                             "monitor_key": activity_monitor_key,
+                            "author_name": author_name,
+                            "author_email": author_email,
                             "session_metadata": sessions[s]}
                     d = Dispatcher()
                     process_id = d.dispatch_task(jobs.start_and_run_activity_monitor, kwargs=args, persist=True)
@@ -131,7 +168,8 @@ class JupyterLabMonitor(DevEnvMonitor):
 class JupyterLabNotebookMonitor(ActivityMonitor):
     """Class to monitor a notebook kernel for activity to be processed."""
 
-    def __init__(self, user: str, owner: str, labbook_name: str, monitor_key: str, config_file: str = None) -> None:
+    def __init__(self, user: str, owner: str, labbook_name: str, monitor_key: str, config_file: str = None,
+                 author_name: Optional[str] = None, author_email: Optional[str] = None) -> None:
         """Constructor requires info to load the lab book
 
         Args:
@@ -139,9 +177,12 @@ class JupyterLabNotebookMonitor(ActivityMonitor):
             owner(str): owner of the lab book
             labbook_name(str): name of the lab book
             monitor_key(str): Unique key for the activity monitor in redis
+            author_name(str): Name of the user starting this activity monitor
+            author_email(str): Email of the user starting this activity monitor
         """
         # Call super constructor
-        ActivityMonitor.__init__(self, user, owner, labbook_name, monitor_key, config_file)
+        ActivityMonitor.__init__(self, user, owner, labbook_name, monitor_key, config_file,
+                                 author_name=author_name, author_email=author_email)
 
         # For now, register python processors by default
         self.register_python_processors()
@@ -181,17 +222,16 @@ class JupyterLabNotebookMonitor(ActivityMonitor):
                     activity_record = self.process(ActivityType.CODE,
                                                    self.code, self.result, {"path": metadata["path"]})
 
-                    # Commit changes to the related Notebook file
-                    # commit = self.commit_file(metadata["path"])
-                    commit = self.commit_labbook()
-
-                    # Check if an error occurred, in which
+                    # Check if an error occurred
                     if self.result:
                         if "error" in self.result:
                             if self.result['error']:
-                                # An error occurred. Bail out now after doing the commit but BEFORE saving the record.
-                                logger.info("Cell error detected. Committed repo, but not saving record.")
+                                # An error occurred. Bail out now without doing a commit
+                                logger.info("Cell error detected. Not committing.")
                                 raise StopProcessingException()
+
+                    # Commit changes to the related Notebook file
+                    commit = self.commit_labbook()
 
                     # Create note record
                     activity_commit = self.create_activity_record(commit, activity_record)
@@ -269,8 +309,7 @@ class JupyterLabNotebookMonitor(ActivityMonitor):
         redis_conn = redis.Redis(db=database)
 
         try:
-            loop = True
-            while loop:
+            while True:
                 # get message
                 # TODO: Restructure using timeout kwarg to pack together a bunch of cells run at once
                 try:
@@ -283,8 +322,8 @@ class JupyterLabNotebookMonitor(ActivityMonitor):
 
                 # Check if you should exit
                 if redis_conn.hget(self.monitor_key, "run").decode() == "False":
-                    loop = False
                     logger.info("Received Activity Monitor Shutdown Message for {}".format(metadata["kernel_id"]))
+                    break
 
         except Exception:
             tb = traceback.format_exc()

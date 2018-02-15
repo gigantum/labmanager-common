@@ -467,7 +467,6 @@ class LabBook(object):
         if not self.is_repo_clean:
             raise LabbookException("_sweep_uncommitted_changes failed")
 
-
     @staticmethod
     def get_activity_type_from_section(section_name: str) -> Tuple[ActivityType, ActivityDetailType, str]:
         """Method to get activity and detail types from the section name
@@ -491,7 +490,10 @@ class LabBook(object):
             activity_type = ActivityType.OUTPUT_DATA
             section = "Output Data"
         else:
-            raise ValueError(f"Unsupported LabBook section: '{section_name}'")
+            # This is the labbook root, since we can't catagorize keep generic
+            activity_detail_type = ActivityDetailType.LABBOOK
+            activity_type = ActivityType.LABBOOK
+            section = "LabBook Root"
 
         return activity_type, activity_detail_type, section
 

@@ -442,6 +442,9 @@ class TestJupyterLabNotebookMonitor(object):
         monitor = JupyterLabNotebookMonitor("test", "test", mock_labbook[2].name,
                                             monitor_key, config_file=mock_labbook[0])
 
+        log = mock_labbook[2].git.log()
+        assert len(log) == 1
+
         # Setup monitoring metadata
         metadata = {"kernel_id": "XXXX",
                     "kernel_name": 'python',
@@ -477,6 +480,6 @@ class TestJupyterLabNotebookMonitor(object):
         # Check activity entry
         log = mock_labbook[2].git.log()
 
-        # log should increment by only 1, not 2 because of error and not be an Activity Record.
-        assert len(log) == 2
+        # log should not increment because of error
+        assert len(log) == 1
         assert 'GTM' not in log[0]['message']

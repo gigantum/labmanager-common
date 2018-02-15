@@ -18,12 +18,14 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 from lmcommon.labbook import LabBook
+from typing import Optional
 import redis
 from docker.errors import NotFound
 
 from lmcommon.logging import LMLogger
 from lmcommon.configuration import get_docker_client
 from lmcommon.environment import ComponentManager
+from lmcommon.gitlib.git import GitAuthor
 from lmcommon.activity.monitors import DevEnvMonitorManager
 
 from lmcommon.dispatcher import Dispatcher, JobKey
@@ -47,7 +49,8 @@ logger = LMLogger.get_logger()
 #       process_id: <id for the background task>
 #        ... custom fields for the specific activity monitor class
 
-def start_labbook_monitor(labbook: LabBook, username: str, dev_tool: str, database: int = 1) -> None:
+def start_labbook_monitor(labbook: LabBook, username: str, dev_tool: str, database: int = 1,
+                          author: Optional[GitAuthor] = None) -> None:
     """Method to start Development Environment Monitors for a given Lab Book if available
 
     Args:
@@ -55,6 +58,7 @@ def start_labbook_monitor(labbook: LabBook, username: str, dev_tool: str, databa
         username(str): The username of the logged in user
         dev_tool(str): The name of the development tool to monitor
         database(int): The redis database ID to use for key storage. Default should be 1
+        author(GitAuthor): A GitAuthor instance for the current logged in user starting the monitor
 
     Returns:
         None
@@ -94,13 +98,19 @@ def start_labbook_monitor(labbook: LabBook, username: str, dev_tool: str, databa
         d = Dispatcher()
         kwargs = {'dev_env_name': dev_tool,
                   'key': dev_env_monitor_key}
-        job_key = d.schedule_task(run_dev_env_monitor, kwargs=kwargs, repeat=None, interval=5)
+        job_key = d.schedule_task(run_dev_env_monitor, kwargs=kwargs, repeat=None, interval=3)
 
         redis_conn.hset(dev_env_monitor_key, "container_name", infer_docker_image_name(labbook.name,
                                                                                        labbook.owner['username'],
                                                                                        username))
         redis_conn.hset(dev_env_monitor_key, "process_id", job_key.key_str)
         redis_conn.hset(dev_env_monitor_key, "labbook_root", labbook.root_dir)
+
+        # Set author information so activity records can be committed on behalf of the user
+        if author:
+            redis_conn.hset(dev_env_monitor_key, "author_name", author.name)
+            redis_conn.hset(dev_env_monitor_key, "author_email", author.email)
+
         logger.info("Started `{}` dev env monitor for lab book `{}`".format(dev_tool, labbook.name))
     else:
         raise ValueError(f"{dev_tool} Developer Tool does not support monitoring")

@@ -23,6 +23,7 @@ import re
 import time
 import uuid
 from typing import Any, List, Optional, Tuple, Dict
+import redis
 
 from lmcommon.configuration import get_docker_client, Configuration
 from lmcommon.logging import LMLogger
@@ -153,7 +154,8 @@ class ContainerOperations(object):
             # If jupyter-lab is not already running.
             # Use a random hexadecimal string as token.
             token = str(uuid.uuid4()).replace('-', '')
-            cmd = f"jupyter lab --port=8888 --ip=0.0.0.0 " \
+            cmd = f"cd /mnt/labbook && " \
+                  f"jupyter lab --port=8888 --ip=0.0.0.0 " \
                   f"--NotebookApp.token='{token}' --no-browser " \
                   f"--ConnectionFileMixin.ip=0.0.0.0"
             bash = f'sh -c "{cmd}"'
@@ -170,6 +172,11 @@ class ContainerOperations(object):
             pmap = PortMap(labbook.labmanager_config)
             host, port = pmap.lookup(labbook.key)
             tool_url = f'http://{host}:{port}/lab?token={token}'
+
+            # Store token in redis (activity data is stored in db1) for later activity monitoring
+            redis_conn = redis.Redis(db=1)
+            redis_conn.set(f"{lb_key}-jupyter-token", token)
+
             logger.info(f"Jupyer Lab up at {tool_url}")
             return labbook, tool_url
 

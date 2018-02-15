@@ -269,7 +269,8 @@ def run_dev_env_monitor(dev_env_name, key) -> int:
         raise e
 
 
-def start_and_run_activity_monitor(module_name, class_name, user, owner, labbook_name, monitor_key, session_metadata):
+def start_and_run_activity_monitor(module_name, class_name, user, owner, labbook_name, monitor_key, author_name,
+                                   author_email, session_metadata):
     """Run method to run the activity monitor. It is a long running job.
 
         Args:
@@ -289,7 +290,8 @@ def start_and_run_activity_monitor(module_name, class_name, user, owner, labbook
         monitor_cls = getattr(m, class_name)
 
         # Instantiate monitor class
-        monitor = monitor_cls(user, owner, labbook_name, monitor_key)
+        monitor = monitor_cls(user, owner, labbook_name, monitor_key,
+                              author_name=author_name, author_email=author_email)
 
         # Start the monitor
         monitor.start(session_metadata)

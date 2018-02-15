@@ -70,7 +70,12 @@ class BasicJupyterLabProcessor(ActivityProcessor):
                     activity_type, activity_detail_type, section = LabBook.infer_section_from_relative_path(filename)
 
                     adr = ActivityDetailRecord(activity_detail_type, show=False, importance=min(100+cnt, 255))
-                    adr.add_value('text/markdown', f"Created new {section} file `{filename}`")
+                    if section == "LabBook Root":
+                        msg = f"Created new file `{filename}` in the LabBook Root. "
+                        msg = f"{msg}Note, it's best practice to use the Code, Input, and Output sections exclusively."
+                    else:
+                        msg = f"Created new {section} file `{filename}`"
+                    adr.add_value('text/markdown', msg)
                     result_obj.add_detail_object(adr)
                     cnt += 1
 

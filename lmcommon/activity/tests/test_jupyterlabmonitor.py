@@ -22,8 +22,13 @@ from pkg_resources import resource_filename
 import os
 import requests
 from lmcommon.activity.tests.fixtures import get_redis_client_mock, redis_client, MockSessionsResponse
+from lmcommon.container.utils import infer_docker_image_name
 
 from lmcommon.activity.monitors.monitor_jupyterlab import JupyterLabMonitor
+
+
+def mock_ip(key):
+    return "172.0.1.2"
 
 
 class TestJupyterLabMonitor(object):
@@ -43,9 +48,18 @@ class TestJupyterLabMonitor(object):
     def test_get_sessions(self, redis_client, monkeypatch):
         """Test getting the session information from jupyterlab"""
         monkeypatch.setattr(requests, 'get', MockSessionsResponse)
+        monkeypatch.setattr(JupyterLabMonitor, 'get_container_ip', mock_ip)
         monitor = JupyterLabMonitor()
 
-        sessions = monitor.get_sessions()
+        # prep redis data
+        dev_env_key = "dev_env_monitor:{}:{}:{}:{}".format('default',
+                                                           'default',
+                                                           'test-labbook',
+                                                           'jupyterlab')
+        lb_key = infer_docker_image_name('test-labbook', 'default', 'default')
+        redis_client.set(f"{lb_key}-jupyter-token", "afaketoken")
+
+        sessions = monitor.get_sessions(dev_env_key, redis_conn=redis_client)
 
         assert sessions['6e529520-2a6d-4adb-a2a1-de10b85b86a6']['kernel_id'] == '6e529520-2a6d-4adb-a2a1-de10b85b86a6'
         assert sessions['6e529520-2a6d-4adb-a2a1-de10b85b86a6']['kernel_name'] == 'python3'
@@ -59,6 +73,7 @@ class TestJupyterLabMonitor(object):
     def test_run(self, redis_client, monkeypatch):
         """Test running the monitor process"""
         monkeypatch.setattr(requests, 'get', MockSessionsResponse)
+        monkeypatch.setattr(JupyterLabMonitor, 'get_container_ip', mock_ip)
         # TODO: Mock dispatch methods once added
         monitor = JupyterLabMonitor()
 
@@ -66,6 +81,10 @@ class TestJupyterLabMonitor(object):
                                                            'default',
                                                            'test-labbook',
                                                            'jupyterlab-ubuntu1604')
+        lb_key = infer_docker_image_name('test-labbook', 'default', 'default')
+        redis_client.set(f"{lb_key}-jupyter-token", "afaketoken")
+        redis_client.hset(dev_env_key, "author_name", "default")
+        redis_client.hset(dev_env_key, "author_email", "default@default.io")
 
         monitor.run(dev_env_key)
 

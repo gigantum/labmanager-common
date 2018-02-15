@@ -18,7 +18,6 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 import abc
-import git
 from lmcommon.logging import LMLogger
 from typing import (Any, Dict, List, Optional)
 
@@ -26,6 +25,9 @@ from lmcommon.activity import ActivityRecord, ActivityStore, ActivityType
 from lmcommon.activity.processors.processor import ActivityProcessor
 from lmcommon.configuration import get_docker_client
 from lmcommon.labbook import LabBook
+from lmcommon.gitlib.git import GitAuthor
+from lmcommon.container.utils import infer_docker_image_name
+
 
 logger = LMLogger.get_logger()
 
@@ -33,7 +35,8 @@ logger = LMLogger.get_logger()
 class ActivityMonitor(metaclass=abc.ABCMeta):
     """Class to monitor a kernel/IDE for activity to be processed."""
 
-    def __init__(self, user: str, owner: str, labbook_name: str, monitor_key: str, config_file: str = None) -> None:
+    def __init__(self, user: str, owner: str, labbook_name: str, monitor_key: str, config_file: str = None,
+                 author_name: Optional[str] = None, author_email: Optional[str] = None) -> None:
         """Constructor requires info to load the lab book
 
         Args:
@@ -41,14 +44,22 @@ class ActivityMonitor(metaclass=abc.ABCMeta):
             owner(str): owner of the lab book
             labbook_name(str): name of the lab book
             monitor_key(str): Unique key for the activity monitor in redis
+            author_name(str): Name of the user starting this activity monitor
+            author_email(str): Email of the user starting this activity monitor
         """
         self.monitor_key = monitor_key
 
         # List of processor classes that will be invoked in order
         self.processors: List[ActivityProcessor] = []
 
+        # Populate GitAuthor instance if available
+        if author_name:
+            author: Optional[GitAuthor] = GitAuthor(name=author_name, email=author_email)
+        else:
+            author = None
+
         # Load Lab Book instance
-        self.labbook = LabBook(config_file=config_file)
+        self.labbook = LabBook(config_file=config_file, author=author)
         self.labbook.from_name(user, owner, labbook_name)
         self.user = user
         self.owner = owner
@@ -135,14 +146,10 @@ class ActivityMonitor(metaclass=abc.ABCMeta):
             str
         """
         client = get_docker_client()
-        ip = None
-        for container in client.containers.list():
-            if container.name == '{}-{}-{}'.format(self.user, self.owner, self.labbook_name):
-                details = client.api.inspect_container(container.id)
-                ip = details['NetworkSettings']['IPAddress']
-
-                logger.info("container {} IP: {}".format(container.name, ip))
-                break
+        lb_key = infer_docker_image_name(self.labbook_name, self.owner, self.user)
+        container = client.containers.get(lb_key)
+        ip = container.attrs['NetworkSettings']['Networks']['bridge']['IPAddress']
+        logger.info("container {} IP: {}".format(container.name, ip))
 
         return ip
 
