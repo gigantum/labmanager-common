@@ -94,10 +94,6 @@ class TestJobs(object):
             assert import_lb2.active_branch == "gm.workspace-unittester"
             assert not import_lb2.has_remote
 
-            # Do not build image in CircleCI, just return now.
-            if getpass.getuser() == 'circleci':
-                return
-
             build_kwargs = {
                 'path': labbook_dir,
                 'username': 'unittester',

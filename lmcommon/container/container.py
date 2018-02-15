@@ -143,9 +143,7 @@ class ContainerOperations(object):
             if not p:
                 raise LabbookException('Cannot detect Jupyter Lab port')
             port = p.groups()[0]
-
             t = re.search("token='?([a-zA-Z\d-]+)'?", jupyter_ps[0])
-            print(jupyter_ps[0])
             if not t:
                 raise LabbookException('Cannot detect Jupyter Lab token')
             token = t.groups()[0]

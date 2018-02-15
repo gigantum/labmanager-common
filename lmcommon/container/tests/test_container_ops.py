@@ -30,7 +30,7 @@ from lmcommon.container.utils import infer_docker_image_name
 from lmcommon.fixtures import build_lb_image_for_jupyterlab, mock_config_with_repo
 from lmcommon.container.exceptions import ContainerBuildException
 
-@pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Cannot build images on CircleCI")
+
 class TestContainerOps(object):
     def test_build_image_fixture(self, build_lb_image_for_jupyterlab):
         # Note, the test is in the fixure (the fixture is needed by other tests around here).

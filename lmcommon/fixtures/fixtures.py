@@ -88,6 +88,8 @@ def _create_temp_work_dir(override_dict: dict = None):
         }
     }
 
+    os.environ['HOST_WORK_DIR'] = unit_test_working_dir
+
     config = Configuration()
     merge_dict(config.config, default_override_config)
     if override_dict:

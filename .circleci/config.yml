@@ -7,11 +7,12 @@ jobs:
       version: 3.6.1
     steps:
       - checkout
-      - run: 
+      - setup_remote_docker
+      - run:
           name: Install build essentials
           command: |
             sudo apt-get update
-            sudo apt-get install -y build-essential redis-server
+            sudo apt-get install -y build-essential redis-server 
 
       - run:
           name: Set Git credentials config
@@ -28,6 +29,11 @@ jobs:
           name: Run mypy type checker
           command: |
             python -m mypy . --ignore-missing-imports --strict-optional
+
+      - run:
+          name: Set authentication credentials
+          command: bash /home/circleci/project/.circleci/write_auth.sh
+
       - run:
           name: Run unit and coverage tests
           command: |

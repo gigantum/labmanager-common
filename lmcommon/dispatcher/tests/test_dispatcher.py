@@ -164,7 +164,6 @@ class TestDispatcher(object):
         assert d.query_task(job_ref_1).status == 'failed'
         assert d.query_task(job_ref_2).status == 'deferred'
 
-    @pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Cannot build images on CircleCI")
     def test_build_docker_image(self, temporary_worker, mock_config_file):
         w, d = temporary_worker
 
@@ -215,7 +214,6 @@ class TestDispatcher(object):
         assert res
         assert res.status == 'finished'
 
-    @pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Cannot build images on CircleCI")
     def test_start_and_stop_docker_container(self, temporary_worker, mock_config_file):
         # start_docker_container(docker_image_id, exposed_ports, volumes_dict) -> str:
         w, d = temporary_worker

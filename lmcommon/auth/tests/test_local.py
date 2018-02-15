@@ -142,7 +142,6 @@ class TestIdentityLocal(object):
 
         assert mgr._get_profile_attribute(profile_data, "first_name", False) is None
 
-    @pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Cannot test auth0 on CircleCI")
     def test_is_session_valid(self, mock_config_file_with_auth):
         """test check for valid session"""
         # TODO: Possibly move to integration tests or fully mock since this makes a call out to Auth0
@@ -162,7 +161,6 @@ class TestIdentityLocal(object):
         assert mgr.is_token_valid(token_data['access_token']) is True
         assert mgr.rsa_key is not None
 
-    @pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Cannot test auth0 on CircleCI")
     def test_is_authenticated_token(self, mock_config_file_with_auth):
         """test checking if the user is authenticated via a token"""
         # TODO: Possibly move to integration tests or fully mock since this makes a call out to Auth0
@@ -191,7 +189,6 @@ class TestIdentityLocal(object):
         assert mgr.is_authenticated() is False
         assert mgr2.is_authenticated() is False
 
-    @pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Cannot test auth0 on CircleCI")
     def test_get_user_profile(self, mock_config_file_with_auth):
         """test getting a user profile from Auth0"""
         # TODO: Possibly move to integration tests or fully mock since this makes a call out to Auth0
