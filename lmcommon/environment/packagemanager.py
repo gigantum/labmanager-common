@@ -65,6 +65,18 @@ class PackageManager(metaclass=abc.ABCMeta):
         raise NotImplemented
 
     @abc.abstractmethod
+    def latest_versions(self, package_names: List[str]) -> List[str]:
+        """Method to get the latest version string for a list of packages
+
+        Args:
+            package_names(list): list of names of the packages to query
+
+        Returns:
+            list: latest version strings
+        """
+        raise NotImplemented
+
+    @abc.abstractmethod
     def list_installed_packages(self) -> List[Dict[str, str]]:
         """Method to get a list of all packages that are currently installed
 

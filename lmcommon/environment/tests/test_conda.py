@@ -55,6 +55,21 @@ class TestConda3PackageManager(object):
         assert result == "2.18.4"
 
     @pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Conda not available on CircleCI")
+    def test_latest_versions(self):
+        """Test latest_version command"""
+        mrg = Conda3PackageManager()
+        result = mrg.latest_versions(["requests", "numpy", "scipy", "matplotlib", "bokeh"])
+
+        assert result == ["2.18.4", '1.14.0', '1.0.0', '2.1.2', '0.12.13']
+
+    @pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Conda not available on CircleCI")
+    def test_latest_versions_bad_pkg(self):
+        """Test latest_version command"""
+        mrg = Conda3PackageManager()
+        with pytest.raises(ValueError):
+            mrg.latest_versions(["asdasdfdasdff", "numpy"])
+
+    @pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Conda not available on CircleCI")
     def test_list_installed_packages(self):
         """Test list_installed_packages command
 
@@ -259,3 +274,19 @@ class TestConda2PackageManager(object):
 
         assert result.package is True
         assert result.version is True
+
+    @pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Conda not available on CircleCI")
+    def test_latest_versions(self):
+        """Test latest_version command"""
+        mrg = Conda2PackageManager()
+        result = mrg.latest_versions(["requests", "numpy", "scipy", "matplotlib", "bokeh"])
+
+        assert result == ["2.18.4", '1.14.0', '1.0.0', '2.1.2', '0.12.13']
+
+    @pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Conda not available on CircleCI")
+    def test_latest_versions_bad_pkg(self):
+        """Test latest_version command"""
+        mrg = Conda2PackageManager()
+        with pytest.raises(ValueError):
+            mrg.latest_versions(["asdasdfdasdff", "numpy"])
+

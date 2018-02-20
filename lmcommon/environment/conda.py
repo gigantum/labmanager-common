@@ -19,6 +19,7 @@
 # SOFTWARE.
 from typing import (Any, List, Dict, Optional)
 from collections import OrderedDict
+import subprocess
 
 from io import StringIO
 import requests
@@ -134,7 +135,8 @@ class CondaPackageManagerBase(PackageManager):
         with redirect_stdout(buffer):
             try:
                 # Use the install function to solve for the correct package version based on the python env
-                conda.cli.main('conda', 'install', '--dry-run', '-n', self.python_env, '--json', package_name)
+                conda.cli.main('conda', 'install', '--dry-run', '--no-deps', '-n', self.python_env, '--json',
+                               package_name)
             except TypeError:
                 raise ValueError("Package not found")
         result = buffer.getvalue()
@@ -149,6 +151,35 @@ class CondaPackageManagerBase(PackageManager):
 
         # if you get here, failed to find the package in the result from conda
         raise ValueError(f"Could not retrieve version list for provided package name: {package_name}")
+
+    def latest_versions(self, package_names: List[str]) -> List[str]:
+        """Method to get the latest version string for a list of packages
+
+        Args:
+            package_names(list): list of names of the packages to query
+
+        Returns:
+            list: latest version strings
+        """
+        cmd = ['conda', 'install', '--dry-run', '--no-deps', '-n', self.python_env, '--json', *package_names]
+        try:
+            result = subprocess.run(cmd, stdout=subprocess.PIPE, check=True).stdout.decode('utf-8').strip()
+        except subprocess.CalledProcessError:
+            pkgs = ", ".join(package_names)
+            raise ValueError(f"Could not retrieve latest versions due to invalid package name in list: {pkgs}")
+
+        output_versions: List[str] = list()
+        if result:
+            # Parse json
+            data = json.loads(result)
+
+            versions = dict()
+            for p in data.get('actions')[0].get('LINK'):
+                versions[p.get('name')] = p.get("version")
+
+            output_versions = [versions[p] for p in package_names]
+
+        return output_versions
 
     def list_installed_packages(self) -> List[Dict[str, str]]:
         """Method to get a list of all packages that are currently installed

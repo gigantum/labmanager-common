@@ -91,6 +91,17 @@ class AptPackageManager(PackageManager):
         else:
             raise ValueError("Could not retrieve version list for provided package name")
 
+    def latest_versions(self, package_names: List[str]) -> List[str]:
+        """Method to get the latest version string for a list of packages
+
+        Args:
+            package_names(list): list of names of the packages to query
+
+        Returns:
+            list: latest version strings
+        """
+        return [self.latest_version(pkg) for pkg in package_names]
+
     def list_installed_packages(self) -> List[Dict[str, str]]:
         """Method to get a list of all packages that are currently installed
 
