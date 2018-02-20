@@ -27,6 +27,7 @@ import uuid
 import yaml
 import json
 import time
+import subprocess
 from contextlib import contextmanager
 from pkg_resources import resource_filename
 import gitdb
@@ -709,7 +710,7 @@ class LabBook(object):
             raise LabbookException(e)
 
     @_validate_git
-    def sync(self, username: str, remote: str = "origin") -> int:
+    def sync(self, username: str, remote: str = "origin", force: bool = False) -> int:
         """Sync workspace and personal workspace with the remote.
 
         Args:
@@ -744,7 +745,13 @@ class LabBook(object):
 
                 ## Pull those changes into the personal workspace
                 self.checkout_branch(f"gm.workspace-{username}")
-                self.git.merge("gm.workspace")
+                if force:
+                    logger.warning("Using force to overwrite local changes")
+                    r = subprocess.check_output(f'git merge -s recursive -X theirs {remote}/gm.workspace',
+                                                cwd=self.root_dir, shell=True)
+                    logger.info(f'Got result of merge: {r}')
+                else:
+                    self.git.merge("gm.workspace")
                 self.git.add_all(self.root_dir)
                 self.git.commit("Sync -- Merged from gm.workspace")
                 self.push(remote=remote)
