@@ -195,34 +195,33 @@ class ImageBuilder(object):
         if write:
             logger.info("Writing Dockerfile to {}".format(dockerfile_name))
 
-            with open(dockerfile_name, "w") as dockerfile:
-                dockerfile.write(os.linesep.join(docker_lines))
-
             # Get a LabBook instance
             lb = LabBook()
             lb.from_directory(self.labbook_directory)
 
-            # Add updated dockerfile to git
-            short_message = "Re-Generated Dockerfile"
-            lb.git.add(dockerfile_name)
-            commit = lb.git.commit(short_message)
+            with lb.lock_labbook():
+                with open(dockerfile_name, "w") as dockerfile:
+                    dockerfile.write(os.linesep.join(docker_lines))
 
-            # Create detail record
-            adr = ActivityDetailRecord(ActivityDetailType.ENVIRONMENT, show=False)
-            adr.add_value('text/plain', short_message)
+                short_message = "Re-Generated Dockerfile"
+                lb.git.add(dockerfile_name)
+                commit = lb.git.commit(short_message)
 
-            # Create activity record
-            ar = ActivityRecord(ActivityType.ENVIRONMENT,
-                                message=short_message,
-                                show=False,
-                                linked_commit=commit.hexsha,
-                                tags=['dockerfile'])
-            ar.add_detail_object(adr)
+                # Create detail record
+                adr = ActivityDetailRecord(ActivityDetailType.ENVIRONMENT, show=False)
+                adr.add_value('text/plain', short_message)
 
-            # Store
-            ars = ActivityStore(lb)
-            ars.create_activity_record(ar)
+                # Create activity record
+                ar = ActivityRecord(ActivityType.ENVIRONMENT,
+                                    message=short_message,
+                                    show=False,
+                                    linked_commit=commit.hexsha,
+                                    tags=['dockerfile'])
+                ar.add_detail_object(adr)
 
+                # Store
+                ars = ActivityStore(lb)
+                ars.create_activity_record(ar)
         else:
             logger.info("Dockerfile NOT being written; write=False; {}".format(dockerfile_name))
 

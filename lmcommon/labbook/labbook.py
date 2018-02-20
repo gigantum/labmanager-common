@@ -139,7 +139,7 @@ class LabBook(object):
         return __validator
 
     @contextmanager
-    def lock_labbook(self, lock_key: str = None):
+    def lock_labbook(self, lock_key: Optional[str] = None):
         """A context manager for locking labbook operations that is decorator compatible
 
         Manages the lock process along with catching and logging exceptions that may occur
