@@ -27,7 +27,8 @@ from typing import Dict, List, Tuple
 # Dictionary of supported implementations.
 # Key is the value to put in the config_dict["backend"].
 # Value is a list with the first entry being the module and the second the class
-SUPPORTED_GIT_INTERFACES = {'filesystem': ["lmcommon.gitlib.git_fs", "GitFilesystem"]}
+SUPPORTED_GIT_INTERFACES = {'filesystem': ["lmcommon.gitlib.git_fs", "GitFilesystem"],
+                            'filesystem-shim': ["lmcommon.gitlib.git_fs_shim", "GitFilesystemShimmed"]}
 
 
 def get_git_interface(config_dict):

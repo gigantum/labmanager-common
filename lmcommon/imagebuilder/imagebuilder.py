@@ -21,6 +21,7 @@ import datetime
 import functools
 import glob
 import os
+import time
 
 from typing import (Any, Dict, List)
 import yaml
@@ -203,6 +204,8 @@ class ImageBuilder(object):
                 with open(dockerfile_name, "w") as dockerfile:
                     dockerfile.write(os.linesep.join(docker_lines))
 
+                # TODO: Remove sleep after GitPython is removed from stack
+                time.sleep(2)
                 short_message = "Re-Generated Dockerfile"
                 lb.git.add(dockerfile_name)
                 commit = lb.git.commit(short_message)

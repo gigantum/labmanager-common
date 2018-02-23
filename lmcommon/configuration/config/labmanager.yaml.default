@@ -22,9 +22,10 @@ environment:
 
 # Git Configuration
 git:
-  backend: "filesystem"
+  backend: "filesystem-shim"
   working_directory: "~/gigantum"
   default_remote: "repo.gigantum.io"
+  lfs_enabled: true
   remotes:
     repo.gigantum.io:
       remote_type: gitlab

@@ -17,19 +17,22 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-import pytest
-from .git_interface_mixin import GitInterfaceMixin
-from .git_interface_mixin import mock_config_filesystem as mock_config
-from .git_interface_mixin import mock_initialized_filesystem as mock_initialized
-from .git_interface_mixin import mock_initialized_filesystem_with_remote as mock_initialized_remote
-from lmcommon.gitlib import GitFilesystem
+from lmcommon.gitlib.git_fs import GitFilesystem
+from lmcommon.logging import LMLogger
+
+logger = LMLogger.get_logger()
 
 
-@pytest.mark.usefixtures("mock_config")
-class TestGitFilesystem(GitInterfaceMixin):
-    """Class to test the GitFilesystem interface"""
-    class_type = GitFilesystem
+class GitFilesystemShimmed(GitFilesystem):
 
-    def get_git_obj(self, config):
-        return GitFilesystem(config)
+    def add(self, filename):
+        """Add a file to a commit
 
+        Args:
+            filename(str): Filename to add.
+
+        Returns:
+            None
+        """
+        logger.info("Adding file {} to Git repository in {}".format(filename, self.working_directory))
+        self.repo.git.add([filename])

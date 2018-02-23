@@ -18,6 +18,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 import pytest
+from typing import Any
 import tempfile
 import os
 import shutil
@@ -171,10 +172,15 @@ def write_file(git_instance, filename, content, add=True, commit_msg=None):
 
 class GitInterfaceMixin(object):
     """Mixin to test the GitInterface"""
+    class_type: Any = None
+
+    def get_git_obj(self, config):
+        raise NotImplemented
+
     def test_empty_dir(self, mock_config):
         """Test trying to get the filesystem interface"""
-        git = GitFilesystem(mock_config)
-        assert type(git) is GitFilesystem
+        git = self.get_git_obj(mock_config)
+        assert type(git) is self.class_type
         assert git.repo is None
 
     def test_existing_repo(self, mock_config):
@@ -183,8 +189,8 @@ class GitInterfaceMixin(object):
         create_dummy_repo(mock_config["working_directory"])
 
         # Create a GitFilesystem instance
-        git = GitFilesystem(mock_config)
-        assert type(git) is GitFilesystem
+        git = self.get_git_obj(mock_config)
+        assert type(git) is self.class_type
         assert type(git.repo) is Repo
 
     def test_update_working_directory(self, mock_config):
@@ -193,8 +199,8 @@ class GitInterfaceMixin(object):
         create_dummy_repo(mock_config["working_directory"])
 
         # Create a GitFilesystem instance
-        git = GitFilesystem(mock_config)
-        assert type(git) is GitFilesystem
+        git = self.get_git_obj(mock_config)
+        assert type(git) is self.class_type
         assert type(git.repo) is Repo
         assert git.working_directory == mock_config["working_directory"]
 
@@ -278,7 +284,7 @@ class GitInterfaceMixin(object):
         create_dummy_repo(mock_config["working_directory"])
 
         # Create a GitFilesystem instance
-        git = GitFilesystem(mock_config)
+        git = self.get_git_obj(mock_config)
 
         # Create a complex repo with all possible states to check
 

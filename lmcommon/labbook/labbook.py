@@ -1112,7 +1112,6 @@ class LabBook(object):
                 logger.exception(e)
                 raise
 
-
     @_validate_git
     def makedir(self, relative_path: str, make_parents: bool = True, create_activity_record: bool = False) -> None:
         """Make a new directory inside the labbook directory.
@@ -1145,11 +1144,12 @@ class LabBook(object):
                 for d in relative_path.split(os.sep):
                     new_dir = os.path.join(new_dir, d)
                     full_new_dir = os.path.join(self.root_dir, new_dir)
-                    with open(os.path.join(full_new_dir, '.gitkeep'), 'w') as gitkeep:
-                        gitkeep.write("This file is necessary to keep this directory tracked by Git"
-                                      " and archivable by compression tools. Do not delete or modify!")
-                    self.git.add_all(new_directory_path)
-
+                    gitkeep_path = os.path.join(full_new_dir, '.gitkeep')
+                    if not os.path.exists(gitkeep_path):
+                        with open(gitkeep_path, 'w') as gitkeep:
+                            gitkeep.write("This file is necessary to keep this directory tracked by Git"
+                                          " and archivable by compression tools. Do not delete or modify!")
+                        self.git.add(gitkeep_path)
 
                 if create_activity_record:
                     # Create detail record
@@ -1597,6 +1597,12 @@ class LabBook(object):
         # Create .gitignore default file
         shutil.copyfile(os.path.join(resource_filename('lmcommon', 'labbook'), 'gitignore.default'),
                         os.path.join(self.root_dir, ".gitignore"))
+
+        # Create .gitattributes to create git-lfs policies
+        if self.labmanager_config.config["git"]["lfs_enabled"]:
+            shutil.copyfile(os.path.join(resource_filename('lmcommon', 'labbook'), 'gitattributes.default'),
+                            os.path.join(self.root_dir, ".gitattributes"))
+            self.git.add(os.path.join(self.root_dir, ".gitattributes"))
 
         # Commit
         # TODO: Once users are properly added, create a GitAuthor instance before commit

@@ -45,7 +45,7 @@ ENV_UNIT_TEST_BASE = 'quickstart-jupyterlab'
 ENV_UNIT_TEST_REV = 1
 
 
-def _create_temp_work_dir(override_dict: dict = None):
+def _create_temp_work_dir(override_dict: dict = None, lfs_enabled: bool = True):
     """Helper method to create a temporary working directory and associated config file"""
     def merge_dict(d1, d2) -> None:
         """Method to merge 1 dictionary into another, updating and adding key/values as needed
@@ -75,7 +75,8 @@ def _create_temp_work_dir(override_dict: dict = None):
         },
         'git': {
             'working_directory': unit_test_working_dir,
-            'backend': 'filesystem'
+            'backend': 'filesystem',
+            'lfs_enabled': lfs_enabled
         },
         'auth': {
             'audience': "io.gigantum.api.dev"
@@ -298,7 +299,10 @@ def mock_duplicate_labbook():
 
 @pytest.fixture()
 def remote_labbook_repo():
-    conf_file, working_dir = _create_temp_work_dir()
+
+    # TODO: Remove after integration tests with LFS support are available
+    conf_file, working_dir = _create_temp_work_dir(lfs_enabled=False)
+
     lb = LabBook(conf_file)
     labbook_dir = lb.new(username="test", name="sample-repo-lb", description="my first labbook",
                              owner={"username": "test"})
