@@ -131,7 +131,11 @@ class LabBook(object):
                     _check_git_tracked(self.git)
                     n = method_ref(self, *args, **kwargs) #type: ignore
                 except ValueError:
-                    self._sweep_uncommitted_changes()
+                    with self.lock_labbook():
+                        self._sweep_uncommitted_changes()
+                    n = method_ref(self, *args, **kwargs)  # type: ignore
+                    with self.lock_labbook():
+                        self._sweep_uncommitted_changes()
                 finally:
                     _check_git_tracked(self.git)
             else:
@@ -1133,7 +1137,8 @@ class LabBook(object):
             section = relative_path.split(os.sep)[0]
             git_untracked = shims.in_untracked(self.root_dir, section)
             if os.path.exists(new_directory_path):
-                raise ValueError(f'Directory `{new_directory_path}` already exists')
+                #raise ValueError(f'Directory `{new_directory_path}` already exists')
+                return
             else:
                 logger.info(f"Making new directory in `{new_directory_path}`")
                 os.makedirs(new_directory_path, exist_ok=make_parents)
@@ -1144,6 +1149,7 @@ class LabBook(object):
                 for d in relative_path.split(os.sep):
                     new_dir = os.path.join(new_dir, d)
                     full_new_dir = os.path.join(self.root_dir, new_dir)
+
                     gitkeep_path = os.path.join(full_new_dir, '.gitkeep')
                     if not os.path.exists(gitkeep_path):
                         with open(gitkeep_path, 'w') as gitkeep:
