@@ -455,19 +455,11 @@ class LabBook(object):
         return ''.join(c for c in value if c not in '\<>?/;"`\'')
 
     def _sweep_uncommitted_changes(self) -> None:
-        result_status = self.git.status()
-        # status_key is one of "staged", "unstaged", "untracked"
-        has_changes = False
-        for status_key in result_status.keys():
-            n = result_status.get(status_key)
-            if n:
-                has_changes = True
-                s = ', '.join([f"{a[0]} ({a[1]}" for a in n])
-                logger.warning(f"In {str(self)}, sweeping up {s}")
-
-        if has_changes:
-            self.git.add_all(self.root_dir)
+        if not self.is_repo_clean:
+            self.git.add_all()
             self.git.commit("Sweeping up lingering changes.")
+        else:
+            logger.info(f"{str(self)} no changes to sweep.")
 
         if not self.is_repo_clean:
             raise LabbookException("_sweep_uncommitted_changes failed")
@@ -563,6 +555,7 @@ class LabBook(object):
             for status_key in result_status.keys():
                 n = result_status.get(status_key)
                 if n:
+                    logger.warning(f"Found {status_key} in {str(self)}: {n}")
                     return False
             return True
         except gitdb.exc.BadName:
@@ -856,6 +849,8 @@ class LabBook(object):
     def publish(self, username: str, access_token: Optional[str] = None, remote: str = "origin") -> None:
         try:
             logger.info(f"Publishing {str(self)} for user {username} to remote {remote}")
+            with self.lock_labbook():
+                self._sweep_uncommitted_changes()
 
             if self.active_branch == 'master':
                 logger.warning(f"Applying shim in {str(self)} to replace branch master")
