@@ -1487,7 +1487,7 @@ class LabBook(object):
         return favorite_data
 
     def new(self, owner: Dict[str, str], name: str, username: Optional[str] = None,
-            description: Optional[str] = None) -> str:
+            description: Optional[str] = None, bypass_lfs: bool = False) -> str:
         """Method to create a new minimal LabBook instance on disk
 
         /[LabBook name]
@@ -1600,7 +1600,7 @@ class LabBook(object):
                         os.path.join(self.root_dir, ".gitignore"))
 
         # Create .gitattributes to create git-lfs policies
-        if self.labmanager_config.config["git"]["lfs_enabled"]:
+        if self.labmanager_config.config["git"]["lfs_enabled"] and not bypass_lfs:
             shutil.copyfile(os.path.join(resource_filename('lmcommon', 'labbook'), 'gitattributes.default'),
                             os.path.join(self.root_dir, ".gitattributes"))
             self.git.add(os.path.join(self.root_dir, ".gitattributes"))
