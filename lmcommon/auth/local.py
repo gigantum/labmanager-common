@@ -163,7 +163,8 @@ class LocalIdentityManager(IdentityManager):
         # If user data exists, remove it first
         data_file = os.path.join(self.auth_dir, 'user.json')
         if os.path.exists(data_file):
-            raise IOError("User identity data already exists. Must explicitly remove to store new identity.")
+            os.remove(data_file)
+            logger.warning(f"User identity data already exists. Overwriting with {data['username']}")
 
         with open(data_file, 'wt') as user_file:
             json.dump(data, user_file)
