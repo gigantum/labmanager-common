@@ -137,6 +137,12 @@ def import_labboook_from_zip(archive_path: str, username: str, owner: str,
         # Make the user also the new owner of the Labbook on import.
         lb = LabBook(config_file)
         lb.from_directory(new_lb_path)
+
+        # This a fix to sweep up permissions issues that crop up when importing
+        # on Windows hosts.
+        with lb.lock_labbook():
+            lb._sweep_uncommitted_changes()
+
         if not lb._data:
             raise ValueError(f'Could not load data from imported LabBook {lb}')
         lb._data['owner']['username'] = owner
