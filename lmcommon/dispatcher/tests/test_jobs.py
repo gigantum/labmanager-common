@@ -55,14 +55,19 @@ class TestJobs(object):
             # Export the labbook
             export_dir = os.path.join(mock_config_with_repo[1], "export")
             exported_archive_path = jobs.export_labbook_as_zip(lb.root_dir, export_dir)
+            tmp_archive_path = shutil.copy(exported_archive_path, '/tmp')
 
             # Delete the labbook
             shutil.rmtree(lb.root_dir)
             assert not os.path.exists(lb_root), f"LabBook at {lb_root} should not exist."
 
             # Now import the labbook as a new user, validating that the change of namespace works properly.
-            imported_lb_path = jobs.import_labboook_from_zip(archive_path=exported_archive_path, username='unittester2',
+            imported_lb_path = jobs.import_labboook_from_zip(archive_path=tmp_archive_path, username='unittester2',
                                                              owner='unittester2', config_file=mock_config_with_repo[0])
+
+            assert not os.path.exists(tmp_archive_path)
+            tmp_archive_path = shutil.copy(exported_archive_path, '/tmp')
+            assert os.path.exists(tmp_archive_path)
 
             # New path should reflect username of new owner and user.
             assert imported_lb_path == lb_root.replace('/unittester/unittester/', '/unittester2/unittester2/')
@@ -81,8 +86,9 @@ class TestJobs(object):
             assert not import_lb.has_remote
 
             # Repeat the above, except with the original user (e.g., re-importing their own labbook)
-            user_import_lb = jobs.import_labboook_from_zip(archive_path=exported_archive_path, username="unittester",
+            user_import_lb = jobs.import_labboook_from_zip(archive_path=tmp_archive_path, username="unittester",
                                                            owner="unittester", config_file=mock_config_with_repo[0])
+            assert not os.path.exists(tmp_archive_path)
 
             # New path should reflect username of new owner and user.
             assert user_import_lb

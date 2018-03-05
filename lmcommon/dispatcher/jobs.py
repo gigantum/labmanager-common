@@ -159,6 +159,12 @@ def import_labboook_from_zip(archive_path: str, username: str, owner: str,
             raise ValueError(f'Error importing LabBook {lb} - cannot set owner')
 
         logger.info(f"(Job {p}) LabBook {inferred_labbook_name} imported to {new_lb_path}")
+
+        try:
+            logger.info(f'Deleting archive for {str(lb)} at `{archive_path}`')
+            os.remove(archive_path)
+        except FileNotFoundError as e:
+            logger.error(f'Could not delete archive for {str(lb)} at `{archive_path}`: {e}')
         return new_lb_path
     except Exception as e:
         logger.exception(f"(Job {p}) Error on import_labbook_from_zip({archive_path}): {e}")
