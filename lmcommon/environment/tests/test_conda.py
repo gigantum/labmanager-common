@@ -60,7 +60,7 @@ class TestConda3PackageManager(object):
         mrg = Conda3PackageManager()
         result = mrg.latest_versions(["requests", "numpy", "scipy", "matplotlib", "bokeh"])
 
-        assert result == ["2.18.4", '1.14.1', '1.0.0', '2.1.2', '0.12.13']
+        assert result == ["2.18.4", '1.14.1', '1.0.0', '2.1.2', '0.12.14']
 
     @pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Conda not available on CircleCI")
     def test_latest_versions_bad_pkg(self):
@@ -281,7 +281,7 @@ class TestConda2PackageManager(object):
         mrg = Conda2PackageManager()
         result = mrg.latest_versions(["requests", "numpy", "scipy", "matplotlib", "bokeh"])
 
-        assert result == ["2.18.4", '1.14.1', '1.0.0', '2.1.2', '0.12.13']
+        assert result == ["2.18.4", '1.14.1', '1.0.0', '2.1.2', '0.12.14']
 
     @pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Conda not available on CircleCI")
     def test_latest_versions_bad_pkg(self):

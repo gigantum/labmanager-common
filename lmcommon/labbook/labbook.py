@@ -31,6 +31,8 @@ import subprocess
 from contextlib import contextmanager
 from pkg_resources import resource_filename
 import gitdb
+from collections import OrderedDict
+import operator
 
 from lmcommon.configuration import Configuration, get_docker_client
 from lmcommon.gitlib import get_git_interface, GitAuthor, GitRepoInterface
@@ -332,18 +334,9 @@ class LabBook(object):
             dict
         """
         if not self._favorite_keys:
-            data: Dict[str, List[Optional[Any]]] = dict()
-            # Try to load favorite data from disk
-            favorites_dir = os.path.join(self.root_dir, '.gigantum', 'favorites')
+            data: Dict[str, list] = dict()
             for section in ['code', 'input', 'output']:
-                favorite_file = os.path.join(favorites_dir, f'{section}.json')
-                data[section] = list()
-                if os.path.exists(favorite_file):
-                    with open(favorite_file, 'rt') as f_data:
-                        favorite_data = json.load(f_data)
-
-                    # Save just the keys in a list
-                    data[section].extend([f['key'] for f in favorite_data])
+                data[section] = list(self.get_favorites(section).keys())
 
             self._favorite_keys = data
 
@@ -1249,15 +1242,15 @@ class LabBook(object):
         return sorted(stats, key=lambda a: a['key'])
 
     def create_favorite(self, section: str, relative_path: str,
-                        description: Optional[str] = None, position: Optional[int] = None,
-                        is_dir: bool = False) -> Dict[str, Any]:
+                        description: Optional[str] = None, is_dir: bool = False) -> Dict[str, Any]:
         """Mark an existing file as a Favorite
+
+        Data is stored in a json document, with each object name the relative path to the file
 
         Args:
             section(str): lab book subdir where file exists (code, input, output)
-            relative_path(str): Relative path within the root_dir to the file to favorite
+            relative_path(str): Relative path within the section to the file to favorite
             description(str): A short string containing information about the favorite
-            position(int): The position to insert the favorite. If omitted, will append.
             is_dir(bool): If true, relative_path will expected to be a directory
 
         Returns:
@@ -1288,7 +1281,7 @@ class LabBook(object):
                 # No favorites have been created
                 os.makedirs(favorites_dir)
 
-            favorite_data: List[Dict[str, Any]] = []
+            favorite_data: Dict[str, Any] = dict()
             if os.path.exists(os.path.join(favorites_dir, f'{section}.json')):
                 # Read existing data
                 with open(os.path.join(favorites_dir, f'{section}.json'), 'rt') as f_data:
@@ -1299,53 +1292,44 @@ class LabBook(object):
                 if relative_path[-1] != os.path.sep:
                     relative_path = relative_path + os.path.sep
 
-            favorite_record = {"key": relative_path,
-                               "description": description,
-                               "is_dir": is_dir}
+            if relative_path in favorite_data:
+                raise ValueError(f"Favorite `{relative_path}` already exists in {section}.")
 
-            if any(f['key'] == favorite_record['key'] for f in favorite_data):
-                raise ValueError(f"Favorite `{favorite_record['key']}` already exists.")
-
-            if position:
-                # insert at specific location
-                if position >= len(favorite_data):
-                    raise ValueError("Invalid index to insert favorite")
-
-                if position < 0:
-                    raise ValueError("Invalid index to insert favorite")
-
-                favorite_data.insert(position, favorite_record)
-                result_index = position
+            # Get last index
+            if favorite_data:
+                last_index = max([int(favorite_data[x]['index']) for x in favorite_data])
+                index_val = last_index + 1
             else:
-                # append
-                favorite_data.append(favorite_record)
-                result_index = len(favorite_data) - 1
+                index_val = 0
 
-            # Add index values
-            favorite_data = [dict(fav_data, index=idx_val) for fav_data, idx_val in zip(favorite_data,
-                                                                                        range(len(favorite_data)))]
+            # Create new record
+            favorite_data[relative_path] = {"key": relative_path,
+                                            "index": index_val,
+                                            "description": description,
+                                            "is_dir": is_dir}
+
+            # Always be sure to sort the ordered dict
+            favorite_data = OrderedDict(sorted(favorite_data.items(), key=lambda val: val[1]['index']))
 
             # Write favorites to lab book
             with open(os.path.join(favorites_dir, f'{section}.json'), 'wt') as f_data:
-                json.dump(favorite_data, f_data)
+                json.dump(favorite_data, f_data, indent=2)
 
             # Remove cached favorite key data
             self._favorite_keys = None
 
-            return favorite_data[result_index]
+            return favorite_data[relative_path]
 
-    def update_favorite(self, section: str, index: int,
+    def update_favorite(self, section: str, relative_path: str,
                         new_description: Optional[str] = None,
-                        new_index: Optional[int] = None,
-                        new_key: Optional[str] = None) -> Dict[str, Any]:
+                        new_index: Optional[int] = None) -> Dict[str, Any]:
         """Mark an existing file as a Favorite
 
         Args:
             section(str): lab book subdir where file exists (code, input, output)
-            index(int): The position of the favorite to edit
+            relative_path(str): Relative path within the section to the file to favorite
             new_description(str): A short string containing information about the favorite
             new_index(int): The position to move the favorite
-            new_key(int): An updated key for the favorite
 
         Returns:
             dict
@@ -1364,64 +1348,53 @@ class LabBook(object):
             with open(favorites_file, 'rt') as f_data:
                 favorite_data = json.load(f_data)
 
-            # Ensure the index is valid
-            if index < 0 or index >= len(favorite_data):
-                raise ValueError(f"Invalid favorite index {index}")
+            # Ensure the favorite already exists is valid
+            if relative_path not in favorite_data:
+                raise ValueError(f"Favorite {relative_path} in section {section} does not exist. Cannot update.")
 
             # Update description if needed
             if new_description:
-                logger.info(f"Updating description for {favorite_data[index]['key']} favorite")
-                favorite_data[index]['description'] = new_description
+                logger.info(f"Updating description for {relative_path} favorite in section {section}.")
+                favorite_data[relative_path]['description'] = new_description
 
-            # Update key if needed
-            if new_key:
-                # Remove any leading "/" -- without doing so os.path.join will break.
-                target_path_rel = LabBook._make_path_relative(os.path.join(section, new_key))
-                target_path = os.path.join(self.root_dir, target_path_rel.replace('..', ''))
+            # Update the index if needed
+            if new_index is not None:
+                if new_index < 0 or new_index > len(favorite_data.keys()) - 1:
+                    raise ValueError(f"Invalid index during favorite update: {new_index}")
 
-                if not os.path.exists(target_path):
-                    raise ValueError(f"Target file/dir `{target_path}` does not exist")
+                if new_index < favorite_data[relative_path]['index']:
+                    # Increment index of all items "after" updated index
+                    for fav in favorite_data:
+                        if favorite_data[fav]['index'] >= new_index:
+                            favorite_data[fav]['index'] = favorite_data[fav]['index'] + 1
 
-                logger.info(f"Updating key for {favorite_data[index]['key']} favorite")
-                favorite_data[index]['key'] = new_key
+                elif new_index > favorite_data[relative_path]['index']:
+                    # Decrement index of all items "before" updated index
+                    for fav in favorite_data:
+                        if favorite_data[fav]['index'] <= new_index:
+                            favorite_data[fav]['index'] = favorite_data[fav]['index'] - 1
 
-            if new_index and new_index != index:
-                if new_index < 0 or new_index >= len(favorite_data):
-                    raise ValueError("Invalid index to insert favorite")
+                # Update new index
+                favorite_data[relative_path]['index'] = new_index
 
-                updated_record = favorite_data[index]
-                if new_index > index:
-                    # Insert then delete
-                    favorite_data.insert(new_index + 1, updated_record)
-                    del favorite_data[index]
-                else:
-                    # delete then insert
-                    del favorite_data[index]
-                    favorite_data.insert(new_index, updated_record)
-
-                result_index = new_index
-            else:
-                result_index = index
-
-            # Add index values
-            favorite_data = [dict(fav_data, index=idx_val) for fav_data, idx_val in zip(favorite_data,
-                                                                                        range(len(favorite_data)))]
+            # Always be sure to sort the ordered dict
+            favorite_data = OrderedDict(sorted(favorite_data.items(), key=lambda val: val[1]['index']))
 
             # Write favorites to lab book
             with open(favorites_file, 'wt') as f_data:
-                json.dump(favorite_data, f_data)
+                json.dump(favorite_data, f_data, indent=2)
 
             # Remove cached favorite key data
             self._favorite_keys = None
 
-            return favorite_data[result_index]
+            return favorite_data[relative_path]
 
-    def remove_favorite(self, section: str, position: int) -> None:
+    def remove_favorite(self, section: str, relative_path: str) -> None:
         """Mark an existing file as a Favorite
 
         Args:
             section(str): lab book subdir where file exists (code, input, output)
-            position(int): The position to insert the favorite. If omitted, will append.
+            relative_path(str): Relative path within the section to the file to favorite
 
         Returns:
             None
@@ -1432,41 +1405,41 @@ class LabBook(object):
         with self.lock_labbook():
             # Open existing Favorites json if exists
             favorites_dir = os.path.join(self.root_dir, '.gigantum', 'favorites')
-            if not os.path.exists(favorites_dir):
-                # No favorites have been created
-                raise ValueError(f"No favorites have been created yet. Cannot remove item {position}!")
 
-            favorite_data: List[Dict[str, Any]] = []
-            if os.path.exists(os.path.join(favorites_dir, f'{section}.json')):
-                # Read existing data
-                with open(os.path.join(favorites_dir, f'{section}.json'), 'rt') as f_data:
-                    favorite_data = json.load(f_data)
+            data_file = os.path.join(favorites_dir, f'{section}.json')
+            if not os.path.exists(data_file):
+                raise ValueError(f"No {section} favorites have been created yet. Cannot remove item {relative_path}!")
 
-            if position >= len(favorite_data):
-                raise ValueError("Invalid index to remove favorite")
-            if position < 0:
-                raise ValueError("Invalid index to remove favorite")
+            # Read existing data
+            with open(data_file, 'rt') as f_data:
+                favorite_data = json.load(f_data)
+
+            if relative_path not in favorite_data:
+                raise ValueError(f"Favorite {relative_path} not found in {section}. Cannot remove.")
 
             # Remove favorite at index value
-            del favorite_data[position]
+            del favorite_data[relative_path]
 
-            # Add index values
-            favorite_data = [dict(fav_data, index=idx_val) for fav_data, idx_val in zip(favorite_data,
-                                                                                        range(len(favorite_data)))]
+            # Always be sure to sort the ordered dict
+            favorite_data = OrderedDict(sorted(favorite_data.items(), key=lambda val: val[1]['index']))
+
+            # Reset index vals
+            for idx, fav in enumerate(favorite_data):
+                favorite_data[fav]['index'] = idx
 
             # Write favorites to back lab book
-            with open(os.path.join(favorites_dir, f'{section}.json'), 'wt') as f_data:
-                json.dump(favorite_data, f_data)
+            with open(data_file, 'wt') as f_data:
+                json.dump(favorite_data, f_data, indent=2)
 
-            logger.info(f"Removed {section} favorite #{position}")
+            logger.info(f"Removed {section} favorite {relative_path}")
 
             # Remove cached favorite key data
             self._favorite_keys = None
 
             return None
 
-    def get_favorites(self, section: str) -> List[Optional[Dict[str, Any]]]:
-        """Get Favorite data
+    def get_favorites(self, section: str) -> OrderedDict:
+        """Get Favorite data in an OrderedDict, sorted by index
 
         Args:
             section(str): lab book subdir where file exists (code, input, output)
@@ -1477,12 +1450,12 @@ class LabBook(object):
         if section not in ['code', 'input', 'output']:
             raise ValueError("Favorites only supported in `code`, `input`, and `output` Lab Book directories")
 
-        favorite_data: List[Optional[Dict[str, Any]]] = []
+        favorite_data: OrderedDict = OrderedDict()
         favorites_dir = os.path.join(self.root_dir, '.gigantum', 'favorites')
         if os.path.exists(os.path.join(favorites_dir, f'{section}.json')):
             # Read existing data
             with open(os.path.join(favorites_dir, f'{section}.json'), 'rt') as f_data:
-                favorite_data = json.load(f_data)
+                favorite_data = json.load(f_data, object_pairs_hook=OrderedDict)
 
         return favorite_data
 
@@ -1542,7 +1515,7 @@ class LabBook(object):
         logger.info("Creating new labbook on disk for {}/{}/{} ...".format(username, owner, name))
 
         # lock while creating initial directory
-        with self.lock_labbook(lock_key=f"new_labbook_lock|{username}|{owner}|{name}"):
+        with self.lock_labbook(lock_key=f"new_labbook_lock|{username}|{owner['username']}|{name}"):
             # Verify or Create user subdirectory
             # Make sure you expand a user dir string
             starting_dir = os.path.expanduser(self.labmanager_config.config["git"]["working_directory"])

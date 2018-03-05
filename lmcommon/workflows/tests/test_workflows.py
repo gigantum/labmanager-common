@@ -29,7 +29,7 @@ import git
 
 from lmcommon.labbook import LabBook, LabbookException
 from lmcommon.workflows import GitWorkflow, MergeError
-from lmcommon.fixtures import (mock_config_file, mock_labbook, mock_duplicate_labbook, remote_bare_repo,
+from lmcommon.fixtures import (mock_config_file, mock_labbook_lfs_disabled, mock_duplicate_labbook, remote_bare_repo,
                                sample_src_file, _MOCK_create_remote_repo)
 
 # If importing from remote, does new user's branch get created and does it push properly?
@@ -44,11 +44,11 @@ def pause_wait_for_redis():
 class TestLabbookShareProtocol(object):
 
     @mock.patch('lmcommon.labbook.LabBook._create_remote_repo', new=_MOCK_create_remote_repo)
-    def test_simple_publish_new_one_user(self, pause_wait_for_redis, remote_bare_repo, mock_labbook):
+    def test_simple_publish_new_one_user(self, pause_wait_for_redis, remote_bare_repo, mock_labbook_lfs_disabled):
         # Make sure you cannot clobber a remote branch with your local branch of the same name.
 
         ## 1 - Make initial set of contributions to Labbook.
-        lb = mock_labbook[2]
+        lb = mock_labbook_lfs_disabled[2]
 
         assert lb.active_branch == "gm.workspace-test"
         lb.makedir(relative_path='code/testy-tacked-dir', create_activity_record=True)
@@ -76,11 +76,12 @@ class TestLabbookShareProtocol(object):
         assert os.path.exists(os.path.join(lb.root_dir, 'input', 'new-input-dir'))
 
     @mock.patch('lmcommon.labbook.LabBook._create_remote_repo', new=_MOCK_create_remote_repo)
-    def test_simple_single_user_two_instances(self, pause_wait_for_redis, remote_bare_repo, mock_labbook, mock_config_file):
+    def test_simple_single_user_two_instances(self, pause_wait_for_redis, remote_bare_repo, mock_labbook_lfs_disabled,
+                                              mock_config_file):
         """This mocks up a single user using a single labbook at two locations (i.e., home and work). """
 
         ## 1 - Make initial set of contributions to Labbook.
-        workplace_lb = mock_labbook[2]
+        workplace_lb = mock_labbook_lfs_disabled[2]
         workplace_lb.makedir(relative_path='code/testy-tracked-dir', create_activity_record=True)
         workplace_lb.publish('test')
         workplace_lb.makedir(relative_path='code/second-silly-dir', create_activity_record=True)
@@ -103,9 +104,10 @@ class TestLabbookShareProtocol(object):
         assert os.path.exists(os.path.join(workplace_lb.root_dir, 'input/stuff-for-inputs'))
 
     @mock.patch('lmcommon.labbook.LabBook._create_remote_repo', new=_MOCK_create_remote_repo)
-    def test_two_users_alternate_changes(self, pause_wait_for_redis, remote_bare_repo, mock_labbook, mock_config_file):
+    def test_two_users_alternate_changes(self, pause_wait_for_redis, remote_bare_repo, mock_labbook_lfs_disabled,
+                                         mock_config_file):
         ## 1 - Make initial set of contributions to Labbook.
-        test_user_lb = mock_labbook[2]
+        test_user_lb = mock_labbook_lfs_disabled[2]
         test_user_lb.makedir(relative_path='code/testy-tracked-dir', create_activity_record=True)
         test_user_lb.publish('test')
 
@@ -124,8 +126,9 @@ class TestLabbookShareProtocol(object):
         assert test_user_lb.active_branch == "gm.workspace-test"
 
     @mock.patch('lmcommon.labbook.LabBook._create_remote_repo', new=_MOCK_create_remote_repo)
-    def test_two_users_attempt_conflict(self, pause_wait_for_redis, mock_labbook, mock_config_file, sample_src_file):
-        test_user_lb = mock_labbook[2]
+    def test_two_users_attempt_conflict(self, pause_wait_for_redis, mock_labbook_lfs_disabled, mock_config_file,
+                                        sample_src_file):
+        test_user_lb = mock_labbook_lfs_disabled[2]
         test_user_lb.makedir(relative_path='code/testy-tracked-dir', create_activity_record=True)
         test_user_lb.publish('test')
 
@@ -148,11 +151,12 @@ class TestLabbookShareProtocol(object):
         assert os.path.exists(os.path.join(bob_user_lb.root_dir, 'code', 'testy-tracked-dir'))
 
     @mock.patch('lmcommon.labbook.LabBook._create_remote_repo', new=_MOCK_create_remote_repo)
-    def test_attempt_another_conflict(self, pause_wait_for_redis, mock_labbook, mock_config_file, sample_src_file):
+    def test_attempt_another_conflict(self, pause_wait_for_redis, mock_labbook_lfs_disabled,
+                                      mock_config_file, sample_src_file):
 
         with open('/tmp/s1.txt', 'w') as s1:
             s1.write('aaaaa\nbbbbbb\nccccc')
-        test_user_lb = mock_labbook[2]
+        test_user_lb = mock_labbook_lfs_disabled[2]
         test_user_lb.insert_file(section='code', src_file=s1.name, dst_dir='')
         wf_test_user = GitWorkflow(test_user_lb)
         wf_test_user.publish('test')

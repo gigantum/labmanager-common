@@ -84,7 +84,6 @@ def _create_temp_work_dir(override_dict: dict = None, lfs_enabled: bool = True):
         'lock': {
             'redis': {
                 'strict': False,
-                'db': 4
             }
         }
     }
@@ -264,6 +263,18 @@ def mock_labbook():
     """A pytest fixture that creates a temporary directory and a config file to match. Deletes directory after test"""
 
     conf_file, working_dir = _create_temp_work_dir()
+    lb = LabBook(conf_file)
+    labbook_dir = lb.new(username="test", name="labbook1", description="my first labbook",
+                             owner={"username": "test"})
+    yield conf_file, labbook_dir, lb
+    shutil.rmtree(working_dir)
+
+
+@pytest.fixture()
+def mock_labbook_lfs_disabled():
+    """A pytest fixture that creates a temporary directory and a config file to match. Deletes directory after test"""
+
+    conf_file, working_dir = _create_temp_work_dir(lfs_enabled=False)
     lb = LabBook(conf_file)
     labbook_dir = lb.new(username="test", name="labbook1", description="my first labbook",
                              owner={"username": "test"})
