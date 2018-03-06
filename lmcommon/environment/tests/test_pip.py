@@ -39,10 +39,10 @@ class TestPipPackageManager(object):
 
         result = mrg.list_versions("gigantum")
 
-        assert len(result) == 5
-        assert result[2] == "0.3"
-        assert result[1] == "0.4"
-        assert result[0] == "0.5"
+        assert len(result) > 3
+        assert "0.3" in result
+        assert "0.4" in result
+        assert "0.5" in result
 
     def test_latest_version(self):
         """Test latest_version command"""
@@ -50,15 +50,16 @@ class TestPipPackageManager(object):
 
         result = mrg.latest_version("gigantum")
 
-        assert result == "0.5"
+        assert result == "0.7"
 
     def test_latest_versions(self):
         """Test latest_version command"""
         mrg = PipPackageManager()
 
-        result = mrg.latest_versions(["gigantum", "requests"])
+        gig_res, req_res = mrg.latest_versions(["gigantum", "requests"])
 
-        assert result == ["0.5", "2.18.4"]
+        assert gig_res == "0.7"
+        assert req_res.startswith('2.')
 
     def test_list_installed_packages(self):
         """Test list_installed_packages command

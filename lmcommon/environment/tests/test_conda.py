@@ -58,9 +58,12 @@ class TestConda3PackageManager(object):
     def test_latest_versions(self):
         """Test latest_version command"""
         mrg = Conda3PackageManager()
-        result = mrg.latest_versions(["requests", "numpy", "scipy", "matplotlib", "bokeh"])
+        pkgs = ["requests", "numpy", "scipy", "matplotlib", "bokeh"]
+        result = mrg.latest_versions(pkgs)
 
-        assert result == ["2.18.4", '1.14.1', '1.0.0', '2.1.2', '0.12.14']
+        for res, pak in zip(result, pkgs):
+            assert res.replace('.', '').isdigit(), f"Invalid version {res} on Conda package {pak}"
+        #assert result == ["2.18.4", '1.14.1', '1.0.0', '2.1.2', '0.12.14']
 
     @pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Conda not available on CircleCI")
     def test_latest_versions_bad_pkg(self):
@@ -279,9 +282,13 @@ class TestConda2PackageManager(object):
     def test_latest_versions(self):
         """Test latest_version command"""
         mrg = Conda2PackageManager()
-        result = mrg.latest_versions(["requests", "numpy", "scipy", "matplotlib", "bokeh"])
+        pkgs = ["requests", "numpy", "scipy", "matplotlib", "bokeh"]
+        result = mrg.latest_versions(pkgs)
 
-        assert result == ["2.18.4", '1.14.1', '1.0.0', '2.1.2', '0.12.14']
+        for res, pak in zip(result, pkgs):
+            assert res.replace('.', '').isdigit(), f"Version {res} for package {pak} is invalid"
+
+        #assert result == ["2.18.4", '1.14.1', '1.0.0', '2.1.2', '0.12.14']
 
     @pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Conda not available on CircleCI")
     def test_latest_versions_bad_pkg(self):

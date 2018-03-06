@@ -24,6 +24,7 @@ import os
 import time
 from typing import Optional
 import zipfile
+import subprocess
 import shutil
 
 from rq import get_current_job
@@ -134,14 +135,14 @@ def import_labboook_from_zip(archive_path: str, username: str, owner: str,
         if not os.path.isdir(new_lb_path):
             raise ValueError(f"(Job {p}) Expected LabBook not found at {new_lb_path}")
 
+        logger.info(f'(Job {p}) Extracted imported archive to {new_lb_path}')
         # Make the user also the new owner of the Labbook on import.
         lb = LabBook(config_file)
         lb.from_directory(new_lb_path)
+        logger.info(f'(Job {p}) Extracted archive resolves to new LabBook {str(lb)}')
 
-        # This a fix to sweep up permissions issues that crop up when importing
-        # on Windows hosts.
-        with lb.lock_labbook():
-            lb._sweep_uncommitted_changes()
+        r = subprocess.check_output("git config core.fileMode false", cwd=lb.root_dir, shell=True)
+
 
         if not lb._data:
             raise ValueError(f'Could not load data from imported LabBook {lb}')

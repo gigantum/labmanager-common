@@ -449,8 +449,10 @@ class LabBook(object):
 
     def _sweep_uncommitted_changes(self) -> None:
         if not self.is_repo_clean:
-            self.git.add_all()
-            self.git.commit("Sweeping up lingering changes.")
+            r = subprocess.check_output(f'git add -A && git commit -m "_sweep_uncommitted_changes"',
+                                        cwd=self.root_dir, shell=True)
+            #self.git.add_all()
+            #self.git.commit("Sweeping up lingering changes.")
         else:
             logger.info(f"{str(self)} no changes to sweep.")
 
