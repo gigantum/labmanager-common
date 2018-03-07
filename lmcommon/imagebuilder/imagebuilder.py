@@ -129,8 +129,9 @@ class ImageBuilder(object):
         """ Contents of docker setup that must be at end of Dockerfile. """
         root_dir = os.path.join(self.labbook_directory, '.gigantum', 'env', 'package_manager')
         package_files = [os.path.join(root_dir, n) for n in os.listdir(root_dir) if 'yaml' in n]
-
         docker_lines = ['## Adding individual packages']
+        apt_updated = False
+
         for package in sorted(package_files):
             pkg_fields: Dict[str, Any] = {}
 
@@ -141,6 +142,10 @@ class ImageBuilder(object):
             pkg_info = {"name": str(pkg_fields['package']),
                         "version": str(pkg_fields.get('version'))}
             if not pkg_fields.get('from_base'):
+                if pkg_fields['manager'] == 'apt' and not apt_updated:
+                    docker_lines.append('RUN apt-get -y update')
+                    apt_updated = True
+
                 docker_lines.extend(
                     get_package_manager(pkg_fields['manager']).generate_docker_install_snippet([pkg_info]))
 

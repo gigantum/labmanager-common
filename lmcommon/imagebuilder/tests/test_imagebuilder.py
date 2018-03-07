@@ -71,7 +71,7 @@ class TestImageBuilder(object):
 
         ib = ImageBuilder(labbook_dir_tree)
         pkg_lines = [l for l in ib._load_packages() if 'RUN' in l]
-        assert 'RUN apt-get -y install docker=1.2.3' in pkg_lines
+        assert 'RUN apt-get -y install docker' in pkg_lines
 
     def test_package_pip(self, labbook_dir_tree):
         package_manager_dir = os.path.join(labbook_dir_tree, '.gigantum', 'env', 'package_manager')
@@ -139,7 +139,7 @@ class TestImageBuilder(object):
             dockerfile.write(dockerfile_text)
 
         test_lines = ['## Adding individual packages',
-                      'RUN apt-get -y install docker=1.2.3',
+                      'RUN apt-get -y install docker',
                       'RUN pip install docker==2.0.1',
                       'RUN pip install requests==2.18.4']
 

@@ -195,7 +195,7 @@ class AptPackageManager(PackageManager):
         Returns:
             list
         """
-        package_strings = [f"{x['name']}={x['version']}" for x in packages]
+        package_strings = [f"{x['name']}" for x in packages]
 
         if single_line:
             return [f"RUN apt-get -y install {' '.join(package_strings)}"]

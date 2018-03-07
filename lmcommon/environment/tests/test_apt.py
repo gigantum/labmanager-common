@@ -96,10 +96,10 @@ class TestAptPackageManager(object):
         packages = [{'name': 'mypackage', 'version': '3.1.4'}]
 
         result = mrg.generate_docker_install_snippet(packages)
-        assert result == ['RUN apt-get -y install mypackage=3.1.4']
+        assert result == ['RUN apt-get -y install mypackage']
 
         result = mrg.generate_docker_install_snippet(packages, single_line=True)
-        assert result == ['RUN apt-get -y install mypackage=3.1.4']
+        assert result == ['RUN apt-get -y install mypackage']
 
     def test_generate_docker_install_snippet_multiple(self):
         """Test generate_docker_install_snippet command
@@ -110,10 +110,10 @@ class TestAptPackageManager(object):
                     {'name': 'yourpackage', 'version': '2017-54.0'}]
 
         result = mrg.generate_docker_install_snippet(packages)
-        assert result == ['RUN apt-get -y install mypackage=3.1.4', 'RUN apt-get -y install yourpackage=2017-54.0']
+        assert result == ['RUN apt-get -y install mypackage', 'RUN apt-get -y install yourpackage']
 
         result = mrg.generate_docker_install_snippet(packages, single_line=True)
-        assert result == ['RUN apt-get -y install mypackage=3.1.4 yourpackage=2017-54.0']
+        assert result == ['RUN apt-get -y install mypackage yourpackage']
 
     @pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Cannot check apt versions on CircleCI")
     def test_list_versions_badpackage(self):
