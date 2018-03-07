@@ -119,6 +119,11 @@ chmod 777 /var/run/docker.sock
 export JUPYTER_RUNTIME_DIR=/mnt/share/jupyter/runtime
 chown -R giguser:root /mnt/share/
 
+export LB_HOME=/mnt/labbook
+export LB_INPUT=/mnt/labbook/input
+export LB_OUTPUT=/mnt/labbook/output
+export LB_CODE=/mnt/labbook/code
+
 # Run the Docker Command
 exec gosu giguser "$@"
 """)
