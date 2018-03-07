@@ -164,6 +164,10 @@ class ImageBuilder(object):
         """ Contents of docker setup that must be at end of Dockerfile. """
         try:
             docker_lines = ['## Entrypoint hooks']
+            docker_lines.append('ENV LB_HOME=/mnt/labbook')
+            docker_lines.append('ENV LB_CODE=/mnt/labbook/code')
+            docker_lines.append('ENV LB_INPUT=/mnt/labbook/input')
+            docker_lines.append('ENV LB_OUTPUT=/mnt/labbook/output')
             docker_lines.append("# Run Environment")
             docker_lines.append('ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]')
             docker_lines.append('WORKDIR /mnt/labbook')
