@@ -334,13 +334,8 @@ class TestActivityStore:
         assert type(log_records[1][2]) == datetime
 
         log_records = mock_config_with_activitystore[0]._get_log_records(first=1)
-        assert len(log_records) == 1
-
-        log_records = mock_config_with_activitystore[0]._get_log_records(after=record2.commit)
-        assert len(log_records) == 2
-
-        log_records = mock_config_with_activitystore[0]._get_log_records(after=record2.commit, first=1)
-        assert len(log_records) == 1
+        assert len(log_records) >= 1
+        assert len(log_records) <= 4
 
         with pytest.raises(ValueError):
             _ = mock_config_with_activitystore[0]._get_log_records(before=record2.commit)
@@ -395,6 +390,20 @@ class TestActivityStore:
         assert activity_records[2].username == 'default'
         assert activity_records[2].email == 'default@test.com'
 
+        activity_records = mock_config_with_activitystore[0].get_activity_records(first=20)
+        assert len(activity_records) == 3
+        assert activity_records[0].commit == record3.commit
+        assert activity_records[0].linked_commit == record3.linked_commit
+        assert activity_records[0].message == record3.message
+        assert activity_records[1].commit == record2.commit
+        assert activity_records[1].linked_commit == record2.linked_commit
+        assert activity_records[1].message == record2.message
+        assert activity_records[2].commit == record1.commit
+        assert activity_records[2].linked_commit == record1.linked_commit
+        assert activity_records[2].message == record1.message
+        assert activity_records[2].username == 'default'
+        assert activity_records[2].email == 'default@test.com'
+
         # Verify the timestamp is getting set properly
         assert type(activity_records[0].timestamp) == datetime
         assert activity_records[0].timestamp < datetime.now(timezone.utc)
@@ -414,6 +423,116 @@ class TestActivityStore:
 
         activity_records = mock_config_with_activitystore[0].get_activity_records(after=record3.commit, first=1)
         assert len(activity_records) == 1
+        assert activity_records[0].commit == record2.commit
+        assert activity_records[0].linked_commit == record2.linked_commit
+        assert activity_records[0].message == record2.message
+
+        activity_records = mock_config_with_activitystore[0].get_activity_records(after=record3.commit, first=20)
+        assert len(activity_records) == 2
+        assert activity_records[0].commit == record2.commit
+        assert activity_records[0].linked_commit == record2.linked_commit
+        assert activity_records[0].message == record2.message
+
+    def test_get_activity_records_with_intermediate_commits(self, mock_config_with_activitystore):
+        """Method to test creating and getting a bunch of activity records with intermediate commits made"""
+
+        linked_commit = helper_create_labbook_change(mock_config_with_activitystore[1], 1)
+
+        ar = ActivityRecord(ActivityType.CODE,
+                            show=True,
+                            message="added some code 1",
+                            importance=50,
+                            linked_commit=linked_commit.hexsha)
+
+        record1 = mock_config_with_activitystore[0].create_activity_record(ar)
+
+        # Add some intermediate commits
+        for cnt in range(10):
+            helper_create_labbook_change(mock_config_with_activitystore[1], cnt)
+
+        linked_commit = helper_create_labbook_change(mock_config_with_activitystore[1], 1)
+
+        ar = ActivityRecord(ActivityType.CODE,
+                            show=True,
+                            message="added some code 2",
+                            importance=50,
+                            linked_commit=linked_commit.hexsha)
+
+        record2 = mock_config_with_activitystore[0].create_activity_record(ar)
+
+        linked_commit = helper_create_labbook_change(mock_config_with_activitystore[1], 1)
+
+        ar = ActivityRecord(ActivityType.CODE,
+                            show=True,
+                            message="added some code 3",
+                            importance=50,
+                            linked_commit=linked_commit.hexsha)
+
+        record3 = mock_config_with_activitystore[0].create_activity_record(ar)
+
+        # add a bunch of non-activity record commits, which previously would prevent activity from coming back
+        for cnt in range(20):
+            helper_create_labbook_change(mock_config_with_activitystore[1], cnt)
+
+        activity_records = mock_config_with_activitystore[0].get_activity_records()
+        assert len(activity_records) == 3
+        assert activity_records[0].commit == record3.commit
+        assert activity_records[0].linked_commit == record3.linked_commit
+        assert activity_records[0].message == record3.message
+        assert activity_records[1].commit == record2.commit
+        assert activity_records[1].linked_commit == record2.linked_commit
+        assert activity_records[1].message == record2.message
+        assert activity_records[2].commit == record1.commit
+        assert activity_records[2].linked_commit == record1.linked_commit
+        assert activity_records[2].message == record1.message
+        assert activity_records[2].username == 'default'
+        assert activity_records[2].email == 'default@test.com'
+
+        activity_records = mock_config_with_activitystore[0].get_activity_records(first=6)
+        assert len(activity_records) == 3
+        assert activity_records[0].commit == record3.commit
+        assert activity_records[0].linked_commit == record3.linked_commit
+        assert activity_records[0].message == record3.message
+        assert activity_records[1].commit == record2.commit
+        assert activity_records[1].linked_commit == record2.linked_commit
+        assert activity_records[1].message == record2.message
+        assert activity_records[2].commit == record1.commit
+        assert activity_records[2].linked_commit == record1.linked_commit
+        assert activity_records[2].message == record1.message
+        assert activity_records[2].username == 'default'
+        assert activity_records[2].email == 'default@test.com'
+
+        activity_records = mock_config_with_activitystore[0].get_activity_records(first=20)
+        assert len(activity_records) == 3
+
+        activity_records = mock_config_with_activitystore[0].get_activity_records(first=2)
+        assert len(activity_records) == 2
+
+        # Verify the timestamp is getting set properly
+        assert type(activity_records[0].timestamp) == datetime
+        assert activity_records[0].timestamp < datetime.now(timezone.utc)
+        assert activity_records[0].timestamp > datetime.now(timezone.utc) - timedelta(seconds=10)
+
+        activity_records = mock_config_with_activitystore[0].get_activity_records(first=1)
+        assert len(activity_records) == 1
+        assert activity_records[0].commit == record3.commit
+        assert activity_records[0].linked_commit == record3.linked_commit
+        assert activity_records[0].message == record3.message
+
+        activity_records = mock_config_with_activitystore[0].get_activity_records(after=record2.commit)
+        assert len(activity_records) == 1
+        assert activity_records[0].commit == record1.commit
+        assert activity_records[0].linked_commit == record1.linked_commit
+        assert activity_records[0].message == record1.message
+
+        activity_records = mock_config_with_activitystore[0].get_activity_records(after=record3.commit, first=1)
+        assert len(activity_records) == 1
+        assert activity_records[0].commit == record2.commit
+        assert activity_records[0].linked_commit == record2.linked_commit
+        assert activity_records[0].message == record2.message
+
+        activity_records = mock_config_with_activitystore[0].get_activity_records(after=record3.commit, first=20)
+        assert len(activity_records) == 2
         assert activity_records[0].commit == record2.commit
         assert activity_records[0].linked_commit == record2.linked_commit
         assert activity_records[0].message == record2.message
