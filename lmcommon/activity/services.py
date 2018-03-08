@@ -19,6 +19,7 @@
 # SOFTWARE.
 from lmcommon.labbook import LabBook
 from typing import Optional
+import time
 import redis
 from docker.errors import NotFound
 
@@ -127,16 +128,6 @@ def stop_dev_env_monitors(dev_env_key: str, redis_conn: redis.Redis, labbook_nam
     Returns:
 
     """
-    # Get all related activity monitor keys
-    activity_monitor_keys = redis_conn.keys("{}:activity_monitor".format(dev_env_key))
-
-    # Signal all activity monitors to exit
-    for am in activity_monitor_keys:
-        # Set run flag in redis
-        redis_conn.hset(am, "run", False)
-
-        logger.info("Signaled activity monitor for lab book `{}` to stop".format(labbook_name))
-
     # Unschedule dev env monitor
     d = Dispatcher()
     process_id = redis_conn.hget(dev_env_key, "process_id")
@@ -147,8 +138,23 @@ def stop_dev_env_monitors(dev_env_key: str, redis_conn: redis.Redis, labbook_nam
         _, dev_env_name = dev_env_key.rsplit(":", 1)
         logger.info("Stopped dev tool monitor `{}` for lab book `{}`. PID {}".format(dev_env_name, labbook_name,
                                                                                     process_id))
+        # Remove dev env monitor key
+        redis_conn.delete(dev_env_key)
+
+        # Make sure the monitor is unscheduled so it doesn't start activity monitors again
+        time.sleep(2)
     else:
         logger.info("Shutting down container with no Dev Tool monitoring processes to stop.")
+
+    # Get all related activity monitor keys
+    activity_monitor_keys = redis_conn.keys("{}:activity_monitor*".format(dev_env_key))
+
+    # Signal all activity monitors to exit
+    for am in activity_monitor_keys:
+        # Set run flag in redis
+        redis_conn.hset(am.decode(), "run", False)
+
+        logger.info("Signaled activity monitor for lab book `{}` to stop".format(labbook_name))
 
 
 def stop_labbook_monitor(labbook: LabBook, username: str, database: int = 1) -> None:
