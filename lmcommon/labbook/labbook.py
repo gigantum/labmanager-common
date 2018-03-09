@@ -571,7 +571,6 @@ class LabBook(object):
             raise LabbookException(f"Cannot checkout {branch_name}: Untracked and/or uncommitted changes")
 
         try:
-            self.git.fetch()
             if new:
                 logger.info(f"Creating a new branch {branch_name}...")
                 self.git.create_branch(branch_name)
@@ -626,6 +625,7 @@ class LabBook(object):
         try:
             logger.info(f"Adding new remote {remote_name} at {url}")
             self.git.add_remote(remote_name, url)
+            self.git.fetch(remote=remote_name)
         except Exception as e:
             # Unsure what specific exception add_remote creates, so make a catchall.
             logger.exception(e)
