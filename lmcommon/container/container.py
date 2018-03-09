@@ -24,6 +24,7 @@ import time
 import uuid
 from typing import Any, List, Optional, Tuple, Dict
 import redis
+import docker
 
 from lmcommon.configuration import get_docker_client, Configuration
 from lmcommon.logging import LMLogger
@@ -61,6 +62,36 @@ class ContainerOperations(object):
         return (labbook,
                 build_docker_image(labbook.root_dir, override_image_tag=override_image_tag, username=username,
                                    nocache=nocache))
+
+    @classmethod
+    def delete_image(cls, labbook: LabBook, override_image_tag: Optional[str] = None,
+                    username: Optional[str] = None) -> Tuple[LabBook, bool]:
+        """ Delete the Docker image for the given LabBook
+
+        Args:
+            labbook: Subject LabBook.
+            override_image_tag: Tag of docker image (optional)
+            username: The current logged in username
+
+        Returns:
+            A tuple containing the labbook, docker image id.
+
+        Raises:
+            Todo.
+        """
+        image_name = override_image_tag or infer_docker_image_name(labbook_name=labbook.name,
+                                                                   owner=labbook.owner['username'],
+                                                                   username=username)
+        # We need to remove any images pertaining to this labbook before triggering a build.
+        try:
+            get_docker_client().images.get(name=image_name)
+            get_docker_client().images.remove(image_name)
+        except docker.errors.ImageNotFound:
+            pass
+        except Exception as e:
+            logger.error("Error deleting docker images for {str(lb)}: {e}")
+            return labbook, False
+        return labbook, True
 
     @classmethod
     def start_container(cls, labbook: LabBook, username: Optional[str] = None,

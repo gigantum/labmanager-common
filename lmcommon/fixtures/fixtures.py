@@ -409,6 +409,8 @@ def build_lb_image_for_jupyterlab(mock_config_with_repo):
         except:
             pass
 
+        ContainerOperations.delete_image(labbook=lb, username='unittester')
+
         # Remove image if it's still there
         try:
             client.images.remove(docker_image_id, force=True, noprune=False)
