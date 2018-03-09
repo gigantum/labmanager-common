@@ -25,6 +25,7 @@ import docker
 import requests
 
 from lmcommon.configuration import get_docker_client
+
 from lmcommon.container import ContainerOperations
 from lmcommon.container.utils import infer_docker_image_name
 from lmcommon.fixtures import build_lb_image_for_jupyterlab, mock_config_with_repo
@@ -47,7 +48,8 @@ class TestContainerOps(object):
             'sh -c "ps aux | grep jupyter | grep -v \' grep \'"', user='giguser').decode().split('\n') if a]
         assert len(l) == 0
 
-        lb, info = ContainerOperations.start_dev_tool(labbook=lb, dev_tool_name='jupyterlab', username='unittester')
+        lb, info = ContainerOperations.start_dev_tool(labbook=lb, dev_tool_name='jupyterlab', username='unittester',
+                                                      check_reachable=not (getpass.getuser() == 'circleci'))
 
         l = [a for a in client.containers.get(container_id=container_id).exec_run(
             'sh -c "ps aux | grep jupyter-lab | grep -v \' grep \'"', user='giguser').decode().split('\n') if a]

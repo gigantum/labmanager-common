@@ -24,9 +24,12 @@ import time
 import uuid
 from typing import Any, List, Optional, Tuple, Dict
 import redis
+import requests
 import docker
 
+
 from lmcommon.configuration import get_docker_client, Configuration
+from lmcommon.activity.monitors.monitor_jupyterlab import JupyterLabMonitor
 from lmcommon.logging import LMLogger
 from lmcommon.labbook import LabBook, LabbookException
 from lmcommon.portmap import PortMap
@@ -143,7 +146,8 @@ class ContainerOperations(object):
 
     @classmethod
     def start_dev_tool(cls, labbook: LabBook, dev_tool_name: str,
-                       username: str, tag: Optional[str] = None) -> Tuple[LabBook, str]:
+                       username: str, tag: Optional[str] = None,
+                       check_reachable: bool = True) -> Tuple[LabBook, str]:
         """ Start a given development tool (e.g., JupyterLab).
 
         Args:
@@ -159,7 +163,8 @@ class ContainerOperations(object):
         if dev_tool_name not in supported_dev_tools:
             raise LabbookException(f"Development Tool '{dev_tool_name}' not currently supported")
 
-        lb_key = tag or infer_docker_image_name(labbook_name=labbook.name, owner=labbook.owner['username'], username=username)
+        lb_key = tag or infer_docker_image_name(labbook_name=labbook.name, owner=labbook.owner['username'],
+                                                username=username)
         docker_client = get_docker_client()
 
         lb_container = docker_client.containers.get(lb_key)
@@ -207,6 +212,20 @@ class ContainerOperations(object):
             # Store token in redis (activity data is stored in db1) for later activity monitoring
             redis_conn = redis.Redis(db=1)
             redis_conn.set(f"{lb_key}-jupyter-token", token)
+
+            if check_reachable:
+                for n in range(18):
+                    lb_ip_addr = JupyterLabMonitor.get_container_ip(lb_key)
+                    test_url = tool_url.replace(host, lb_ip_addr)
+                    logger.debug(f"Attempt {n + 1}: Testing if JupyerLab is up at {test_url}...")
+                    r = requests.get(test_url)
+                    if r.status_code != 200:
+                        time.sleep(0.5)
+                    else:
+                        logger.info(f'Found JupyterLab up at {tool_url} after {n/2.0} seconds')
+                        break
+                else:
+                    raise LabbookException(f'Could not reach JupyterLab at {tool_url} after timeout')
 
             logger.info(f"Jupyer Lab up at {tool_url}")
             return labbook, tool_url
