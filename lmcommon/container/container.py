@@ -29,11 +29,9 @@ import docker
 
 
 from lmcommon.configuration import get_docker_client, Configuration
-from lmcommon.activity.monitors.monitor_jupyterlab import JupyterLabMonitor
 from lmcommon.logging import LMLogger
 from lmcommon.labbook import LabBook, LabbookException
 from lmcommon.portmap import PortMap
-from lmcommon.environment import ComponentManager
 
 from lmcommon.container.utils import infer_docker_image_name
 from lmcommon.container.core import (build_docker_image, stop_labbook_container,
@@ -215,7 +213,11 @@ class ContainerOperations(object):
 
             if check_reachable:
                 for n in range(18):
-                    lb_ip_addr = JupyterLabMonitor.get_container_ip(lb_key)
+                    # Get IP of container on Docker Bridge Network
+                    client = get_docker_client()
+                    container = client.containers.get(lb_key)
+                    lb_ip_addr = container.attrs['NetworkSettings']['Networks']['bridge']['IPAddress']
+
                     test_url = tool_url.replace(host, lb_ip_addr)
                     logger.debug(f"Attempt {n + 1}: Testing if JupyerLab is up at {test_url}...")
                     r = requests.get(test_url)
