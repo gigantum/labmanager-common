@@ -220,16 +220,22 @@ class ContainerOperations(object):
 
                     test_url = tool_url.replace(host, lb_ip_addr)
                     logger.debug(f"Attempt {n + 1}: Testing if JupyerLab is up at {test_url}...")
-                    r = requests.get(test_url)
-                    if r.status_code != 200:
+                    try:
+                        r = requests.get(test_url)
+
+                        if r.status_code != 200:
+                            time.sleep(0.5)
+                        else:
+                            logger.info(f'Found JupyterLab up at {tool_url} after {n/2.0} seconds')
+                            break
+
+                    except requests.exceptions.ConnectionError:
+                        # Assume API isn't up at all yet, so no connection can be made
                         time.sleep(0.5)
-                    else:
-                        logger.info(f'Found JupyterLab up at {tool_url} after {n/2.0} seconds')
-                        break
                 else:
                     raise LabbookException(f'Could not reach JupyterLab at {tool_url} after timeout')
 
-            logger.info(f"Jupyer Lab up at {tool_url}")
+            logger.info(f"JupyterLab up at {tool_url}")
             return labbook, tool_url
 
         else:
