@@ -26,6 +26,7 @@ from typing import (Any, Dict, List, Optional, Set, Tuple)
 import uuid
 import yaml
 import json
+import git
 import time
 import subprocess
 from contextlib import contextmanager
@@ -57,6 +58,11 @@ class LabbookException(Exception):
     having to be aware of every sub-library that is used by the Labbook and the exceptions that those raise.
     The principle idea behind this is to have a single catch for all Labbook-related errors. In the stack trace you
     can still observe the origin of the problem."""
+    pass
+
+
+class LabbookMergeException(LabbookException):
+    """ Indicates failure of syncing with remote due to a merge conflict with local changes. """
     pass
 
 
@@ -743,7 +749,11 @@ class LabBook(object):
                                                 cwd=self.root_dir, shell=True)
                     logger.info(f'Got result of merge: {r}')
                 else:
-                    self.git.merge("gm.workspace")
+                    try:
+                        self.git.merge("gm.workspace")
+                    except git.exc.GitCommandError as merge_error:
+                        logger.error(f"Merge conflict syncing {str(self)} - Use `force` to overwrite.")
+                        raise LabbookMergeException(merge_error)
                 self.git.add_all(self.root_dir)
                 self.git.commit("Sync -- Merged from gm.workspace")
                 self.push(remote=remote)
@@ -759,6 +769,8 @@ class LabBook(object):
                 self.checkout_branch(f"gm.workspace-{username}")
 
                 return remote_updates_cnt
+        except LabbookMergeException as m:
+            raise m
         except Exception as e:
             logger.exception(e)
             raise LabbookException(e)

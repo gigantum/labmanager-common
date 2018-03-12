@@ -19,7 +19,7 @@
 # SOFTWARE.
 
 from typing import Optional, Tuple
-from lmcommon.labbook import LabBook, LabbookException
+from lmcommon.labbook import LabBook, LabbookException, LabbookMergeException
 
 
 class GitWorkflowException(Exception):
@@ -41,10 +41,8 @@ class GitWorkflow(object):
     def sync(self, username: str, remote: str = "origin", force: bool = False):
         try:
             self.labbook.sync(username=username, remote=remote, force=force)
-        except LabbookException as e:
-            if 'cannot merge' in str(e).lower():
-                raise MergeError(str(e).split('\n')[-1])
-            raise
+        except LabbookMergeException as e:
+            raise MergeError(e)
 
     def add_remote(self, remote_name: str, url: str):
         self.labbook.add_remote(remote_name=remote_name, url=url)
