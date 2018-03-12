@@ -212,7 +212,7 @@ class ContainerOperations(object):
             redis_conn.set(f"{lb_key}-jupyter-token", token)
 
             if check_reachable:
-                for n in range(18):
+                for n in range(30):
                     # Get IP of container on Docker Bridge Network
                     client = get_docker_client()
                     container = client.containers.get(lb_key)
