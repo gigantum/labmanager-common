@@ -221,7 +221,7 @@ class ContainerOperations(object):
                     test_url = tool_url.replace(host, lb_ip_addr)
                     logger.debug(f"Attempt {n + 1}: Testing if JupyerLab is up at {test_url}...")
                     try:
-                        r = requests.get(test_url)
+                        r = requests.get(test_url, timeout=0.1)
 
                         if r.status_code != 200:
                             time.sleep(0.5)
