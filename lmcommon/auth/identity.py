@@ -20,6 +20,10 @@
 import abc
 import importlib
 import requests
+import shutil
+import os
+import pathlib
+import time
 from jose import jwt
 
 from typing import (Optional, Dict, Any)
@@ -27,6 +31,8 @@ from typing import (Optional, Dict, Any)
 from lmcommon.configuration import Configuration
 from lmcommon.logging import LMLogger
 from lmcommon.auth import User
+from lmcommon.dispatcher import (Dispatcher, jobs)
+
 
 logger = LMLogger.get_logger()
 
@@ -67,6 +73,60 @@ class IdentityManager(metaclass=abc.ABCMeta):
     @user.setter
     def user(self, value: User) -> None:
         self._user = value
+
+    def _check_first_login(self, username: Optional[str]) -> None:
+        """Method to check if this is the first time a user has logged in. If so, import the demo labbook
+
+        All child classes should place this method at the end of their `get_user_profile()` implementation
+
+        Returns:
+            None
+        """
+        demo_labbook_name = 'awful-intersections-demo.lbk'
+        working_directory = Configuration().config['git']['working_directory']
+
+        if not username:
+            raise ValueError("Cannot check first login without a username set")
+
+        if self.config.config['core']['import_demo_on_first_login']:
+            user_dir = os.path.join(working_directory, username)
+
+            # Check if the user has already logged into this instance
+            if not os.path.exists(user_dir):
+                # Create user dir
+                pathlib.Path(os.path.join(working_directory, username, username, 'labbooks')).mkdir(parents=True,
+                                                                                                    exist_ok=True)
+
+                # Import demo labbook
+                logger.info(f"Importing Demo LabBook for first-time user: {username}")
+
+                assumed_lb_name = demo_labbook_name.replace('.lbk', '')
+                jobs.import_labboook_from_zip(archive_path=os.path.join('/opt', demo_labbook_name),
+                                              username=username,
+                                              owner=username,
+                                              base_filename=assumed_lb_name,
+                                              remove_source=False)
+
+                inferred_lb_directory = os.path.join(working_directory, username, username, 'labbooks',
+                                                     assumed_lb_name)
+                build_img_kwargs = {
+                    'path': inferred_lb_directory,
+                    'username': username,
+                    'nocache': True
+                }
+                build_img_metadata = {
+                    'method': 'build_image',
+                    # TODO - we need labbook key but labbook is not available...
+                    'labbook': f"{username}|{username}|{assumed_lb_name}"
+                }
+                dispatcher = Dispatcher()
+                build_image_job_key = dispatcher.dispatch_task(jobs.build_labbook_image, kwargs=build_img_kwargs,
+                                                               metadata=build_img_metadata)
+                logger.info(f"Adding job {build_image_job_key} to build "
+                            f"Docker image for labbook `{inferred_lb_directory}`")
+
+                # TODO: Give build a 3 second head start for now. Use subscription in the future
+                time.sleep(3)
 
     def _get_jwt_public_key(self, id_token: str) -> Optional[Dict[str, str]]:
         """Method to get the public key for JWT signing

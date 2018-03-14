@@ -392,3 +392,40 @@ class TestComponentManager(object):
         log = lb.git.log()
         assert "_GTM_ACTIVITY_START_" in log[0]["message"]
         assert 'Remove base component' in log[0]["message"]
+
+    def test_misconfigured_base_no_base(self, mock_config_with_repo):
+        lb = LabBook(mock_config_with_repo[0])
+        lb.new(owner={"username": "test"}, name="test-base-1", description="validate tests.")
+        cm = ComponentManager(lb)
+
+        with pytest.raises(ValueError):
+            a = cm.base_fields
+
+    def test_misconfigured_base_two_bases(self, mock_config_with_repo):
+        lb = LabBook(mock_config_with_repo[0])
+        lb.new(owner={"username": "test"}, name="test-base-2", description="validate tests.")
+
+        cm = ComponentManager(lb)
+
+        # mock_config_with_repo is a ComponentManager Instance
+        cm.add_component("base", lmcommon.fixtures.ENV_UNIT_TEST_REPO, "ut-jupyterlab-1", 0)
+        cm.add_component("base", lmcommon.fixtures.ENV_UNIT_TEST_REPO, "ut-jupyterlab-2", 0)
+
+        with pytest.raises(ValueError):
+            a = cm.base_fields
+
+    def test_get_base(self, mock_config_with_repo):
+        lb = LabBook(mock_config_with_repo[0])
+        lb.new(owner={"username": "test"}, name="test-base-3", description="validate tests.")
+
+        cm = ComponentManager(lb)
+
+        # mock_config_with_repo is a ComponentManager Instance
+        cm.add_component("base", lmcommon.fixtures.ENV_UNIT_TEST_REPO, "ut-jupyterlab-1", 0)
+
+        base_data = cm.base_fields
+
+        assert type(base_data) == dict
+        assert base_data['name'] == 'Unit Test1'
+        assert base_data['os_class'] == 'ubuntu'
+        assert base_data['schema'] == 1

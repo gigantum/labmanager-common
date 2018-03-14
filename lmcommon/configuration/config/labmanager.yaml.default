@@ -7,6 +7,7 @@ from: null
 core:
   team_mode: false # Should the LabManager run in Team Mode (multi-user)
   logging_config: "/etc/gigantum/logging.json" # Location of configuration file for the LabManager logger
+  import_demo_on_first_login: true # Should the app import a labbook into new user's working dirs on first login
 
 # Authentication Configuration
 auth:

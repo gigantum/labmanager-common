@@ -64,7 +64,8 @@ def _create_temp_work_dir(override_dict: dict = None, lfs_enabled: bool = True):
 
     default_override_config = {
         'core': {
-            'team_mode': False
+            'team_mode': False,
+            'import_demo_on_first_login': False
         },
         'environment': {
             #'repo_url': ["https://github.com/gig-dev/environment-components.git"]

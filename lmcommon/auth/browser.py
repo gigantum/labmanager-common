@@ -95,6 +95,9 @@ class BrowserIdentityManager(IdentityManager):
         self.user.given_name = self._get_profile_attribute(user_profile, "given_name", required=False)
         self.user.family_name = self._get_profile_attribute(user_profile, "family_name", required=False)
 
+        # Check if it's the first time this user has logged into this instance
+        self._check_first_login(self.user.username)
+
         return self.user
 
     def logout(self) -> None:

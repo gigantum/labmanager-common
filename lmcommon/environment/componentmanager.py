@@ -411,7 +411,6 @@ exec gosu giguser "$@"
         if not os.path.exists(component_dir):
             raise ValueError("No components found for component class: {}".format(component_class))
 
-
         # Get all YAML files in dir
         yaml_files = glob.glob(os.path.join(component_dir, "*.yaml"))
         yaml_files = sorted(yaml_files)
@@ -426,13 +425,14 @@ exec gosu giguser "$@"
 
     @property
     def base_fields(self) -> Dict[str, Any]:
-        # Infer the base YAML
-        base_file = [n for n in os.listdir(os.path.join(self.env_dir, 'base')) if n and '.yaml' in n]
-        if len(base_file) != 1:
-            print(base_file)
-            raise LabbookException('There should only be one base YAML file')
+        """Load the base data for this LabBook from disk"""
+        base_yaml_file = glob.glob(os.path.join(self.env_dir, 'base', '*.yaml'))
 
-        with open(os.path.join(self.env_dir, 'base', base_file[0])) as yf_file:
-            yaml_data = yaml.load(yf_file)
+        if len(base_yaml_file) != 1:
+            raise ValueError(f"LabBook misconfigured. Found {len(base_yaml_file)} base configurations.")
 
-        return yaml_data
+        # If you got 1 base, load from disk
+        with open(base_yaml_file[0], 'rt') as bf:
+            data = yaml.load(bf)
+
+        return data

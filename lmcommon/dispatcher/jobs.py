@@ -89,7 +89,8 @@ def export_labbook_as_zip(labbook_path: str, lb_export_directory: str) -> str:
 
 
 def import_labboook_from_zip(archive_path: str, username: str, owner: str,
-                             config_file: Optional[str] = None, base_filename: Optional[str] = None) -> str:
+                             config_file: Optional[str] = None, base_filename: Optional[str] = None,
+                             remove_source: bool = True) -> str:
     """Method to import a labbook from a zip file
 
     Args:
@@ -98,6 +99,7 @@ def import_labboook_from_zip(archive_path: str, username: str, owner: str,
         owner(str): Owner username
         config_file(str): Optional path to a labmanager config file
         base_filename(str): The desired basename for the upload, without an upload ID prepended
+        remove_source(bool): Flag indicating if the source file should removed after import
 
     Returns:
         str: directory path of imported labbook
@@ -143,7 +145,6 @@ def import_labboook_from_zip(archive_path: str, username: str, owner: str,
 
         r = subprocess.check_output("git config core.fileMode false", cwd=lb.root_dir, shell=True)
 
-
         if not lb._data:
             raise ValueError(f'Could not load data from imported LabBook {lb}')
         lb._data['owner']['username'] = owner
@@ -167,11 +168,13 @@ def import_labboook_from_zip(archive_path: str, username: str, owner: str,
 
         logger.info(f"(Job {p}) LabBook {inferred_labbook_name} imported to {new_lb_path}")
 
-        try:
-            logger.info(f'Deleting archive for {str(lb)} at `{archive_path}`')
-            os.remove(archive_path)
-        except FileNotFoundError as e:
-            logger.error(f'Could not delete archive for {str(lb)} at `{archive_path}`: {e}')
+        if remove_source:
+            try:
+                logger.info(f'Deleting archive for {str(lb)} at `{archive_path}`')
+                os.remove(archive_path)
+            except FileNotFoundError as e:
+                logger.error(f'Could not delete archive for {str(lb)} at `{archive_path}`: {e}')
+
         return new_lb_path
     except Exception as e:
         logger.exception(f"(Job {p}) Error on import_labbook_from_zip({archive_path}): {e}")

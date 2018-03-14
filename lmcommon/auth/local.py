@@ -125,6 +125,9 @@ class LocalIdentityManager(IdentityManager):
             # Save User to local storage
             self._save_user()
 
+            # Check if it's the first time this user has logged into this instance
+            self._check_first_login(self.user.username)
+
             return self.user
 
     def logout(self) -> None:
