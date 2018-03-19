@@ -1326,11 +1326,16 @@ class LabBook(object):
             favorite_data = OrderedDict(sorted(favorite_data.items(), key=lambda val: val[1]['index']))
 
             # Write favorites to lab book
-            with open(os.path.join(favorites_dir, f'{section}.json'), 'wt') as f_data:
+            fav_data_file = os.path.join(favorites_dir, f'{section}.json')
+            with open(fav_data_file, 'wt') as f_data:
                 json.dump(favorite_data, f_data, indent=2)
 
             # Remove cached favorite key data
             self._favorite_keys = None
+
+            # Commit the changes
+            self.git.add(fav_data_file)
+            self.git.commit(f"Committing new Favorite file {fav_data_file}")
 
             return favorite_data[relative_path]
 
@@ -1401,6 +1406,10 @@ class LabBook(object):
             # Remove cached favorite key data
             self._favorite_keys = None
 
+            # Commit the changes
+            self.git.add(favorites_file)
+            self.git.commit(f"Committing update to Favorite file {favorites_file}")
+
             return favorite_data[relative_path]
 
     def remove_favorite(self, section: str, relative_path: str) -> None:
@@ -1449,6 +1458,10 @@ class LabBook(object):
 
             # Remove cached favorite key data
             self._favorite_keys = None
+
+            # Commit the changes
+            self.git.add(data_file)
+            self.git.commit(f"Committing update to Favorite file {data_file}")
 
             return None
 

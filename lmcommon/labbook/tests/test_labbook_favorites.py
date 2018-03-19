@@ -49,6 +49,9 @@ class TestLabBookFavorites(object):
         """Test creating favorite for a file"""
         with open(os.path.join(mock_labbook[1], 'code', 'test.txt'), 'wt') as test_file:
             test_file.write("blah")
+        # commit
+        mock_labbook[2].git.add(os.path.join(mock_labbook[1], 'code', 'test.txt'))
+        mock_labbook[2].git.commit("test file")
 
         favorites_dir = os.path.join(mock_labbook[1], '.gigantum', 'favorites')
         assert os.path.exists(favorites_dir) is False
@@ -77,10 +80,15 @@ class TestLabBookFavorites(object):
         assert result['is_dir'] is False
         assert result['index'] == 0
 
+        assert mock_labbook[2].is_repo_clean is True
+
     def test_duplicate_favorite_file(self, mock_labbook):
         """Test creating favorite for a file twice"""
         with open(os.path.join(mock_labbook[1], 'code', 'test.txt'), 'wt') as test_file:
             test_file.write("blah")
+        # commit
+        mock_labbook[2].git.add(os.path.join(mock_labbook[1], 'code', 'test.txt'))
+        mock_labbook[2].git.commit("test file")
 
         favorites_dir = os.path.join(mock_labbook[1], '.gigantum', 'favorites')
         assert os.path.exists(favorites_dir) is False
@@ -93,12 +101,20 @@ class TestLabBookFavorites(object):
         with pytest.raises(ValueError):
             mock_labbook[2].create_favorite("code", "test.txt", description="My file with stuff")
 
+        assert mock_labbook[2].is_repo_clean is True
+
     def test_append_to_favorite_file(self, mock_labbook):
         """Test creating two favorites for a file"""
         with open(os.path.join(mock_labbook[1], 'code', 'test.txt'), 'wt') as test_file:
             test_file.write("blah")
+        # commit
+        mock_labbook[2].git.add(os.path.join(mock_labbook[1], 'code', 'test.txt'))
+        mock_labbook[2].git.commit("test file")
         with open(os.path.join(mock_labbook[1], 'code', 'test2.txt'), 'wt') as test_file:
             test_file.write("blah2")
+        # commit
+        mock_labbook[2].git.add(os.path.join(mock_labbook[1], 'code', 'test2.txt'))
+        mock_labbook[2].git.commit("test file")
 
         mock_labbook[2].create_favorite("code", "test.txt", description="My file with stuff")
         result = mock_labbook[2].create_favorite("code", "test2.txt", description="My file with stuff 2")
@@ -127,11 +143,16 @@ class TestLabBookFavorites(object):
         assert result['is_dir'] is False
         assert result['index'] == 1
 
+        assert mock_labbook[2].is_repo_clean is True
+
     def test_favorite_dir(self, mock_labbook):
         """Test creating a favorite directory"""
         os.makedirs(os.path.join(mock_labbook[1], 'code', 'fav'))
         with open(os.path.join(mock_labbook[1], 'code', 'fav', 'test1.txt'), 'wt') as test_file:
             test_file.write("blah1")
+        # commit
+        mock_labbook[2].git.add_all()
+        mock_labbook[2].git.commit("test file")
 
         with pytest.raises(ValueError):
             mock_labbook[2].create_favorite("code", "fav/", description="Dir with stuff")
@@ -149,6 +170,8 @@ class TestLabBookFavorites(object):
         assert data["fav/"]['is_dir'] is True
         assert data["fav/"]['index'] == 0
 
+        assert mock_labbook[2].is_repo_clean is True
+
     def test_favorite_all_subdirs(self, mock_labbook):
         """Test creating favorites for each subdir type that is supported"""
         with open(os.path.join(mock_labbook[1], 'code', 'test1.txt'), 'wt') as test_file:
@@ -157,6 +180,9 @@ class TestLabBookFavorites(object):
             test_file.write("blah2")
         with open(os.path.join(mock_labbook[1], 'output', 'test3.txt'), 'wt') as test_file:
             test_file.write("blah3")
+        # commit
+        mock_labbook[2].git.add_all()
+        mock_labbook[2].git.commit("test file")
 
         mock_labbook[2].create_favorite("code", "test1.txt", description="My file with stuff 1")
         mock_labbook[2].create_favorite("input", "test2.txt", description="My file with stuff 2")
@@ -193,10 +219,15 @@ class TestLabBookFavorites(object):
         assert data["test3.txt"]['is_dir'] is False
         assert data["test3.txt"]['index'] == 0
 
+        assert mock_labbook[2].is_repo_clean is True
+
     def test_remove_favorite_errors(self, mock_labbook):
         """Test errors when removing"""
         with open(os.path.join(mock_labbook[1], 'code', 'test.txt'), 'wt') as test_file:
             test_file.write("blah")
+        # commit
+        mock_labbook[2].git.add_all()
+        mock_labbook[2].git.commit("test file")
 
         with pytest.raises(ValueError):
             mock_labbook[2].remove_favorite('code', "test.txt")
@@ -211,6 +242,8 @@ class TestLabBookFavorites(object):
         with pytest.raises(ValueError):
             mock_labbook[2].remove_favorite('asdfasdf', "test.txt")
 
+        assert mock_labbook[2].is_repo_clean is True
+
     def test_remove_favorite_file(self, mock_labbook):
         """Test removing a favorites file"""
         with open(os.path.join(mock_labbook[1], 'code', 'test.txt'), 'wt') as test_file:
@@ -219,10 +252,15 @@ class TestLabBookFavorites(object):
             test_file.write("blah2")
         with open(os.path.join(mock_labbook[1], 'code', 'test3.txt'), 'wt') as test_file:
             test_file.write("blah3")
+        # commit
+        mock_labbook[2].git.add_all()
+        mock_labbook[2].git.commit("test file")
 
         mock_labbook[2].create_favorite("code", "test.txt", description="My file with stuff")
         mock_labbook[2].create_favorite("code", "test3.txt", description="My file with stuff 3")
         mock_labbook[2].create_favorite("code", "test2.txt", description="My file with stuff 2")
+
+        assert mock_labbook[2].is_repo_clean is True
 
         favorites_dir = os.path.join(mock_labbook[1], '.gigantum', 'favorites')
 
@@ -243,6 +281,8 @@ class TestLabBookFavorites(object):
         assert data["test2.txt"]['is_dir'] is False
         assert data["test2.txt"]['index'] == 1
 
+        assert mock_labbook[2].is_repo_clean is True
+
     def test_get_favorites(self, mock_labbook):
         """Test getting favorites"""
         with open(os.path.join(mock_labbook[1], 'code', 'test1.txt'), 'wt') as test_file:
@@ -250,6 +290,9 @@ class TestLabBookFavorites(object):
         with open(os.path.join(mock_labbook[1], 'code', 'test2.txt'), 'wt') as test_file:
             test_file.write("blah2")
         os.makedirs(os.path.join(mock_labbook[1], 'code', 'tester'))
+        # commit
+        mock_labbook[2].git.add_all()
+        mock_labbook[2].git.commit("test file")
 
         mock_labbook[2].create_favorite("code", "test2.txt", description="My file with stuff 2")
         mock_labbook[2].create_favorite("code", "tester/", is_dir=True, description="My test dir")
@@ -279,10 +322,15 @@ class TestLabBookFavorites(object):
         assert data["tester/"]['is_dir'] is True
         assert data["tester/"]['index'] == 1
 
+        assert mock_labbook[2].is_repo_clean is True
+
     def test_update_description(self, mock_labbook):
         """Test updating a description"""
         with open(os.path.join(mock_labbook[1], 'code', 'test1.txt'), 'wt') as test_file:
             test_file.write("blah1")
+        # commit
+        mock_labbook[2].git.add_all()
+        mock_labbook[2].git.commit("test file")
 
         # Expect error since favorite doesn't exist yet
         with pytest.raises(ValueError):
@@ -309,12 +357,17 @@ class TestLabBookFavorites(object):
         assert data["test1.txt"]['is_dir'] is False
         assert data["test1.txt"]['index'] == 0
 
+        assert mock_labbook[2].is_repo_clean is True
+
     def test_update_invalid_index(self, mock_labbook):
         """Test updating an index to an invalid value raises exception"""
         with open(os.path.join(mock_labbook[1], 'code', 'test1.txt'), 'wt') as test_file:
             test_file.write("blah1")
         with open(os.path.join(mock_labbook[1], 'code', 'test2.txt'), 'wt') as test_file:
             test_file.write("blah2")
+        # commit
+        mock_labbook[2].git.add_all()
+        mock_labbook[2].git.commit("test file")
 
         mock_labbook[2].create_favorite("code", "test1.txt", description="My file with stuff 1")
         mock_labbook[2].create_favorite("code", "test2.txt", description="My file with stuff 2")
@@ -328,6 +381,8 @@ class TestLabBookFavorites(object):
         with pytest.raises(ValueError):
             mock_labbook[2].update_favorite('code', "test1.txt", new_index=200)
 
+        assert mock_labbook[2].is_repo_clean is True
+
     def test_update_smaller_index_and_description(self, mock_labbook):
         """Test updating a description and index"""
         with open(os.path.join(mock_labbook[1], 'code', 'test1.txt'), 'wt') as test_file:
@@ -337,6 +392,9 @@ class TestLabBookFavorites(object):
         with open(os.path.join(mock_labbook[1], 'code', 'test3.txt'), 'wt') as test_file:
             test_file.write("blah3")
         os.makedirs(os.path.join(mock_labbook[1], 'code', 'tester'))
+        # commit
+        mock_labbook[2].git.add_all()
+        mock_labbook[2].git.commit("test file")
 
         mock_labbook[2].create_favorite("code", "test1.txt", description="My file with stuff 1")
         mock_labbook[2].create_favorite("code", "test2.txt", description="My file with stuff 2")
@@ -399,6 +457,8 @@ class TestLabBookFavorites(object):
         assert data["tester/"]['is_dir'] is True
         assert data["tester/"]['index'] == 1
 
+        assert mock_labbook[2].is_repo_clean is True
+
     def test_update_larger_index_and_description(self, mock_labbook):
         """Test updating a description and index"""
         with open(os.path.join(mock_labbook[1], 'code', 'test1.txt'), 'wt') as test_file:
@@ -408,6 +468,9 @@ class TestLabBookFavorites(object):
         with open(os.path.join(mock_labbook[1], 'code', 'test3.txt'), 'wt') as test_file:
             test_file.write("blah3")
         os.makedirs(os.path.join(mock_labbook[1], 'code', 'tester'))
+        # commit
+        mock_labbook[2].git.add_all()
+        mock_labbook[2].git.commit("test file")
 
         mock_labbook[2].create_favorite("code", "test1.txt", description="My file with stuff 1")
         mock_labbook[2].create_favorite("code", "test2.txt", description="My file with stuff 2")
@@ -504,6 +567,8 @@ class TestLabBookFavorites(object):
         assert data["tester/"]['is_dir'] is True
         assert data["tester/"]['index'] == 2
 
+        assert mock_labbook[2].is_repo_clean is True
+
     def test_update_same_index(self, mock_labbook):
         """Test updating with the same index"""
         with open(os.path.join(mock_labbook[1], 'code', 'test1.txt'), 'wt') as test_file:
@@ -513,6 +578,9 @@ class TestLabBookFavorites(object):
         with open(os.path.join(mock_labbook[1], 'code', 'test3.txt'), 'wt') as test_file:
             test_file.write("blah3")
         os.makedirs(os.path.join(mock_labbook[1], 'code', 'tester'))
+        # commit
+        mock_labbook[2].git.add_all()
+        mock_labbook[2].git.commit("test file")
 
         mock_labbook[2].create_favorite("code", "test1.txt", description="My file with stuff 1")
         mock_labbook[2].create_favorite("code", "test2.txt", description="My file with stuff 2")
@@ -573,6 +641,8 @@ class TestLabBookFavorites(object):
         assert data["tester/"]['is_dir'] is True
         assert data["tester/"]['index'] == 3
 
+        assert mock_labbook[2].is_repo_clean is True
+
     def test_favorite_data_prop(self, mock_labbook):
         """Test accessing the favorites cached data property"""
         with open(os.path.join(mock_labbook[1], 'code', 'test1.txt'), 'wt') as test_file:
@@ -584,6 +654,9 @@ class TestLabBookFavorites(object):
 
         os.makedirs(os.path.join(mock_labbook[1], 'code', 'subdir1'))
         os.makedirs(os.path.join(mock_labbook[1], 'input', 'subdir2'))
+        # commit
+        mock_labbook[2].git.add_all()
+        mock_labbook[2].git.commit("test file")
 
         mock_labbook[2].create_favorite("code", "test1.txt", description="My file with stuff 1")
         mock_labbook[2].create_favorite("input", "test2.txt", description="My file with stuff 2")
@@ -607,3 +680,5 @@ class TestLabBookFavorites(object):
         mock_labbook[2]._favorite_keys['code'].append("test value added")
         favs_again = mock_labbook[2].favorite_keys
         assert "test value added" in favs_again['code']
+
+        assert mock_labbook[2].is_repo_clean is True
