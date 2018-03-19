@@ -18,16 +18,16 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 from typing import (Any, List, Dict, Optional)
-import pip
-from io import StringIO
 import requests
 import json
+import subprocess
+import sys
+
 from natsort import natsorted
 
 from distutils.version import StrictVersion
 from distutils.version import LooseVersion
 
-from contextlib import redirect_stdout
 from lmcommon.environment.packagemanager import PackageManager, PackageValidation
 
 
@@ -44,11 +44,9 @@ class PipPackageManager(PackageManager):
         Returns:
             list(str): The list of package names that match the search string
         """
-        buffer = StringIO()
-        with redirect_stdout(buffer):
-            pip.main(['search', search_str])
+        search_result = subprocess.check_output([sys.executable, '-m', 'pip', 'search', search_str])
 
-        lines = buffer.getvalue().splitlines()
+        lines = search_result.decode().splitlines()
         return [x.split(' ')[0] for x in lines]
 
     def list_versions(self, package_name: str) -> List[str]:
@@ -123,11 +121,8 @@ class PipPackageManager(PackageManager):
         Returns:
             list
         """
-        buffer = StringIO()
-        with redirect_stdout(buffer):
-            pip.main(['list', '--format=json'])
-
-        return json.loads(buffer.getvalue())
+        packages = subprocess.check_output([sys.executable, '-m', 'pip', 'list', '--format=json'])
+        return json.loads(packages.decode())
 
     def list_available_updates(self) -> List[Dict[str, str]]:
         """Method to get a list of all installed packages that could be updated and the new version string
@@ -141,11 +136,8 @@ class PipPackageManager(PackageManager):
         Returns:
             list
         """
-        buffer = StringIO()
-        with redirect_stdout(buffer):
-            pip.main(['list', '--format=json', '-o'])
-
-        return json.loads(buffer.getvalue())
+        packages = subprocess.check_output([sys.executable, '-m', 'pip', 'list', '--format=json', '-o'])
+        return json.loads(packages.decode())
 
     def is_valid(self, package_name: str, package_version: Optional[str] = None) -> PackageValidation:
         """Method to validate package names and versions
