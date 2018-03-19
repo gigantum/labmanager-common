@@ -31,6 +31,24 @@ class FileOperationsException(Exception):
 class FileOperations(object):
 
     @classmethod
+    def content_size(cls, labbook: LabBook) -> int:
+        """ Return the size on disk (in bytes) of the given LabBook.
+
+        Args:
+            labbook: Subject labbook
+
+        Returns:
+            int size of LabBook on disk
+        """
+        # Note: os.walk does NOT follow symlinks, but does follow hidden dirs/files.
+        total_bytes = 0
+        for dirpath, dirnames, filenames in os.walk(labbook.root_dir):
+            for f in filenames:
+                fp = os.path.join(dirpath, f)
+                total_bytes += os.path.getsize(fp)
+        return total_bytes
+
+    @classmethod
     def is_set_untracked(cls, labbook: LabBook, section: str) -> bool:
         """ Return True if the given labbook section is set to be untracked (to work around git performance issues
         when files are large).

@@ -27,6 +27,15 @@ from lmcommon.files import FileOperations, FileOperationsException
 
 
 class TestFileOps(object):
+    def test_labbook_content_size_simply(self, mock_labbook):
+        x, y, lb = mock_labbook
+
+        lb_size = FileOperations.content_size(lb)
+        # Make sure the new LB is about 10-30kB. This is about reasonable for a new, emtpy LB.
+        assert lb_size > 10000
+        assert lb_size < 30000
+
+
     def test_set_new_lb_section_for_large_files(self, mock_labbook):
         x, y, lb = mock_labbook
 
