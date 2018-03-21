@@ -28,6 +28,7 @@ import yaml
 import json
 import git
 import time
+import datetime
 import subprocess
 from contextlib import contextmanager
 from pkg_resources import resource_filename
@@ -372,6 +373,28 @@ class LabBook(object):
         except Exception as e:
             logger.exception(e)
             raise LabbookException(e)
+
+    @property
+    def creation_date(self) -> Optional[datetime.datetime]:
+        path = os.path.join(self.root_dir, '.gigantum', 'buildinfo')
+        if os.path.isfile(path):
+            with open(path) as p:
+                info = json.load(p)
+                date_str = info.get('creation_utc')
+                d = datetime.datetime.strptime(date_str, '%Y-%m-%dT%H:%M:%S.%f')
+                return d
+        else:
+            return None
+
+    @property
+    def build_details(self) -> Optional[Dict[str, str]]:
+        path = os.path.join(self.root_dir, '.gigantum', 'buildinfo')
+        if os.path.isfile(path):
+            with open(path) as p:
+                info = json.load(p)
+                return info.get('build_info')
+        else:
+            return None
 
     def _set_root_dir(self, new_root_dir: str) -> None:
         """Update the root directory and also reconfigure the git instance
@@ -1594,6 +1617,21 @@ class LabBook(object):
 
         # Create labbook.yaml file
         self._save_labbook_data()
+
+        try:
+            buildinfo = Configuration().config['build_info']
+        except KeyError:
+            logger.warning("Could not obtain build_info from config")
+            buildinfo = None
+        buildinfo = {
+            'creation_utc': datetime.datetime.utcnow().isoformat(),
+            'build_info': buildinfo
+        }
+
+        buildinfo_path = os.path.join(self.root_dir, '.gigantum', 'buildinfo')
+        with open(buildinfo_path, 'w') as f:
+            json.dump(buildinfo, f)
+        self.git.add(buildinfo_path)
 
         # Create .gitignore default file
         shutil.copyfile(os.path.join(resource_filename('lmcommon', 'labbook'), 'gitignore.default'),

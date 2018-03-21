@@ -18,6 +18,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 import pytest
+import getpass
 import tempfile
 import os
 import shutil
@@ -52,6 +53,8 @@ class TestLabBook(object):
         assert os.path.isdir(os.path.join(labbook_dir, ".gigantum", "activity")) is True
         assert os.path.isdir(os.path.join(labbook_dir, ".gigantum", "activity", "log")) is True
         assert os.path.isdir(os.path.join(labbook_dir, ".gigantum", "activity", "index")) is True
+        assert os.path.isfile(os.path.join(labbook_dir, ".gigantum", "buildinfo")) is True
+
 
         # Validate labbook data file
         with open(os.path.join(labbook_dir, ".gigantum", "labbook.yaml"), "rt") as data_file:
@@ -61,6 +64,12 @@ class TestLabBook(object):
         assert data["labbook"]["description"] == "my first labbook"
         assert "id" in data["labbook"]
         assert data["owner"]["username"] == "test"
+
+        if getpass.getuser() == 'circleci':
+            assert lb.build_details is None
+        else:
+            assert lb.build_details is not None
+        assert lb.creation_date is not None
 
     def test_create_labbook_no_username(self, mock_config_file):
         """Test creating an empty labbook"""
