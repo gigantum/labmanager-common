@@ -19,15 +19,11 @@
 # SOFTWARE.
 
 import pytest
-import tempfile
 import os
-import shutil
-import yaml
 
-import git
 
 from lmcommon.labbook import LabBook, LabbookException
-from lmcommon.fixtures import mock_config_file, mock_labbook_lfs_disabled, remote_labbook_repo
+from lmcommon.fixtures import (mock_config_file, mock_labbook_lfs_disabled, remote_labbook_repo)
 
 # Note, I believe most of these tests are deprecated and OBE.
 
@@ -38,22 +34,6 @@ def pause_wait_for_redis():
 
 
 class TestLabBook(object):
-
-    def test_from_remote(self, pause_wait_for_redis, mock_config_file, mock_labbook_lfs_disabled):
-        # Basically a "Import Labbook via Git".
-
-        shutil.rmtree(f"/tmp/{mock_labbook_lfs_disabled[2].name}", ignore_errors=True)
-        # Create a new labbook, move it to temp, and clone a new labbook from it
-        repo_path = shutil.move(mock_labbook_lfs_disabled[1], "/tmp")
-
-        # Make the original labbook doesn't exist at its original location
-        assert not os.path.exists(mock_labbook_lfs_disabled[1])
-
-        lb2 = LabBook(mock_config_file[0])
-        lb2.from_remote(repo_path, username='test2', owner='test2', labbook_name='labbook1')
-        assert lb2.name == "labbook1"
-        assert lb2.has_remote is True
-        assert lb2.active_branch == "gm.workspace-test2"
 
     def test_checkout_basics(self, mock_config_file, mock_labbook_lfs_disabled):
         lb = mock_labbook_lfs_disabled[2]
@@ -124,23 +104,6 @@ class TestLabBook(object):
             lb.checkout_branch("new-branch", new=False)
         assert lb.active_branch == 'gm.workspace-test'
 
-    def test_push_to_remote_repo_with_new_branch(self, remote_labbook_repo, mock_config_file,
-                                                 mock_labbook_lfs_disabled):
-        # Tests pushing a local branch to the remote.
-        lb = mock_labbook_lfs_disabled[2]
-        lb.checkout_branch("distinct-branch", new=True)
-        lb.add_remote("origin", remote_labbook_repo)
-        lb.push("origin")
-
-    def test_push_to_remote_repo_with_same_branch_should_be_error(self, remote_labbook_repo, mock_config_file,
-                                                                  mock_labbook_lfs_disabled):
-        # Make sure you cannot clobber a remote branch with your local branch of the same name.
-        lb = mock_labbook_lfs_disabled[2]
-        lb.add_remote("origin", remote_labbook_repo)
-        with pytest.raises(LabbookException):
-            # Since we'd be clobbering master in another repo, can't do this.
-            lb.push("origin")
-
     def test_checkout_and_track_a_remote_branch(self, remote_labbook_repo, mock_labbook_lfs_disabled):
         # Do the equivalent of a "git checkoub -b mybranch". Checkout from remote only.
         lb = mock_labbook_lfs_disabled[2]
@@ -153,28 +116,6 @@ class TestLabBook(object):
         lb = mock_labbook_lfs_disabled[2]
         lb.add_remote("origin", remote_labbook_repo)
         assert 'origin/testing-branch' in lb.get_branches()['remote']
-
-    def test_pull_from_tracked_remote_branch(self, mock_config_file, remote_labbook_repo, mock_labbook_lfs_disabled):
-        # If branch by given name exists at remote, check it out and track it.
-        lb = mock_labbook_lfs_disabled[2]
-        lb.add_remote("origin", remote_labbook_repo)
-        lb.checkout_branch("testing-branch")
-
-        assert os.path.isfile(os.path.join(lb.root_dir, "code", "codefile.c"))
-
-        # Make some changes on the remote upstream.
-        remote_lb = LabBook(mock_config_file[0])
-        remote_lb.from_directory(remote_labbook_repo)
-        remote_lb.checkout_branch("testing-branch")
-        assert remote_lb.active_branch == 'testing-branch'
-        remote_lb.delete_file("code", "codefile.c")
-
-        assert os.path.isfile(os.path.join(lb.root_dir, "code", "codefile.c"))
-
-        lb.pull("origin")
-
-        # Make sure the change is reflected in the local working copy after the pull.
-        assert not os.path.isfile(os.path.join(lb.root_dir, "code", "codefile.c"))
 
     def test_count_commits_behind_remote(self, mock_config_file, remote_labbook_repo, mock_labbook_lfs_disabled):
         # Check that we're behind when changes happen at remote.

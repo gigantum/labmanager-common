@@ -18,10 +18,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 import pytest
-import tempfile
 import os
-import uuid
-import shutil
 import json
 from collections import OrderedDict
 

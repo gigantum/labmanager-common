@@ -20,14 +20,10 @@
 
 from typing import Optional, Tuple
 from lmcommon.labbook import LabBook, LabbookException, LabbookMergeException
+from lmcommon.logging import LMLogger
+from lmcommon.workflows import core
 
-
-class GitWorkflowException(Exception):
-    pass
-
-
-class MergeError(GitWorkflowException):
-    pass
+logger = LMLogger.get_logger()
 
 
 class GitWorkflow(object):
@@ -35,14 +31,47 @@ class GitWorkflow(object):
     def __init__(self, labbook: LabBook) -> None:
         self.labbook = labbook
 
-    def publish(self, username: str, access_token: Optional[str] = None, remote: str = "origin"):
-        self.labbook.publish(username=username, access_token=access_token, remote=remote)
+    def publish(self, username: str, access_token: Optional[str] = None, remote: str = "origin") -> None:
+        """ Publish this labbook to the remote GitLab instance.
+        Args:
+            username: Subject username
+            access_token: Temp token/password to gain permissions on GitLab instance
+            remote: Name of Git remote (always "origin" for now).
 
-    def sync(self, username: str, remote: str = "origin", force: bool = False):
+        Returns:
+            None
+        """
         try:
-            self.labbook.sync(username=username, remote=remote, force=force)
-        except LabbookMergeException as e:
-            raise MergeError(e)
+            logger.info(f"Publishing {str(self.labbook)} for user {username} to remote {remote}")
+            with self.labbook.lock_labbook():
+                self.labbook._sweep_uncommitted_changes()
 
-    def add_remote(self, remote_name: str, url: str):
+            if self.labbook.has_remote:
+                raise ValueError("Cannot publish Labbook when remote already set.")
+            with self.labbook.lock_labbook():
+                core.create_remote_gitlab_repo(labbook=self.labbook, username=username, access_token=access_token)
+                core.publish_to_remote(labbook=self.labbook, username=username, remote=remote)
+        except Exception as e:
+            # Unsure what specific exception add_remote creates, so make a catchall.
+            logger.error(f"Labbook {str(self.labbook)} may be in corrupted Git state!")
+            # TODO - Rollback to before merge
+            raise e
+        finally:
+            self.labbook.checkout_branch(f"gm.workspace-{username}")
+
+    def sync(self, username: str, remote: str = "origin", force: bool = False) -> int:
+        """ Sync with remote GitLab repo (i.e., pull any upstream changes and push any new changes). Following
+        a sync operation both the local repo and remote should be at the same revision.
+
+        Args:
+            username: Subject user
+            remote: Name of remote (usually only origin for now)
+            force: In the event of conflict, force overwrite local changes
+
+        Returns:
+            Integer number of commits pulled down from remote.
+        """
+        return core.sync_with_remote(labbook=self.labbook, username=username, remote=remote, force=force)
+
+    def _add_remote(self, remote_name: str, url: str):
         self.labbook.add_remote(remote_name=remote_name, url=url)

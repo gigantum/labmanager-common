@@ -21,13 +21,8 @@
 import pytest
 import tempfile
 import os
-import shutil
-import yaml
-import pprint
 
-import git
-
-from lmcommon.labbook import LabBook, LabbookException
+from lmcommon.labbook import LabBook
 from lmcommon.fixtures import mock_config_file, mock_labbook, remote_labbook_repo, sample_src_file
 
 

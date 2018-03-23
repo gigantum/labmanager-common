@@ -35,7 +35,7 @@ from lmcommon.configuration import get_docker_client, Configuration
 from lmcommon.labbook import LabBook
 from lmcommon.labbook import shims as labbook_shims
 from lmcommon.logging import LMLogger
-
+from lmcommon.workflows import GitWorkflow, sync_locally
 from lmcommon.container.core import (build_docker_image as build_image,
                                      start_labbook_container as start_container,
                                      stop_labbook_container as stop_container)
@@ -64,7 +64,7 @@ def export_labbook_as_zip(labbook_path: str, lb_export_directory: str) -> str:
 
         labbook: LabBook = LabBook()
         labbook.from_directory(labbook_path)
-        labbook.local_sync()
+        sync_locally(labbook)
 
         logger.info(f"(Job {p}) Exporting `{labbook.root_dir}` to `{lb_export_directory}`")
         if not os.path.exists(lb_export_directory):
@@ -153,7 +153,7 @@ def import_labboook_from_zip(archive_path: str, username: str, owner: str,
         if lb.has_remote:
             lb.git.remove_remote('origin')
         # This makes sure the working directory is set properly.
-        lb.local_sync(username=username)
+        sync_locally(lb, username=username)
 
         if not lb.is_repo_clean:
             raise ValueError(f'Imported LabBook {lb} should have clean repo after import')

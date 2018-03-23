@@ -19,13 +19,9 @@
 # SOFTWARE.
 import pytest
 import getpass
-import tempfile
 import os
-import shutil
 import yaml
 import pprint
-
-import git
 
 from lmcommon.labbook import LabBook, LabbookException
 from lmcommon.gitlib.git import GitAuthor

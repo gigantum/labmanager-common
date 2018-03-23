@@ -18,19 +18,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import pytest
-import tempfile
-import mock
 import os
-import shutil
-import yaml
-import pprint
-import git
-
-from lmcommon.labbook import LabBook, LabbookException
-from lmcommon.dispatcher.jobs import import_labboook_from_zip
-from lmcommon.fixtures import (mock_config_file, mock_labbook, remote_labbook_repo,
-                               _MOCK_create_remote_repo)
 
 
 LBK_ARCHIVE_PATH = '/home/circleci/project/lmcommon/labbook/tests/test-export_2017000000.lbk' \

@@ -21,12 +21,10 @@ import glob
 import os
 import re
 import shutil
-from functools import wraps
 from typing import (Any, Dict, List, Optional, Set, Tuple)
 import uuid
 import yaml
 import json
-import git
 import time
 import datetime
 import subprocess
@@ -34,11 +32,9 @@ from contextlib import contextmanager
 from pkg_resources import resource_filename
 import gitdb
 from collections import OrderedDict
-import operator
 
 from lmcommon.configuration import Configuration, get_docker_client
 from lmcommon.gitlib import get_git_interface, GitAuthor, GitRepoInterface
-from lmcommon.gitlib.gitlab import GitLabRepositoryManager
 from lmcommon.logging import LMLogger
 from lmcommon.labbook.schemas import validate_labbook_schema
 from lmcommon.labbook import shims
@@ -679,245 +675,6 @@ class LabBook(object):
             logger.exception(e)
             raise LabbookException(e)
 
-    def pull(self, remote: str = "origin"):
-        """Pull and update from a remote git repository
-
-        Deprecated.
-
-        Args:
-            remote(str): Remote Git repository to pull from. Default is "origin"
-
-        Returns:
-            None
-        """
-
-        try:
-            logger.info(f"{str(self)} pulling from remote {remote}")
-            self.git.pull(remote=remote)
-        except Exception as e:
-            logger.exception(e)
-            raise LabbookException(e)
-
-    @_validate_git
-    def local_sync(self, username: Optional[str] = None) -> None:
-        """Sync locally only to gm.workspace branch - don't do anything with remote. Creates a user's
-         local workspace if necessary.
-
-        Args:
-            username(str): Active username
-
-        Returns:
-            None
-
-        Raises:
-            LabbookException
-        """
-        try:
-            with self.lock_labbook():
-                self._sweep_uncommitted_changes()
-                if username and f"gm.workspace-{username}" not in self.get_branches()['local']:
-                    self.checkout_branch("gm.workspace")
-                    self.checkout_branch(f"gm.workspace-{username}", new=True)
-                    self.git.merge("gm.workspace")
-                    self.git.commit(f"Created and merged new user workspace gm.workspace-{username}")
-                else:
-                    orig_branch = self.active_branch
-                    self.checkout_branch("gm.workspace")
-                    self.git.merge(orig_branch)
-                    self.git.commit(f"Merged from local workspace")
-                    self.checkout_branch(orig_branch)
-        except Exception as e:
-            logger.exception(e)
-            raise LabbookException(e)
-
-    @_validate_git
-    def sync(self, username: str, remote: str = "origin", force: bool = False) -> int:
-        """Sync workspace and personal workspace with the remote.
-
-        Args:
-            username(str): Username of current user (populated by API)
-            remote(str): Name of the Git remote
-
-        Returns:
-            int: Number of commits pulled from remote (0 implies no upstream changes pulled in).
-
-        Raises:
-            LabbookException on any problems.
-        """
-
-        # Note, BVB: For now, this method only supports the initial branching workflow of having
-        # "workspace" and "workspace-{user}" branches. In the future, its signature will change to support
-        # user feature-branches.
-
-        try:
-            if not self.has_remote:
-                self.local_sync()
-                return 0
-
-            logger.info(f"Syncing {str(self)} for user {username} to remote {remote}")
-            self.git.fetch(remote=remote)
-            with self.lock_labbook():
-                self._sweep_uncommitted_changes()
-
-                ## Checkout the workspace and retrieve any upstream updtes
-                self.checkout_branch("gm.workspace")
-                remote_updates_cnt = self.get_commits_behind_remote()[1]
-                self.pull(remote=remote)
-
-                ## Pull those changes into the personal workspace
-                self.checkout_branch(f"gm.workspace-{username}")
-                if force:
-                    logger.warning("Using force to overwrite local changes")
-                    r = subprocess.check_output(f'git merge -s recursive -X theirs {remote}/gm.workspace',
-                                                cwd=self.root_dir, shell=True)
-                    logger.info(f'Got result of merge: {r}')
-                else:
-                    try:
-                        self.git.merge("gm.workspace")
-                    except git.exc.GitCommandError as merge_error:
-                        logger.error(f"Merge conflict syncing {str(self)} - Use `force` to overwrite.")
-                        raise LabbookMergeException(merge_error)
-                self.git.add_all(self.root_dir)
-                self.git.commit("Sync -- Merged from gm.workspace")
-                self.push(remote=remote)
-
-                ## Get the local workspace and user's local workspace synced.
-                self.checkout_branch("gm.workspace")
-                self.git.merge(f"gm.workspace-{username}")
-                self.git.add_all(self.root_dir)
-                self.git.commit(f"Sync -- Pulled in {username}'s changes")
-
-                ## Sync it with the remote again. Everything should be up-to-date at this point.
-                self.push(remote=remote)
-                self.checkout_branch(f"gm.workspace-{username}")
-
-                return remote_updates_cnt
-        except LabbookMergeException as m:
-            raise m
-        except Exception as e:
-            logger.exception(e)
-            raise LabbookException(e)
-        finally:
-            ## We should (almost) always have the user's personal workspace checked out.
-            self.checkout_branch(f"gm.workspace-{username}")
-
-    def _publish(self, username: str, remote: str) -> None:
-        # Current branch must be the user's workspace.
-        if f'gm.workspace-{username}' != self.active_branch:
-            raise ValueError('User workspace must be active branch to publish')
-
-        # The gm.workspace branch must exist (if not, then there is a problem in Labbook.new())
-        if not 'gm.workspace' in self.get_branches()['local']:
-            raise ValueError('Branch gm.workspace does not exist in local Labbook branches')
-
-        self.git.fetch(remote=remote)
-
-        # Make sure user's workspace is synced (in case they are working on it on other machines)
-        if self.get_commits_behind_remote(remote_name=remote)[1] > 0:
-            raise ValueError(f'Cannot publish since {self.active_branch} is not synced')
-
-        # Make sure the master workspace is synced before attempting to publish.
-        self.git.checkout("gm.workspace")
-        if self.get_commits_behind_remote(remote_name=remote)[1] > 0:
-            raise ValueError(f'Cannot publish since {self.active_branch} is not synced')
-
-        # Now, it should be safe to pull the user's workspace into the master workspace.
-        self.git.merge(f"gm.workspace-{username}")
-        self.git.add_all(self.root_dir)
-        self.git.commit(f"Merged gm.workspace-{username}")
-
-        # Push the master workspace to the remote, creating if necessary
-        if not f"{remote}/{self.active_branch}" in self.get_branches()['remote']:
-            logger.info(f"Pushing and setting upstream branch {self.active_branch} to {remote}")
-            self.git.repo.git.push("--set-upstream", remote, self.active_branch)
-        else:
-            logger.info(f"Pushing {self.active_branch} to {remote}")
-            self.git.publish_branch(branch_name=self.active_branch, remote_name=remote)
-
-        # Return to the user's workspace, merge it with the global workspace (as a precaution)
-        self.checkout_branch(branch_name=f'gm.workspace-{username}')
-        self.git.merge("gm.workspace")
-        self.git.add_all(self.root_dir)
-        self.git.commit(f"Merged gm.workspace-{username}")
-
-        # Now push the user's workspace to the remote repo (again, as a precaution)
-        if not self.active_branch in self.get_branches()['remote']:
-            logger.info(f"Pushing and setting upstream branch {self.active_branch} to {remote}")
-            self.git.repo.git.push("--set-upstream", remote, self.active_branch)
-        else:
-            logger.info(f"Pushing {self.active_branch} to {remote}")
-            self.git.publish_branch(branch_name=self.active_branch, remote_name=remote)
-
-    def _create_remote_repo(self, username: str, access_token: Optional[str] = None) -> None:
-        """Create a new repository in GitLab,
-
-        Note: It may make more sense to factor this out later on. TODO. """
-
-        try:
-            default_remote = self.labmanager_config.config['git']['default_remote']
-            admin_service = None
-            for remote in self.labmanager_config.config['git']['remotes']:
-                if default_remote == remote:
-                    admin_service = self.labmanager_config.config['git']['remotes'][remote]['admin_service']
-                    break
-
-            if not admin_service:
-                raise ValueError('admin_service could not be found')
-
-            # Add collaborator to remote service
-            mgr = GitLabRepositoryManager(default_remote, admin_service, access_token=access_token or 'invalid',
-                                          username=username, owner=self.owner['username'], labbook_name=self.name)
-            mgr.configure_git_credentials(default_remote, username)
-            mgr.create()
-
-            self.add_remote("origin", f"https://{default_remote}/{username}/{self.name}.git")
-        except Exception as e:
-            logger.exception(e)
-            raise
-
-    @_validate_git
-    def publish(self, username: str, access_token: Optional[str] = None, remote: str = "origin") -> None:
-        try:
-            logger.info(f"Publishing {str(self)} for user {username} to remote {remote}")
-            with self.lock_labbook():
-                self._sweep_uncommitted_changes()
-
-            if self.active_branch == 'master':
-                logger.warning(f"Applying shim in {str(self)} to replace branch master")
-                shims.to_workspace_branch(self, username)
-
-            if self.has_remote:
-                raise ValueError("Cannot publish Labbook when remote already set.")
-            with self.lock_labbook():
-                self._create_remote_repo(username=username, access_token=access_token)
-                self._publish(username=username, remote=remote)
-        except Exception as e:
-            # Unsure what specific exception add_remote creates, so make a catchall.
-            logger.error(f"Labbook {str(self)} may be in corrupted Git state!")
-            logger.exception(e)
-            # TODO - Rollback to before merge
-            raise LabbookException(e)
-        finally:
-            self.checkout_branch(f"gm.workspace-{username}")
-
-    def push(self, remote: str = "origin"):
-        """Push commits to a remote git repository. Assume current working branch."""
-
-        try:
-            logger.info(f"Fetching from remote {remote}")
-            self.git.fetch(remote=remote)
-
-            if not self.active_branch in self.get_branches()['remote']:
-                logger.info(f"Pushing and setting upstream branch {self.active_branch}")
-                self.git.repo.git.push("--set-upstream", remote, self.active_branch)
-            else:
-                logger.info(f"Pushing to {remote}")
-                self.git.publish_branch(branch_name=self.active_branch, remote_name=remote)
-
-        except Exception as e:
-            # Unsure what specific exception add_remote creates, so make a catchall.
-            logger.exception(e)
-            raise LabbookException(e)
 
     @_validate_git
     def insert_file(self, section: str, src_file: str, dst_dir: str,

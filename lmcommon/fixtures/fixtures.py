@@ -103,7 +103,7 @@ def _create_temp_work_dir(override_dict: dict = None, lfs_enabled: bool = True):
     return config_file, unit_test_working_dir
 
 
-def _MOCK_create_remote_repo(self, username: str, access_token = None) -> None:
+def _MOCK_create_remote_repo2(labbook, username: str, access_token = None) -> None:
     """ Used to mock out creating a Labbook remote Gitlab repo. This is not a fixture per se,
 
     Usage:
@@ -120,8 +120,7 @@ def _MOCK_create_remote_repo(self, username: str, access_token = None) -> None:
     import git
     r = git.Repo.init(path=working_dir, bare=True)
     assert r.bare is True
-    self.add_remote(remote_name="origin", url=working_dir)
-
+    labbook.add_remote(remote_name="origin", url=working_dir)
 
 @pytest.fixture()
 def sample_src_file():

@@ -18,4 +18,5 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-from .workflows import GitWorkflow, GitWorkflowException, MergeError
+from lmcommon.workflows.workflows import GitWorkflow
+from lmcommon.workflows.core import WorkflowsException, sync_locally, MergeError, GitLabRemoteError
