@@ -22,7 +22,7 @@ import os
 
 from lmcommon.fixtures import mock_config_file_with_auth
 from lmcommon.configuration import Configuration
-from lmcommon.auth.identity import get_identity_manager
+from lmcommon.auth.identity import get_identity_manager, IdentityManager
 from lmcommon.auth.local import LocalIdentityManager
 from lmcommon.auth import User
 

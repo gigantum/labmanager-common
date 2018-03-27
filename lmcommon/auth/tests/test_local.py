@@ -20,15 +20,30 @@
 import pytest
 import os
 import requests
-import getpass
+import responses
+import time
+import mock
+from typing import Optional
 
 from lmcommon.configuration import Configuration
-from lmcommon.fixtures import mock_config_file_with_auth
+from lmcommon.fixtures import mock_config_file_with_auth, mock_config_file_with_auth_first_login, cleanup_auto_import
 from lmcommon.auth.identity import get_identity_manager, AuthenticationError
 from lmcommon.auth.local import LocalIdentityManager
 from lmcommon.auth import User
 
-#from lmcommon.auth.tests.fixtures import mock_config_file
+
+def mock_import(archive_path: str, username: str, owner: str,
+                config_file: Optional[str] = None, base_filename: Optional[str] = None,
+                remove_source: bool = True) -> str:
+    if not username:
+        username = "johndoe"
+    if not base_filename:
+        base_filename = "awful-intersection-demo"
+
+    lb_dir = os.path.join('/mnt', 'gigantum', username, username, "labbooks", base_filename)
+    os.makedirs(lb_dir)
+
+    return lb_dir
 
 
 class TestIdentityLocal(object):
@@ -232,3 +247,77 @@ class TestIdentityLocal(object):
         with pytest.raises(AuthenticationError):
             # Should fail without a token
             mgr2.get_user_profile()
+
+    def test_check_first_login_user_locally(self, mock_config_file_with_auth_first_login,
+                                            cleanup_auto_import):
+        """Test login, but the user already logged into this instance"""
+        # fake the user already existing by creating the user directory
+        working_dir = mock_config_file_with_auth_first_login[1]
+        os.makedirs(os.path.join(working_dir, "johndoe"))
+
+        config = Configuration(mock_config_file_with_auth_first_login[0])
+        mgr = get_identity_manager(config)
+
+        # Go get a JWT for the test user from the dev auth client (real users are not in this DB)
+        response = requests.post("https://gigantum.auth0.com/oauth/token",
+                                 json=mock_config_file_with_auth_first_login[2])
+        token_data = response.json()
+
+        mgr._check_first_login("johndoe", access_token=token_data['access_token'])
+
+        # Should not import labbook - note we aren't mocking all the way to the workers
+        time.sleep(5)
+        assert os.path.exists(os.path.join('/mnt', 'gigantum', "johndoe", "johndoe", "labbooks",
+                                           "awful-intersections-demo")) is False
+
+    @mock.patch('lmcommon.dispatcher.jobs.import_labboook_from_zip', side_effect=mock_import)
+    @responses.activate
+    def test_check_first_login_no_user_locally_in_repo(self, mock_import, mock_config_file_with_auth_first_login,
+                                                       cleanup_auto_import):
+        """Test login with the user in the repo alread"""
+        # Add mock for call to auth service
+        responses.add(responses.GET, 'https://usersrv.gigantum.io/user',
+                      json={'exists': True}, status=200)
+        responses.add_passthru("https://gigantum.auth0.com/oauth/token")
+
+        config = Configuration(mock_config_file_with_auth_first_login[0])
+        mgr = get_identity_manager(config)
+
+        # Go get a JWT for the test user from the dev auth client (real users are not in this DB)
+        response = requests.post("https://gigantum.auth0.com/oauth/token",
+                                 json=mock_config_file_with_auth_first_login[2])
+        token_data = response.json()
+
+        mgr._check_first_login("johndoe", access_token=token_data['access_token'])
+
+        # Should import labbook - note we aren't mocking all the way to the workers
+        time.sleep(5)
+        assert os.path.exists(os.path.join('/mnt', 'gigantum', "johndoe", "johndoe", "labbooks",
+                                           "awful-intersections-demo")) is True
+
+    @mock.patch('lmcommon.dispatcher.jobs.import_labboook_from_zip', side_effect=mock_import)
+    @responses.activate
+    def test_check_first_login_no_user_locally_no_repo(self, mock_import, mock_config_file_with_auth_first_login,
+                                                       cleanup_auto_import):
+
+        """Test login with the user in the repo alread"""
+        # Add mock for call to auth service
+        responses.add(responses.GET, 'https://usersrv.gigantum.io/user',
+                      json={'exists': False}, status=404)
+        responses.add(responses.POST, 'https://usersrv.gigantum.io/user', status=201)
+        responses.add_passthru("https://gigantum.auth0.com/oauth/token")
+
+        config = Configuration(mock_config_file_with_auth_first_login[0])
+        mgr = get_identity_manager(config)
+
+        # Go get a JWT for the test user from the dev auth client (real users are not in this DB)
+        response = requests.post("https://gigantum.auth0.com/oauth/token",
+                                 json=mock_config_file_with_auth_first_login[2])
+        token_data = response.json()
+
+        mgr._check_first_login("johndoe", access_token=token_data['access_token'])
+
+        # Should import labbook - note we aren't mocking all the way to the workers
+        time.sleep(5)
+        assert os.path.exists(os.path.join('/mnt', 'gigantum', "johndoe", "johndoe", "labbooks",
+                                           "awful-intersections-demo")) is True

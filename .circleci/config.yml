@@ -35,6 +35,10 @@ jobs:
           command: bash /home/circleci/project/.circleci/write_auth.sh
 
       - run:
+          name: Set up working dir, required for import mocks
+          command: sudo mkdir -p /mnt/gigantum && sudo chown -R circleci:circleci /mnt/gigantum
+
+      - run:
           name: Run unit and coverage tests
           command: |
             redis-server &

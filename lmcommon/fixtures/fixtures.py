@@ -203,6 +203,43 @@ def mock_config_file_with_auth():
 
 
 @pytest.fixture()
+def mock_config_file_with_auth_first_login():
+    """A pytest fixture that will run the first login workflow"""
+    # Load auth config for testing
+    test_auth_file = os.path.join(resource_filename('lmcommon',
+                                                    'auth{}tests'.format(os.path.sep)), 'auth_config.json')
+    if not os.path.exists(test_auth_file):
+        test_auth_file = f"{test_auth_file}.example"
+
+    with open(test_auth_file, 'rt') as conf:
+        auth_data = json.load(conf)
+
+    overrides = {
+        'auth': {
+            'provider_domain': 'gigantum.auth0.com',
+            'signing_algorithm': 'RS256',
+            'audience': auth_data['audience'],
+            'identity_manager': 'local'
+        },
+        'core': {
+            'import_demo_on_first_login': True
+        }
+    }
+
+    conf_file, working_dir = _create_temp_work_dir(override_dict=overrides)
+    yield conf_file, working_dir, auth_data  # provide the fixture value
+    shutil.rmtree(working_dir)
+
+
+@pytest.fixture()
+def cleanup_auto_import():
+    """A pytest fixture that cleans up after the auto-import of the demo"""
+    demo_dir = os.path.join('/mnt', 'gigantum', "johndoe", "johndoe", "labbooks",
+                                           "awful-intersections-demo")
+    if os.path.exists(demo_dir) is True:
+        shutil.rmtree(demo_dir)
+
+@pytest.fixture()
 def mock_config_file_with_auth_browser():
     """A pytest fixture that creates a temporary directory and a config file to match. Deletes directory after test"""
     # Load auth config for testing

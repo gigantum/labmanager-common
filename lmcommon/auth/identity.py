@@ -32,6 +32,7 @@ from lmcommon.configuration import Configuration
 from lmcommon.logging import LMLogger
 from lmcommon.auth import User
 from lmcommon.dispatcher import (Dispatcher, jobs)
+from lmcommon.gitlib.gitlab import check_and_add_user
 
 
 logger = LMLogger.get_logger()
@@ -74,7 +75,7 @@ class IdentityManager(metaclass=abc.ABCMeta):
     def user(self, value: User) -> None:
         self._user = value
 
-    def _check_first_login(self, username: Optional[str]) -> None:
+    def _check_first_login(self, username: Optional[str], access_token: str) -> None:
         """Method to check if this is the first time a user has logged in. If so, import the demo labbook
 
         All child classes should place this method at the end of their `get_user_profile()` implementation
@@ -83,7 +84,7 @@ class IdentityManager(metaclass=abc.ABCMeta):
             None
         """
         demo_labbook_name = 'awful-intersections-demo.lbk'
-        working_directory = Configuration().config['git']['working_directory']
+        working_directory = self.config.config['git']['working_directory']
 
         if not username:
             raise ValueError("Cannot check first login without a username set")
@@ -124,6 +125,19 @@ class IdentityManager(metaclass=abc.ABCMeta):
                                                                metadata=build_img_metadata)
                 logger.info(f"Adding job {build_image_job_key} to build "
                             f"Docker image for labbook `{inferred_lb_directory}`")
+
+                # Add user to backend if needed
+                default_remote = self.config.config['git']['default_remote']
+                admin_service = None
+                for remote in self.config.config['git']['remotes']:
+                    if default_remote == remote:
+                        admin_service = self.config.config['git']['remotes'][remote]['admin_service']
+                        break
+
+                if not admin_service:
+                    raise ValueError('admin_service could not be found')
+
+                check_and_add_user(admin_service=admin_service, access_token=access_token, username=username)
 
                 # TODO: Give build a 3 second head start for now. Use subscription in the future
                 time.sleep(3)
