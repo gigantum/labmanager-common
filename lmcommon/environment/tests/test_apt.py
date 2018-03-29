@@ -38,7 +38,7 @@ class TestAptPackageManager(object):
         result = mrg.list_versions("libtiff5")
 
         assert len(result) == 2
-        assert result[0] == "4.0.6-1ubuntu0.2"
+        assert result[0] == "4.0.6-1ubuntu0.3"
         assert result[1] == "4.0.6-1"
 
     @pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Cannot check apt versions on CircleCI")
@@ -48,7 +48,7 @@ class TestAptPackageManager(object):
 
         result = mrg.latest_version("libtiff5")
 
-        assert result == "4.0.6-1ubuntu0.2"
+        assert result == "4.0.6-1ubuntu0.3"
 
     @pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Cannot check apt packages on CircleCI")
     def test_list_installed_packages(self):

@@ -50,7 +50,7 @@ class TestPipPackageManager(object):
 
         result = mrg.latest_version("gigantum")
 
-        assert result == "0.7"
+        assert result == "0.8"
 
     def test_latest_versions(self):
         """Test latest_version command"""
@@ -58,7 +58,7 @@ class TestPipPackageManager(object):
 
         gig_res, req_res = mrg.latest_versions(["gigantum", "requests"])
 
-        assert gig_res == "0.7"
+        assert gig_res == "0.8"
         assert req_res.startswith('2.')
 
     def test_list_installed_packages(self):

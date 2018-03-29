@@ -1353,70 +1353,77 @@ class LabBook(object):
             os.makedirs(new_root_dir)
             self._set_root_dir(new_root_dir)
 
-        # Init repository
-        self.git.initialize()
+            # Init repository
+            self.git.initialize()
 
-        # Create Directory Structure
-        dirs = [
-            'code', 'input', 'output', '.gigantum',
-            os.path.join('.gigantum', 'env'),
-            os.path.join('.gigantum', 'env', 'base'),
-            os.path.join('.gigantum', 'env', 'custom'),
-            os.path.join('.gigantum', 'env', 'package_manager'),
-            os.path.join('.gigantum', 'activity'),
-            os.path.join('.gigantum', 'activity', 'log'),
-            os.path.join('.gigantum', 'activity', 'index'),
-            os.path.join('.gigantum', 'activity', 'importance'),
-        ]
+            # Setup LFS
+            if self.labmanager_config.config["git"]["lfs_enabled"] and not bypass_lfs:
+                # Make sure LFS install is setup
+                subprocess.run(f"git lfs install", shell=True, check=True, cwd=new_root_dir)
 
-        for d in dirs:
-            self.makedir(d, make_parents=True)
+                # Track input and output directories
+                subprocess.run(f"git lfs track input/**", shell=True, check=True, cwd=new_root_dir)
+                subprocess.run(f"git lfs track output/**", shell=True, check=True, cwd=new_root_dir)
 
-        # Create labbook.yaml file
-        self._save_labbook_data()
+                # Commit .gitattributes file
+                self.git.add(os.path.join(self.root_dir, ".gitattributes"))
+                self.git.commit("Configuring LFS")
 
-        try:
-            buildinfo = Configuration().config['build_info']
-        except KeyError:
-            logger.warning("Could not obtain build_info from config")
-            buildinfo = None
-        buildinfo = {
-            'creation_utc': datetime.datetime.utcnow().isoformat(),
-            'build_info': buildinfo
-        }
+            # Create Directory Structure
+            dirs = [
+                'code', 'input', 'output', '.gigantum',
+                os.path.join('.gigantum', 'env'),
+                os.path.join('.gigantum', 'env', 'base'),
+                os.path.join('.gigantum', 'env', 'custom'),
+                os.path.join('.gigantum', 'env', 'package_manager'),
+                os.path.join('.gigantum', 'activity'),
+                os.path.join('.gigantum', 'activity', 'log'),
+                os.path.join('.gigantum', 'activity', 'index'),
+                os.path.join('.gigantum', 'activity', 'importance'),
+            ]
 
-        buildinfo_path = os.path.join(self.root_dir, '.gigantum', 'buildinfo')
-        with open(buildinfo_path, 'w') as f:
-            json.dump(buildinfo, f)
-        self.git.add(buildinfo_path)
+            for d in dirs:
+                self.makedir(d, make_parents=True)
 
-        # Create .gitignore default file
-        shutil.copyfile(os.path.join(resource_filename('lmcommon', 'labbook'), 'gitignore.default'),
-                        os.path.join(self.root_dir, ".gitignore"))
+            # Create labbook.yaml file
+            self._save_labbook_data()
 
-        # Create .gitattributes to create git-lfs policies
-        if self.labmanager_config.config["git"]["lfs_enabled"] and not bypass_lfs:
-            shutil.copyfile(os.path.join(resource_filename('lmcommon', 'labbook'), 'gitattributes.default'),
-                            os.path.join(self.root_dir, ".gitattributes"))
-            self.git.add(os.path.join(self.root_dir, ".gitattributes"))
+            # Save build info
+            try:
+                buildinfo = Configuration().config['build_info']
+            except KeyError:
+                logger.warning("Could not obtain build_info from config")
+                buildinfo = None
+            buildinfo = {
+                'creation_utc': datetime.datetime.utcnow().isoformat(),
+                'build_info': buildinfo
+            }
 
-        # Commit
-        # TODO: Once users are properly added, create a GitAuthor instance before commit
-        for s in ['code', 'input', 'output', '.gigantum']:
-            self.git.add_all(os.path.join(self.root_dir, s))
-        self.git.add(os.path.join(self.root_dir, ".gigantum", "labbook.yaml"))
-        self.git.add(os.path.join(self.root_dir, ".gitignore"))
-        self.git.create_branch(name="gm.workspace")
-        self.git.commit(f"Creating new empty LabBook: {name}")
+            buildinfo_path = os.path.join(self.root_dir, '.gigantum', 'buildinfo')
+            with open(buildinfo_path, 'w') as f:
+                json.dump(buildinfo, f)
+            self.git.add(buildinfo_path)
 
-        user_workspace_branch = f"gm.workspace-{username}"
-        self.git.create_branch(user_workspace_branch)
-        self.checkout_branch(branch_name=user_workspace_branch)
+            # Create .gitignore default file
+            shutil.copyfile(os.path.join(resource_filename('lmcommon', 'labbook'), 'gitignore.default'),
+                            os.path.join(self.root_dir, ".gitignore"))
 
-        if self.active_branch != user_workspace_branch:
-            raise ValueError(f"active_branch should be '{user_workspace_branch}'")
+            # Commit
+            for s in ['code', 'input', 'output', '.gigantum']:
+                self.git.add_all(os.path.join(self.root_dir, s))
+            self.git.add(os.path.join(self.root_dir, ".gigantum", "labbook.yaml"))
+            self.git.add(os.path.join(self.root_dir, ".gitignore"))
+            self.git.create_branch(name="gm.workspace")
+            self.git.commit(f"Creating new empty LabBook: {name}")
 
-        return self.root_dir
+            user_workspace_branch = f"gm.workspace-{username}"
+            self.git.create_branch(user_workspace_branch)
+            self.checkout_branch(branch_name=user_workspace_branch)
+
+            if self.active_branch != user_workspace_branch:
+                raise ValueError(f"active_branch should be '{user_workspace_branch}'")
+
+            return self.root_dir
 
     def from_key(self, key: str) -> None:
         """Method to populate labbook from a unique key.

@@ -116,7 +116,7 @@ class TestJupyterLabNotebookMonitor(object):
 
         # Check activity entry
         log = mock_labbook[2].git.log()
-        assert len(log) == 3
+        assert len(log) == 4
         assert 'code/Test.ipynb' in log[0]['message']
 
         a_store = ActivityStore(mock_labbook[2])
@@ -203,7 +203,7 @@ class TestJupyterLabNotebookMonitor(object):
 
         # Check activity entry
         log = mock_labbook[2].git.log()
-        assert len(log) == 3
+        assert len(log) == 4
         assert 'code/Test.ipynb' in log[0]['message']
 
         # Mock Performing an action AGAIN, faking editing the file and generating some output files
@@ -252,7 +252,7 @@ class TestJupyterLabNotebookMonitor(object):
 
         # Check activity entry
         log = mock_labbook[2].git.log()
-        assert len(log) == 5
+        assert len(log) == 6
         assert 'code/Test.ipynb' in log[0]['message']
 
         a_store = ActivityStore(mock_labbook[2])
@@ -327,7 +327,7 @@ class TestJupyterLabNotebookMonitor(object):
 
         # Check activity entry
         log = mock_labbook[2].git.log()
-        assert len(log) == 3
+        assert len(log) == 4
         assert 'code/Test.ipynb' in log[0]['message']
 
         a_store = ActivityStore(mock_labbook[2])
@@ -401,7 +401,7 @@ class TestJupyterLabNotebookMonitor(object):
 
         # Check activity entry
         log = mock_labbook[2].git.log()
-        assert len(log) == 3
+        assert len(log) == 4
         assert 'code/Test.ipynb' in log[0]['message']
 
         a_store = ActivityStore(mock_labbook[2])
@@ -443,7 +443,7 @@ class TestJupyterLabNotebookMonitor(object):
                                             monitor_key, config_file=mock_labbook[0])
 
         log = mock_labbook[2].git.log()
-        assert len(log) == 1
+        assert len(log) == 2
 
         # Setup monitoring metadata
         metadata = {"kernel_id": "XXXX",
@@ -481,5 +481,5 @@ class TestJupyterLabNotebookMonitor(object):
         log = mock_labbook[2].git.log()
 
         # log should not increment because of error
-        assert len(log) == 1
+        assert len(log) == 2
         assert 'GTM' not in log[0]['message']

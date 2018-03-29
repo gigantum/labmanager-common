@@ -85,7 +85,7 @@ class TestComponentManager(object):
 
         # Verify git/activity
         log = lb.git.log()
-        assert len(log) == 10
+        assert len(log) == 11
         assert "_GTM_ACTIVITY_START_" in log[0]["message"]
         assert 'managed package: ' in log[0]["message"]
         assert "_GTM_ACTIVITY_START_" in log[4]["message"]
