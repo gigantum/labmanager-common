@@ -111,8 +111,9 @@ class TestLabbookShareProtocol(object):
         test_wf.publish('test')
 
         remote_repo = test_user_lb.remote
+        assert remote_repo is not None
 
-        bob_user_lb = LabBook(mock_config_file[0])
+        bob_user_lb = LabBook(mock_labbook_lfs_disabled[0])
         bob_user_lb.from_remote(remote_repo, username="bob", owner="test", labbook_name="labbook1")
         bob_wf = GitWorkflow(bob_user_lb)
         assert bob_user_lb.active_branch == "gm.workspace-bob"

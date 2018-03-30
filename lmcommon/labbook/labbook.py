@@ -474,6 +474,7 @@ class LabBook(object):
 
     def _sweep_uncommitted_changes(self) -> None:
         if not self.is_repo_clean:
+            logger.warning('Untracked changes detected; calling sweep;')
             r = subprocess.check_output(f'git add -A && git commit -m "_sweep_uncommitted_changes"',
                                         cwd=self.root_dir, shell=True)
             #self.git.add_all()
@@ -601,6 +602,11 @@ class LabBook(object):
                 self.git.create_branch(branch_name)
             logger.info(f"Checking out branch {branch_name}...")
             self.git.checkout(branch_name=branch_name)
+
+            # Clear out checkout context
+            if self._root_dir and os.path.exists(os.path.join(self._root_dir, ".gigantum", ".checkout")):
+                os.remove(os.path.join(self._root_dir, ".gigantum", ".checkout"))
+            self._checkout_id = None
         except ValueError as e:
             logger.error(f"Cannot checkout branch {branch_name}: {e}")
             raise LabbookException(e)
