@@ -107,13 +107,14 @@ def start_labbook_container(labbook_root: str, config_path: str, override_image_
     else:
         tag = override_image_id
 
-    opened_ports: List[int] = []
+    opened_ports: List[Tuple] = []
     env_manager = ComponentManager(lb)
     if 'jupyterlab' in env_manager.base_fields['development_tools']:
-        opened_ports = [8888]
+        # List of tuples where the first entry is the CONTAINER port and second is the desired HOST port
+        opened_ports = [(8888, 8890)]
 
-    exposed_p, portmap = opened_ports, PortMap(lb.labmanager_config)
-    exposed_ports = {f"{port}/tcp": portmap.assign(lb.key, "0.0.0.0", port) for port in exposed_p}
+    portmap = PortMap(lb.labmanager_config)
+    exposed_ports = {f"{port[0]}/tcp": portmap.assign(lb.key, "0.0.0.0", port[1]) for port in opened_ports}
     mnt_point = labbook_root.replace('/mnt/gigantum', os.environ['HOST_WORK_DIR'])
 
     volumes_dict = {
@@ -128,9 +129,8 @@ def start_labbook_container(labbook_root: str, config_path: str, override_image_
         env_var = ["WINDOWS_HOST=1"]
 
     docker_client = get_docker_client()
-    container_id = docker_client.containers.run(tag,
-        detach=True, init=True, name=tag, ports=exposed_ports,
-        environment=env_var, volumes=volumes_dict).id
+    container_id = docker_client.containers.run(tag, detach=True, init=True, name=tag, ports=exposed_ports,
+                                                environment=env_var, volumes=volumes_dict).id
 
     # Brief pause to prevent certain race conditions.
     time.sleep(1)

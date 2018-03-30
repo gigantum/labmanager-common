@@ -157,7 +157,9 @@ class ContainerOperations(object):
         Returns:
             (labbook, info): New labbook instance with modified state, info needed to connect to dev tool.
         """
-        supported_dev_tools = ['jupyterlab']
+        # A dictionary of dev tools and the port at which they run IN THE CONTAINER
+        supported_dev_tools = {'jupyterlab': 8888}
+
         if dev_tool_name not in supported_dev_tools:
             raise LabbookException(f"Development Tool '{dev_tool_name}' not currently supported")
 
@@ -173,33 +175,33 @@ class ContainerOperations(object):
             f'sh -c "ps aux | grep \'jupyter lab\' | grep -v \' grep \'"').decode().split('\n') if l]
 
         if len(jupyter_ps) == 1:
-            # If jupyter-lab is already running.
-            p = re.search('--port=([\d]+)', jupyter_ps[0])
-            if not p:
-                raise LabbookException('Cannot detect Jupyter Lab port')
-            port = p.groups()[0]
+            # If jupyterlab is already running, get port from portmap store
+            pmap = PortMap(labbook.labmanager_config)
+            host, port = pmap.lookup(labbook.key)
+
+            # Get token from PS in container
             t = re.search("token='?([a-zA-Z\d-]+)'?", jupyter_ps[0])
             if not t:
                 raise LabbookException('Cannot detect Jupyter Lab token')
             token = t.groups()[0]
-            return labbook, f'http://0.0.0.0:{port}/lab?token={token}'
+
+            return labbook, f'http://{host}:{port}/lab?token={token}'
 
         elif len(jupyter_ps) == 0:
-            # If jupyter-lab is not already running.
+            # If jupyterlab is not already running.
             # Use a random hexadecimal string as token.
             token = str(uuid.uuid4()).replace('-', '')
             cmd = f"cd /mnt/labbook && " \
-                  f"jupyter lab --port=8888 --ip=0.0.0.0 " \
+                  f"jupyter lab --port={supported_dev_tools[dev_tool_name]} --ip=0.0.0.0 " \
                   f"--NotebookApp.token='{token}' --no-browser " \
                   f"--ConnectionFileMixin.ip=0.0.0.0"
             bash = f'sh -c "{cmd}"'
-            result = lb_container.exec_run(bash, detach=True, user='giguser')
+            lb_container.exec_run(bash, detach=True, user='giguser')
             # Pause briefly to avoid race conditions
             time.sleep(1)
             new_ps_list = lb_container.exec_run(
                 f'sh -c "ps aux | grep jupyter | grep -v \' grep \'"').decode().split('\n')
 
-            time.sleep(1)
             if not any(['jupyter lab' in l or 'jupyter-lab' in l for l in new_ps_list]):
                 raise ValueError('Jupyter Lab failed to start')
 
@@ -218,10 +220,10 @@ class ContainerOperations(object):
                     container = client.containers.get(lb_key)
                     lb_ip_addr = container.attrs['NetworkSettings']['Networks']['bridge']['IPAddress']
 
-                    test_url = tool_url.replace(host, lb_ip_addr)
+                    test_url = f'http://{lb_ip_addr}:{supported_dev_tools[dev_tool_name]}/lab?token={token}'
                     logger.debug(f"Attempt {n + 1}: Testing if JupyerLab is up at {test_url}...")
                     try:
-                        r = requests.get(test_url, timeout=0.1)
+                        r = requests.get(test_url, timeout=0.5)
 
                         if r.status_code != 200:
                             time.sleep(0.5)
