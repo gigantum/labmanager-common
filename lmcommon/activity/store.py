@@ -95,13 +95,14 @@ class ActivityStore(object):
         return [tag.strip().translate({ord(c): None for c in '\`;'}) for tag in tags]
 
     def _get_log_records(self, after: Optional[str]=None, before: Optional[str]=None,
-                         first: Optional[int]=None, last: Optional[int]=None) -> List[Tuple[str, str, datetime.datetime]]:
+                         first: Optional[int]=None,
+                         last: Optional[int]=None) -> List[Tuple[str, str, datetime.datetime, str, str]]:
         """Method to get ACTIVITY records from the git log with pagination support
 
         Returns:
-            list: List of tuples of the format (log string, commit hash, commit datetime)
+            list: List of tuples of the format (log string, commit hash, commit datetime, username, email)
         """
-        log_entries: List[Tuple[str, str, datetime.datetime]] = []
+        log_entries: List[Tuple[str, str, datetime.datetime, str, str]] = list()
         kwargs = dict()
 
         # TODO: Add support for reverse paging
@@ -113,16 +114,50 @@ class ActivityStore(object):
         if first is not None:
             if first < 1:
                 raise ValueError("`first` must be greater than or equal to 1, or None")
-            kwargs['max_count'] = first
+
+            # We typically have 2 commits per activity, 1 for the actual user changes and 1 for our changes.
+            # To page properly, load up to 2x the number requested plus 5 to be safe in most cases
+            kwargs['max_count'] = (first * 2) + 5
 
         path_info: Optional[str] = None
         if after:
             path_info = after
 
-        for entry in self.labbook.git.log(path_info=path_info, **kwargs):
-            m = self.note_regex.match(entry['message'])
-            if m:
-                log_entries.append((m.group(0), entry['commit'], entry['committed_on']))
+        while True:
+            for entry in self.labbook.git.log(path_info=path_info, **kwargs):
+                m = self.note_regex.match(entry['message'])
+                if m:
+                    log_entries.append((m.group(0), entry['commit'], entry['committed_on'],
+                                        entry['author']['name'],
+                                        entry['author']['email']))
+
+            if first is not None:
+                if first == -1:
+                    # If you get here, you already tried to load more records. Give up
+                    break
+
+                elif after is not None and len(log_entries) < first + 1:
+                    # Didn't get enough records back. Possibly an edge case to handle or possibly just the end
+                    # Try getting lots of records (paging here is mainly for performance reasons only)
+                    kwargs['max_count'] = 100
+
+                    # Set first to -1 to ensure you don't keep looping at the end of a git log
+                    first = -1
+                    log_entries = list()
+
+                elif len(log_entries) < first:
+                    # Didn't get enough records back. Possibly an edge case to handle or possibly just the end
+                    # Try getting lots of records (paging here is mainly for performance reasons only)
+                    kwargs['max_count'] = 100
+
+                    # Set first to -1 to ensure you don't keep looping at the end of a git log
+                    first = -1
+                    log_entries = list()
+
+                else:
+                    break
+            else:
+                break
 
         return log_entries
 
@@ -152,6 +187,10 @@ class ActivityStore(object):
         commit = self.labbook.git.commit(record.log_str)
         record.commit = commit.hexsha
 
+        # Update record with username and email
+        record.username = self.labbook.git.author.name
+        record.email = self.labbook.git.author.email
+
         logger.debug(f"Successfully created ActivityRecord {commit.hexsha}")
         return record
 
@@ -167,7 +206,8 @@ class ActivityStore(object):
         entry = self.labbook.git.log_entry(commit)
         m = self.note_regex.match(entry["message"])
         if m:
-            ar = ActivityRecord.from_log_str(m.group(0), commit, entry['committed_on'])
+            ar = ActivityRecord.from_log_str(m.group(0), commit, entry['committed_on'],
+                                             username=entry['author']['name'], email=entry['author']['email'])
             return ar
         else:
             raise ValueError("Activity data not found in commit {}".format(commit))
@@ -183,27 +223,22 @@ class ActivityStore(object):
         Returns:
             List[ActivityRecord]
         """
-        max_count = None
-        if first:
-            # We typically have 2 commits per activity, 1 for the actual user changes and 1 for our changes.
-            # To page properly, load up to 2x the number requested plus 5 to be safe
-            max_count = (first * 2) + 5
-
         # Get data from the git log
-        log_data = self._get_log_records(after=after, first=max_count)
-
-        if after:
-            # If some data came back, the "after" record is included. Remove it due to standards on how paging works.
-            if log_data:
-                log_data = log_data[1:]
-
-        # If extra stuff came back due to extra padding on git log op, prune
-        if first:
-            if len(log_data) > first:
-                log_data = log_data[:first]
+        log_data = self._get_log_records(after=after, first=first)
 
         if log_data:
-            return [ActivityRecord.from_log_str(x[0], x[1], x[2]) for x in log_data]
+            if after:
+                # If the "after" record is included. Remove it due to standards on how relay paging works
+                log_data = log_data[1:]
+
+            # If first value provided, check for the right amount of data
+            if first:
+                if len(log_data) > first:
+                    # Need to prune due to padding sent into self._get_log_records()
+                    log_data = log_data[:first]
+
+        if log_data:
+            return [ActivityRecord.from_log_str(x[0], x[1], x[2], username=x[3], email=x[4]) for x in log_data]
         else:
             return []
 

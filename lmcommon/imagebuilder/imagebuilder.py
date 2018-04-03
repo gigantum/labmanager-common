@@ -21,27 +21,18 @@ import datetime
 import functools
 import glob
 import os
-import re
-from typing import (Any, Dict, List, Optional, Union)
+import time
+
+from typing import (Any, Dict, List)
 import yaml
 
-from docker.errors import NotFound
-
-from lmcommon.environment.componentmanager import ComponentManager
-from lmcommon.dispatcher import Dispatcher, jobs
 from lmcommon.labbook import LabBook
 from lmcommon.logging import LMLogger
 from lmcommon.activity import ActivityDetailType, ActivityType, ActivityRecord, ActivityDetailRecord, ActivityStore
+from lmcommon.environment import get_package_manager
+
 
 logger = LMLogger.get_logger()
-
-
-def dockerize_path(volpath: str) -> str:
-    if os.environ.get('WINDOWS_HOST'):
-        # for windows switch the slashes and then sub the drive letter
-        return re.sub('(^[A-Z]):(.*$)', '//\g<1>\g<2>', volpath.replace('\\', '/'))
-    else:
-        return volpath
 
 
 class ImageBuilder(object):
@@ -73,9 +64,8 @@ class ImageBuilder(object):
         """Throw exception if labbook directory structure not in expected format. """
         subdirs = [['.gigantum'],
                    ['.gigantum', 'env'],
-                   ['.gigantum', 'env', 'base_image'],
+                   ['.gigantum', 'env', 'base'],
                    ['.gigantum', 'env', 'custom'],
-                   ['.gigantum', 'env', 'dev_env'],
                    ['.gigantum', 'env', 'package_manager']]
 
         for subdir in subdirs:
@@ -84,7 +74,7 @@ class ImageBuilder(object):
 
     def _import_baseimage_fields(self) -> Dict[str, Any]:
         """Load fields from base_image yaml file into a convenient dict. """
-        root_dir = os.path.join(self.labbook_directory, '.gigantum', 'env', 'base_image')
+        root_dir = os.path.join(self.labbook_directory, '.gigantum', 'env', 'base')
         base_images = self._get_yaml_files(root_dir)
 
         logger.debug("Searching {} for base image file".format(root_dir))
@@ -102,43 +92,18 @@ class ImageBuilder(object):
         fields = self._import_baseimage_fields()
         generation_ts = str(datetime.datetime.now())
         docker_owner_ns = fields['image']['namespace']
-        docker_repo = fields['image']['repo']
+        docker_repo = fields['image']['repository']
         docker_tag = fields['image']['tag']
 
         docker_lines: List[str] = []
         docker_lines.append("# Dockerfile generated on {}".format(generation_ts))
-        docker_lines.append("# Name: {}".format(fields["info"]["human_name"]))
-        docker_lines.append("# Description: {}".format(fields["info"]["description"]))
-        docker_lines.append("# Author: {} <{}>, {}".format(fields['author']['name'], fields['author']['email'],
-                                                           fields['author']['organization']))
+        docker_lines.append("# Name: {}".format(fields["name"]))
+        docker_lines.append("# Description: {}".format(fields["description"]))
         docker_lines.append("")
-        docker_lines.append("FROM {}/{}:{}".format(docker_owner_ns, docker_repo, docker_tag))
-
-        return docker_lines
-
-    def _load_devenv(self) -> List[str]:
-        """Load dev environments from yaml file in expected location. """
-
-        root_dir = os.path.join(self.labbook_directory, '.gigantum', 'env', 'dev_env')
-        dev_envs = self._get_yaml_files(root_dir)
-
-        docker_lines = []
-        for dev_env in dev_envs:
-            with open(dev_env) as current_dev_env:
-                fields = yaml.load(current_dev_env)
-
-            docker_lines.append("### Development Environment: {}".format(fields['info']['name']))
-            docker_lines.append("# Description: {}".format(fields['info']['description']))
-            docker_lines.append("# Version {}.{} by {} <{}>".format(fields['info']['version_major'],
-                                                                    fields['info']['version_minor'],
-                                                                    fields['author']['name'],
-                                                                    fields['author']['email']))
-            docker_lines.append("# Environment installation instructions:")
-            docker_lines.extend(["EXPOSE {}".format(port) for port in fields['exposed_tcp_ports']])
-            docker_lines.extend(["RUN {}".format(cmd) for cmd in fields['install_commands']])
-
-            docker_lines.append("# Finished section {}".format(fields['info']['name']))
-            docker_lines.append("")
+        
+        # Must remove '_' if its in docker hub namespace.
+        prefix = '' if '_' in docker_owner_ns else f'{docker_owner_ns}/'
+        docker_lines.append("FROM {}{}:{}".format(prefix, docker_repo, docker_tag))
 
         return docker_lines
 
@@ -154,7 +119,7 @@ class ImageBuilder(object):
             pkg_fields: Dict[str, Any] = {}
             with open(custom) as custom_content:
                 pkg_fields.update(yaml.load(custom_content))
-                docker_lines.append('## Installing {}'.format(pkg_fields['info']['description']))
+                docker_lines.append('## Installing {}'.format(pkg_fields['name']))
                 docker_lines.extend(pkg_fields['docker'].split(os.linesep))
 
         return docker_lines
@@ -162,29 +127,33 @@ class ImageBuilder(object):
     def _load_packages(self) -> List[str]:
         """Load packages from yaml files in expected location in directory tree. """
         """ Contents of docker setup that must be at end of Dockerfile. """
-        fields = self._import_baseimage_fields()
-        package_managers = {c['name']: c for c in fields['available_package_managers']}
-
         root_dir = os.path.join(self.labbook_directory, '.gigantum', 'env', 'package_manager')
-        package_files = self._get_yaml_files(root_dir)
-
+        package_files = [os.path.join(root_dir, n) for n in os.listdir(root_dir) if 'yaml' in n]
         docker_lines = ['## Adding individual packages']
+        apt_updated = False
+
         for package in sorted(package_files):
             pkg_fields: Dict[str, Any] = {}
+
             with open(package) as package_content:
                 pkg_fields.update(yaml.load(package_content))
-            manager = pkg_fields.get('package_manager')
-            package_name = pkg_fields.get('name')
-            package_version = pkg_fields.get('version')
-            docker_lines.append(package_managers[manager]['docker'].replace('$PKG$', package_name))
+
+            # Generate the appropriate docker command for the given package info
+            pkg_info = {"name": str(pkg_fields['package']),
+                        "version": str(pkg_fields.get('version'))}
+            if not pkg_fields.get('from_base'):
+                if pkg_fields['manager'] == 'apt' and not apt_updated:
+                    docker_lines.append('RUN apt-get -y update')
+                    apt_updated = True
+
+                docker_lines.extend(
+                    get_package_manager(pkg_fields['manager']).generate_docker_install_snippet([pkg_info]))
 
         return docker_lines
 
     def _post_image_hook(self) -> List[str]:
         """Contents that must be after baseimages but before development environments. """
         docker_lines = ["# Post-image creation hooks"]
-        docker_lines.append('RUN apt-get -y update')
-        docker_lines.append('RUN apt-get -y install supervisor curl gosu')
         docker_lines.append('COPY entrypoint.sh /usr/local/bin/entrypoint.sh')
         docker_lines.append('RUN chmod u+x /usr/local/bin/entrypoint.sh')
         docker_lines.append('')
@@ -194,31 +163,23 @@ class ImageBuilder(object):
     def _entrypoint_hooks(self):
         """ Contents of docker setup that must be at end of Dockerfile. """
         try:
-            root_dir = os.path.join(self.labbook_directory, '.gigantum', 'env', 'dev_env')
-            dev_envs = self._get_yaml_files(root_dir)
-
-            assert len(dev_envs) == 1, "Currently only one development environment is supported."
-
-            with open(dev_envs[0]) as dev_env_file:
-                fields = yaml.load(dev_env_file)
-
             docker_lines = ['## Entrypoint hooks']
+            docker_lines.append('ENV LB_HOME=/mnt/labbook')
+            docker_lines.append('ENV LB_CODE=/mnt/labbook/code')
+            docker_lines.append('ENV LB_INPUT=/mnt/labbook/input')
+            docker_lines.append('ENV LB_OUTPUT=/mnt/labbook/output')
             docker_lines.append("# Run Environment")
             docker_lines.append('ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]')
             docker_lines.append('WORKDIR /mnt/labbook')
-
-            for cmd in fields['exec_commands']:
-                tokenized_args = [c.strip().replace('"', "'") for c in cmd.split(' ') if c]
-                quoted_args = ['"{}"'.format(arg) for arg in tokenized_args]
-                cmd_str = 'CMD [{}]'.format(", ".join(quoted_args))
-                docker_lines.append(cmd_str)
-
+            docker_lines.append('')
+            docker_lines.append('# Use this command to make the container run indefinitely')
+            docker_lines.append('CMD ["tail", "-f", "/dev/null"]')
+            docker_lines.append('')
         except Exception as e:
             logger.error(e)
-
         return docker_lines
 
-    def assemble_dockerfile(self, write: bool = False) -> str:
+    def assemble_dockerfile(self, write: bool = True) -> str:
         """Create the content of a Dockerfile per the fields in the indexed data.
 
         Returns:
@@ -226,7 +187,6 @@ class ImageBuilder(object):
         """
         assembly_pipeline = [self._load_baseimage,
                              self._post_image_hook,
-                             self._load_devenv,
                              self._load_custom,
                              self._load_packages,
                              self._entrypoint_hooks]
@@ -239,207 +199,45 @@ class ImageBuilder(object):
             raise
         except Exception as e:
             logger.error(e)
+            raise
 
         dockerfile_name = os.path.join(self.labbook_directory, ".gigantum", "env", "Dockerfile")
         if write:
             logger.info("Writing Dockerfile to {}".format(dockerfile_name))
 
-            with open(dockerfile_name, "w") as dockerfile:
-                dockerfile.write(os.linesep.join(docker_lines))
-
             # Get a LabBook instance
             lb = LabBook()
             lb.from_directory(self.labbook_directory)
 
-            # Add updated dockerfile to git
-            short_message = "Re-Generated Dockerfile"
-            lb.git.add(dockerfile_name)
-            commit = lb.git.commit(short_message)
+            with lb.lock_labbook():
+                with open(dockerfile_name, "w") as dockerfile:
+                    dockerfile.write(os.linesep.join(docker_lines))
 
-            # Create detail record
-            adr = ActivityDetailRecord(ActivityDetailType.ENVIRONMENT, show=False)
-            adr.add_value('text/plain', short_message)
+                # TODO: Remove sleep after GitPython is removed from stack
+                time.sleep(2)
+                short_message = "Re-Generated Dockerfile"
+                lb.git.add(dockerfile_name)
+                commit = lb.git.commit(short_message)
 
-            # Create activity record
-            ar = ActivityRecord(ActivityType.ENVIRONMENT,
-                                message=short_message,
-                                show=False,
-                                linked_commit=commit.hexsha,
-                                tags=['dockerfile'])
-            ar.add_detail_object(adr)
+                # Create detail record
+                adr = ActivityDetailRecord(ActivityDetailType.ENVIRONMENT, show=False)
+                adr.add_value('text/plain', short_message)
 
-            # Store
-            ars = ActivityStore(lb)
-            ars.create_activity_record(ar)
+                # Create activity record
+                ar = ActivityRecord(ActivityType.ENVIRONMENT,
+                                    message=short_message,
+                                    show=False,
+                                    linked_commit=commit.hexsha,
+                                    tags=['dockerfile'])
+                ar.add_detail_object(adr)
 
+                # Store
+                ars = ActivityStore(lb)
+                ars.create_activity_record(ar)
         else:
             logger.info("Dockerfile NOT being written; write=False; {}".format(dockerfile_name))
 
         return os.linesep.join(docker_lines)
-
-    def build_image(self, docker_client, image_tag: str, username: str, assemble: bool = True, nocache: bool = False,
-                    background: bool = False, owner: Optional[str] = None) -> Dict[str, Optional[str]]:
-        """Build docker image according to the Dockerfile just assembled.
-
-        Args:
-            docker_client(docker.client): Docker context
-            image_tag(str): Tag of docker image
-            assemble(bool): Re-assemble the docker file using assemble_dockerfile if True
-            nocache(bool): Don't user the Docker cache if True
-            background(bool): Run the task in the background using the dispatcher.
-            username(str): The current logged in username
-            owner(str): The owner of the lab book
-
-        Returns:
-            dict: Contains the following keys, 'background_job_key' and 'docker_image_id', depending
-                  if run in the background or foreground, respectively.
-        """
-        # Make sure image isn't running in container currently. If so, stop it.
-        try:
-            build_container = docker_client.containers.get(image_tag)
-            build_container.stop()
-            build_container.remove()
-        except NotFound:
-            # Container isn't running, so just move on
-            # TODO: Add logging.info to indicate building a non-running container
-            pass
-
-        if not image_tag:
-            raise ValueError("image_tag cannot be None or empty")
-
-        env_dir = os.path.join(self.labbook_directory, '.gigantum', 'env')
-        logger.info("Building labbook image (tag {}) from Dockerfile in {}".format(image_tag, env_dir))
-        if not os.path.exists(env_dir):
-            raise ValueError('Expected env directory `{}` does not exist.'.format(env_dir))
-
-        if assemble:
-            self.assemble_dockerfile(write=True)
-
-        return_keys: Dict[str, Optional[str]] = {
-            'background_job_key': None,
-            'docker_image_id': None
-        }
-
-        if background:
-            job_dispatcher = Dispatcher()
-            # No owner provided, assume user's namespace
-            if not owner:
-                owner = username
-            job_metadata = {
-                'labbook': "{}-{}-{}".format(username, owner, self.labbook_directory.split('/')[-1]),
-                'method': 'build_image'}
-            job_key = job_dispatcher.dispatch_task(jobs.build_docker_image, args=(env_dir, image_tag, True, nocache),
-                                                   metadata=job_metadata)
-            return_keys['background_job_key'] = job_key.key_str
-        else:
-            docker_image = docker_client.images.build(path=env_dir, tag=image_tag, pull=True, nocache=nocache)
-            return_keys['docker_image_id'] = docker_image.id
-
-        return return_keys
-
-    def run_container(self, docker_client, docker_image_id: str, labbook: LabBook,
-                      background: bool = False) -> Dict[str, Optional[str]]:
-        """Launch docker container from image that was just (re-)built.
-
-        Args:
-            docker_client(docker.client): Docker context
-            docker_image_id(str): Docker image to be launched.
-            labbook(LabBook): Labbook context.
-            background(bool): Run the task in the background using the dispatcher
-
-        Returns:
-            dict: Sets keys 'background_job_key' or 'docker_container_id' if background is True, respectively.
-        """
-
-        if not docker_image_id:
-            raise ValueError("docker_image_id cannot be None or empty")
-
-        if not os.environ.get('HOST_WORK_DIR'):
-            raise ValueError("Environment variable HOST_WORK_DIR must be set")
-
-        env_manager = ComponentManager(labbook)
-        dev_envs_list = env_manager.get_component_list('dev_env')
-
-        # Ensure that base_image_list is exactly a list of one element.
-        if not dev_envs_list:
-            logger.error('No development environment in labbok at {}'.format(labbook.root_dir))
-
-        # Produce port mappings to labbook container.
-        # For now, we map host-to-container ports without any indirection
-        # (e.g., port 8888 on the host maps to port 8888 in the container)
-        exposed_ports = {}
-        for dev_env in dev_envs_list:
-            exposed_ports.update({"{}/tcp".format(port): port for port in dev_env['exposed_tcp_ports']})
-
-        
-        mnt_point = dockerize_path(labbook.root_dir.replace('/mnt/gigantum', os.environ['HOST_WORK_DIR']))
-
-        # Map volumes - The labbook docker container is unaware of labbook name, all labbooks
-        # map to /mnt/labbook.
-        volumes_dict = {
-            mnt_point: {'bind': '/mnt/labbook', 'mode': 'cached'},
-            'labmanager_share_vol':  {'bind': '/mnt/share', 'mode': 'rw'}
-        }
-
-        # If re-mapping permissions, be sure to configure the container
-        if 'LOCAL_USER_ID' in os.environ:
-            env_var = ["LOCAL_USER_ID={}".format(os.environ['LOCAL_USER_ID'])]
-            logger.info("Starting labbook container with user: {}".format(env_var))
-        else:
-            env_var = ["WINDOWS_HOST=1"]
-
-        # If using Jupyter, set work dir (TEMPORARY HARD CODE)
-        if 'JUPYTER_RUNTIME_DIR' in os.environ:
-            env_var.append("JUPYTER_RUNTIME_DIR={}".format(os.environ['JUPYTER_RUNTIME_DIR']))
-
-        logger.info("Starting labbook container with environment variables: {}".format(env_var))
-
-        # Finally, run the image in a container.
-        logger.info(
-            "Running container id {} -- ports {} -- volumes {}".format(docker_image_id, ', '.join(exposed_ports.keys()),
-                                                                       ', '.join(volumes_dict.keys())))
-
-        return_keys: Dict[str, Optional[str]] = {
-            'background_job_key': None,
-            'docker_container_id': None
-        }
-
-        if background:
-            logger.info("Launching container in background for container {}".format(docker_image_id))
-            job_dispatcher = Dispatcher()
-            # FIXME XXX TODO -- Note that labbook.user throws an excpetion, so putting in labbook.owner for now
-            job_metadata = {'labbook': '{}-{}-{}'.format(labbook.owner, labbook.owner, labbook.name),
-                            'method': 'run_container'}
-
-            try:
-                key = job_dispatcher.dispatch_task(jobs.start_docker_container,
-                                                   args=(docker_image_id, exposed_ports, volumes_dict, env_var),
-                                                   metadata=job_metadata)
-            except Exception as e:
-                logger.exception(e, exc_info=True)
-                raise
-
-            logger.info(f"Background job key for run_container: {key}")
-            return_keys['background_job_key'] = key.key_str
-        else:
-            logger.info("Launching container in-process for container {}".format(docker_image_id))
-            if float(docker_client.version()['ApiVersion']) < 1.25:
-                container = docker_client.containers.run(docker_image_id,
-                                                         detach=True,
-                                                         name=docker_image_id,
-                                                         ports=exposed_ports,
-                                                         environment=env_var,
-                                                         volumes=volumes_dict)
-            else:
-                container = docker_client.containers.run(docker_image_id,
-                                                         detach=True,
-                                                         init=True,
-                                                         name=docker_image_id,
-                                                         ports=exposed_ports,
-                                                         environment=env_var,
-                                                         volumes=volumes_dict)
-            return_keys['docker_container_id'] = container.id
-        return return_keys
 
 
 if __name__ == '__main__':

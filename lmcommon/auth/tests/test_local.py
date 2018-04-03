@@ -20,15 +20,30 @@
 import pytest
 import os
 import requests
-import getpass
+import responses
+import time
+import mock
+from typing import Optional
 
 from lmcommon.configuration import Configuration
-from lmcommon.fixtures import mock_config_file_with_auth
+from lmcommon.fixtures import mock_config_file_with_auth, mock_config_file_with_auth_first_login, cleanup_auto_import
 from lmcommon.auth.identity import get_identity_manager, AuthenticationError
 from lmcommon.auth.local import LocalIdentityManager
 from lmcommon.auth import User
 
-#from lmcommon.auth.tests.fixtures import mock_config_file
+
+def mock_import(archive_path: str, username: str, owner: str,
+                config_file: Optional[str] = None, base_filename: Optional[str] = None,
+                remove_source: bool = True) -> str:
+    if not username:
+        username = "johndoe"
+    if not base_filename:
+        base_filename = "awful-intersection-demo"
+
+    lb_dir = os.path.join('/mnt', 'gigantum', username, username, "labbooks", base_filename)
+    os.makedirs(lb_dir)
+
+    return lb_dir
 
 
 class TestIdentityLocal(object):
@@ -111,7 +126,7 @@ class TestIdentityLocal(object):
         assert os.path.exists(os.path.join(mgr.auth_dir, 'user.json')) is True
 
         # Load User
-        u2 = mgr.authenticate()
+        u2 = mgr.get_user_profile()
         assert type(u2) == User
 
         assert u.username == u2.username
@@ -142,9 +157,55 @@ class TestIdentityLocal(object):
 
         assert mgr._get_profile_attribute(profile_data, "first_name", False) is None
 
-    @pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Cannot test auth0 on CircleCI")
-    def test_authenticate(self, mock_config_file_with_auth):
-        """test get authenticating a user from a JWT"""
+    def test_is_session_valid(self, mock_config_file_with_auth):
+        """test check for valid session"""
+        # TODO: Possibly move to integration tests or fully mock since this makes a call out to Auth0
+        config = Configuration(mock_config_file_with_auth[0])
+        mgr = get_identity_manager(config)
+        assert type(mgr) == LocalIdentityManager
+
+        # Invalid with no token
+        assert mgr.is_token_valid() is False
+        assert mgr.is_token_valid(None) is False
+        assert mgr.is_token_valid("asdfasdfasdf") is False
+
+        # Go get a JWT for the test user from the dev auth client (real users are not in this DB)
+        response = requests.post("https://gigantum.auth0.com/oauth/token", json=mock_config_file_with_auth[2])
+        token_data = response.json()
+
+        assert mgr.is_token_valid(token_data['access_token']) is True
+        assert mgr.rsa_key is not None
+
+    def test_is_authenticated_token(self, mock_config_file_with_auth):
+        """test checking if the user is authenticated via a token"""
+        # TODO: Possibly move to integration tests or fully mock since this makes a call out to Auth0
+        config = Configuration(mock_config_file_with_auth[0])
+        mgr = get_identity_manager(config)
+        assert type(mgr) == LocalIdentityManager
+
+        # Invalid with no token
+        assert mgr.is_authenticated() is False
+        assert mgr.is_authenticated(None) is False
+        assert mgr.is_authenticated("asdfasdfa") is False
+
+        # Go get a JWT for the test user from the dev auth client (real users are not in this DB)
+        response = requests.post("https://gigantum.auth0.com/oauth/token", json=mock_config_file_with_auth[2])
+        token_data = response.json()
+
+        assert mgr.is_authenticated(token_data['access_token']) is True
+
+        # Seccond access should load from disk and not need a token
+        mgr2 = get_identity_manager(config)
+        assert mgr2.is_authenticated() is True
+        assert mgr2.is_authenticated("asdfasdfa") is True  # An "expired" token will essentially do this
+
+        # Double check logging out un-authenticates
+        mgr2.logout()
+        assert mgr.is_authenticated() is False
+        assert mgr2.is_authenticated() is False
+
+    def test_get_user_profile(self, mock_config_file_with_auth):
+        """test getting a user profile from Auth0"""
         # TODO: Possibly move to integration tests or fully mock since this makes a call out to Auth0
         config = Configuration(mock_config_file_with_auth[0])
         mgr = get_identity_manager(config)
@@ -152,17 +213,111 @@ class TestIdentityLocal(object):
 
         # Load User
         with pytest.raises(AuthenticationError):
-            mgr.authenticate()
+            # Should fail without a token
+            mgr.get_user_profile()
 
         # Go get a JWT for the test user from the dev auth client (real users are not in this DB)
         response = requests.post("https://gigantum.auth0.com/oauth/token", json=mock_config_file_with_auth[2])
         token_data = response.json()
 
         # Load User
-        u = mgr.authenticate(token_data['access_token'])
+        u = mgr.get_user_profile(token_data['access_token'])
         assert type(u) == User
         assert os.path.exists(os.path.join(mgr.auth_dir, 'user.json')) is True
         assert u.username == "johndoe"
         assert u.email == "john.doe@gmail.com"
         assert u.given_name == "John"
         assert u.family_name == "Doe"
+
+        # Seccond access should load from disk and not need a token
+        mgr2 = get_identity_manager(config)
+        u2 = mgr2.get_user_profile()
+        assert type(u) == User
+        assert os.path.exists(os.path.join(mgr.auth_dir, 'user.json')) is True
+        assert u2.username == "johndoe"
+        assert u2.email == "john.doe@gmail.com"
+        assert u2.given_name == "John"
+        assert u2.family_name == "Doe"
+
+        # Double check logging out un-authenticates
+        mgr2.logout()
+        with pytest.raises(AuthenticationError):
+            # Should fail without a token
+            mgr.get_user_profile()
+        with pytest.raises(AuthenticationError):
+            # Should fail without a token
+            mgr2.get_user_profile()
+
+    def test_check_first_login_user_locally(self, mock_config_file_with_auth_first_login,
+                                            cleanup_auto_import):
+        """Test login, but the user already logged into this instance"""
+        # fake the user already existing by creating the user directory
+        working_dir = mock_config_file_with_auth_first_login[1]
+        os.makedirs(os.path.join(working_dir, "johndoe"))
+
+        config = Configuration(mock_config_file_with_auth_first_login[0])
+        mgr = get_identity_manager(config)
+
+        # Go get a JWT for the test user from the dev auth client (real users are not in this DB)
+        response = requests.post("https://gigantum.auth0.com/oauth/token",
+                                 json=mock_config_file_with_auth_first_login[2])
+        token_data = response.json()
+
+        mgr._check_first_login("johndoe", access_token=token_data['access_token'])
+
+        # Should not import labbook - note we aren't mocking all the way to the workers
+        time.sleep(5)
+        assert os.path.exists(os.path.join('/mnt', 'gigantum', "johndoe", "johndoe", "labbooks",
+                                           "awful-intersections-demo")) is False
+
+    @mock.patch('lmcommon.dispatcher.jobs.import_labboook_from_zip', side_effect=mock_import)
+    @responses.activate
+    def test_check_first_login_no_user_locally_in_repo(self, mock_import, mock_config_file_with_auth_first_login,
+                                                       cleanup_auto_import):
+        """Test login with the user in the repo alread"""
+        # Add mock for call to auth service
+        responses.add(responses.GET, 'https://usersrv.gigantum.io/user',
+                      json={'exists': True}, status=200)
+        responses.add_passthru("https://gigantum.auth0.com/oauth/token")
+
+        config = Configuration(mock_config_file_with_auth_first_login[0])
+        mgr = get_identity_manager(config)
+
+        # Go get a JWT for the test user from the dev auth client (real users are not in this DB)
+        response = requests.post("https://gigantum.auth0.com/oauth/token",
+                                 json=mock_config_file_with_auth_first_login[2])
+        token_data = response.json()
+
+        mgr._check_first_login("johndoe", access_token=token_data['access_token'])
+
+        # Should import labbook - note we aren't mocking all the way to the workers
+        time.sleep(5)
+        assert os.path.exists(os.path.join('/mnt', 'gigantum', "johndoe", "johndoe", "labbooks",
+                                           "awful-intersections-demo")) is True
+
+    @mock.patch('lmcommon.dispatcher.jobs.import_labboook_from_zip', side_effect=mock_import)
+    @responses.activate
+    def test_check_first_login_no_user_locally_no_repo(self, mock_import, mock_config_file_with_auth_first_login,
+                                                       cleanup_auto_import):
+
+        """Test login with the user in the repo alread"""
+        # Add mock for call to auth service
+        responses.add(responses.GET, 'https://usersrv.gigantum.io/user',
+                      json={'exists': False}, status=404)
+        responses.add(responses.POST, 'https://usersrv.gigantum.io/user', status=201)
+        responses.add_passthru("https://gigantum.auth0.com/oauth/token")
+
+        config = Configuration(mock_config_file_with_auth_first_login[0])
+        mgr = get_identity_manager(config)
+
+        # Go get a JWT for the test user from the dev auth client (real users are not in this DB)
+        response = requests.post("https://gigantum.auth0.com/oauth/token",
+                                 json=mock_config_file_with_auth_first_login[2])
+        token_data = response.json()
+
+        mgr._check_first_login("johndoe", access_token=token_data['access_token'])
+
+        # Should import labbook - note we aren't mocking all the way to the workers
+        time.sleep(5)
+        assert os.path.exists(os.path.join('/mnt', 'gigantum', "johndoe", "johndoe", "labbooks",
+                                           "awful-intersections-demo")) is True

@@ -21,21 +21,25 @@ import glob
 import os
 import re
 import shutil
-from functools import wraps
 from typing import (Any, Dict, List, Optional, Set, Tuple)
 import uuid
 import yaml
 import json
 import time
+import datetime
+import subprocess
 from contextlib import contextmanager
 from pkg_resources import resource_filename
+import gitdb
+from collections import OrderedDict
 
-from lmcommon.configuration import Configuration
+from lmcommon.configuration import Configuration, get_docker_client
 from lmcommon.gitlib import get_git_interface, GitAuthor, GitRepoInterface
-from lmcommon.gitlib.gitlab import GitLabRepositoryManager
 from lmcommon.logging import LMLogger
-from lmcommon.labbook.schemas import validate_schema
+from lmcommon.labbook.schemas import validate_labbook_schema
+from lmcommon.labbook import shims
 from lmcommon.activity import ActivityStore, ActivityType, ActivityRecord, ActivityDetailType, ActivityDetailRecord
+from lmcommon.labbook.schemas import CURRENT_SCHEMA
 
 from redis import StrictRedis
 import redis_lock
@@ -51,6 +55,11 @@ class LabbookException(Exception):
     having to be aware of every sub-library that is used by the Labbook and the exceptions that those raise.
     The principle idea behind this is to have a single catch for all Labbook-related errors. In the stack trace you
     can still observe the origin of the problem."""
+    pass
+
+
+class LabbookMergeException(LabbookException):
+    """ Indicates failure of syncing with remote due to a merge conflict with local changes. """
     pass
 
 
@@ -82,14 +91,15 @@ def _check_git_tracked(repo: GitRepoInterface) -> None:
 class LabBook(object):
     """Class representing a single LabBook"""
 
-    # If this is not defined, implicitly the version is "0.2"
-    LABBOOK_DATA_SCHEMA_VERSION = "0.2"
-
-    def __init__(self, config_file: Optional[str] = None) -> None:
+    def __init__(self, config_file: Optional[str] = None, author: Optional[GitAuthor] = None) -> None:
         self.labmanager_config = Configuration(config_file)
 
         # Create gitlib instance
         self.git = get_git_interface(self.labmanager_config.config["git"])
+
+        # If author is set, update git interface
+        if author:
+            self.git.update_author(author=author)
 
         # LabBook Properties
         self._root_dir: Optional[str] = None  # The root dir is the location of the labbook this instance represents
@@ -111,7 +121,6 @@ class LabBook(object):
         else:
             return f'<LabBook UNINITIALIZED>'
 
-
     def _validate_git(method_ref): #type: ignore
         """Definition of decorator that validates git operations.
 
@@ -127,7 +136,11 @@ class LabBook(object):
                     _check_git_tracked(self.git)
                     n = method_ref(self, *args, **kwargs) #type: ignore
                 except ValueError:
-                    self._sweep_uncommitted_changes()
+                    with self.lock_labbook():
+                        self._sweep_uncommitted_changes()
+                    n = method_ref(self, *args, **kwargs)  # type: ignore
+                    with self.lock_labbook():
+                        self._sweep_uncommitted_changes()
                 finally:
                     _check_git_tracked(self.git)
             else:
@@ -136,7 +149,7 @@ class LabBook(object):
         return __validator
 
     @contextmanager
-    def lock_labbook(self, lock_key: str = None):
+    def lock_labbook(self, lock_key: Optional[str] = None):
         """A context manager for locking labbook operations that is decorator compatible
 
         Manages the lock process along with catching and logging exceptions that may occur
@@ -238,6 +251,13 @@ class LabBook(object):
         self._set_root_dir(os.path.join(base_dir, value))
 
     @property
+    def schema(self) -> int:
+        if self._data:
+            return self._data["schema"]
+        else:
+            raise ValueError("No schema stored in LabBook data.")
+
+    @property
     def key(self) -> str:
         """Return a unique key for identifying and locating a labbbok.
 
@@ -317,18 +337,9 @@ class LabBook(object):
             dict
         """
         if not self._favorite_keys:
-            data: Dict[str, List[Optional[Any]]] = dict()
-            # Try to load favorite data from disk
-            favorites_dir = os.path.join(self.root_dir, '.gigantum', 'favorites')
+            data: Dict[str, list] = dict()
             for section in ['code', 'input', 'output']:
-                favorite_file = os.path.join(favorites_dir, f'{section}.json')
-                data[section] = list()
-                if os.path.exists(favorite_file):
-                    with open(favorite_file, 'rt') as f_data:
-                        favorite_data = json.load(f_data)
-
-                    # Save just the keys in a list
-                    data[section].extend([f['key'] for f in favorite_data])
+                data[section] = list(self.get_favorites(section).keys())
 
             self._favorite_keys = data
 
@@ -359,6 +370,28 @@ class LabBook(object):
             logger.exception(e)
             raise LabbookException(e)
 
+    @property
+    def creation_date(self) -> Optional[datetime.datetime]:
+        path = os.path.join(self.root_dir, '.gigantum', 'buildinfo')
+        if os.path.isfile(path):
+            with open(path) as p:
+                info = json.load(p)
+                date_str = info.get('creation_utc')
+                d = datetime.datetime.strptime(date_str, '%Y-%m-%dT%H:%M:%S.%f')
+                return d
+        else:
+            return None
+
+    @property
+    def build_details(self) -> Optional[Dict[str, str]]:
+        path = os.path.join(self.root_dir, '.gigantum', 'buildinfo')
+        if os.path.isfile(path):
+            with open(path) as p:
+                info = json.load(p)
+                return info.get('build_info')
+        else:
+            return None
+
     def _set_root_dir(self, new_root_dir: str) -> None:
         """Update the root directory and also reconfigure the git instance
 
@@ -383,6 +416,7 @@ class LabBook(object):
         with self.lock_labbook():
             with open(os.path.join(self.root_dir, ".gigantum", "labbook.yaml"), 'wt') as lbfile:
                 lbfile.write(yaml.dump(self._data, default_flow_style=False))
+                lbfile.flush()
 
     def _load_labbook_data(self) -> None:
         """Method to load the labbook YAML file to a dictionary
@@ -408,16 +442,11 @@ class LabBook(object):
         if len(self.name) > 100:
             raise ValueError("Invalid `name`. Max length is 100 characters")
 
-        # TODO: Remove in the future after breaking changes are completed
-        # Skip schema check if it doesn't exist (aka an old labbook)
-        if self.data:
-            if "schema" in self.data:
-                if not validate_schema(self.LABBOOK_DATA_SCHEMA_VERSION, self.data):
-                    errmsg = f"Schema in Labbook {str(self)} does not match indicated version {self.LABBOOK_DATA_SCHEMA_VERSION}"
-                    logger.error(errmsg)
-                    raise ValueError(errmsg)
-            else:
-                logger.info("Skipping schema check on old LabBook")
+        # Validate schema is supported by running version of the software and valid
+        if not validate_labbook_schema(self.schema, self.data):
+            errmsg = f"Schema in Labbook {str(self)} does not match indicated version {self.schema}"
+            logger.error(errmsg)
+            raise ValueError(errmsg)
 
     def _validate_section(self, section: str) -> None:
         """Simple method to validate a user provided section name
@@ -444,23 +473,17 @@ class LabBook(object):
         return ''.join(c for c in value if c not in '\<>?/;"`\'')
 
     def _sweep_uncommitted_changes(self) -> None:
-        result_status = self.git.status()
-        # status_key is one of "staged", "unstaged", "untracked"
-        has_changes = False
-        for status_key in result_status.keys():
-            n = result_status.get(status_key)
-            if n:
-                has_changes = True
-                s = ', '.join([f"{a[0]} ({a[1]}" for a in n])
-                logger.warning(f"In {str(self)}, sweeping up {s}")
-
-        if has_changes:
-            self.git.add_all(self.root_dir)
-            self.git.commit("Sweeping up lingering changes.")
+        if not self.is_repo_clean:
+            logger.warning('Untracked changes detected; calling sweep;')
+            r = subprocess.check_output(f'git add -A && git commit -m "_sweep_uncommitted_changes"',
+                                        cwd=self.root_dir, shell=True)
+            #self.git.add_all()
+            #self.git.commit("Sweeping up lingering changes.")
+        else:
+            logger.info(f"{str(self)} no changes to sweep.")
 
         if not self.is_repo_clean:
             raise LabbookException("_sweep_uncommitted_changes failed")
-
 
     @staticmethod
     def get_activity_type_from_section(section_name: str) -> Tuple[ActivityType, ActivityDetailType, str]:
@@ -485,7 +508,10 @@ class LabBook(object):
             activity_type = ActivityType.OUTPUT_DATA
             section = "Output Data"
         else:
-            raise ValueError(f"Unsupported LabBook section: '{section_name}'")
+            # This is the labbook root, since we can't catagorize keep generic
+            activity_detail_type = ActivityDetailType.LABBOOK
+            activity_type = ActivityType.LABBOOK
+            section = "LabBook Root"
 
         return activity_type, activity_detail_type, section
 
@@ -545,12 +571,16 @@ class LabBook(object):
         """Return true if the Git repo is ready to be push, pulled, or merged. I.e., no uncommitted changes
         or un-tracked files. """
 
-        result_status = self.git.status()
-        for status_key in result_status.keys():
-            n = result_status.get(status_key)
-            if n:
-                return False
-        return True
+        try:
+            result_status = self.git.status()
+            for status_key in result_status.keys():
+                n = result_status.get(status_key)
+                if n:
+                    logger.warning(f"Found {status_key} in {str(self)}: {n}")
+                    return False
+            return True
+        except gitdb.exc.BadName:
+            return False
 
     def checkout_branch(self, branch_name: str, new: bool = False) -> None:
         """
@@ -567,12 +597,16 @@ class LabBook(object):
             raise LabbookException(f"Cannot checkout {branch_name}: Untracked and/or uncommitted changes")
 
         try:
-            self.git.fetch()
             if new:
                 logger.info(f"Creating a new branch {branch_name}...")
                 self.git.create_branch(branch_name)
             logger.info(f"Checking out branch {branch_name}...")
             self.git.checkout(branch_name=branch_name)
+
+            # Clear out checkout context
+            if self._root_dir and os.path.exists(os.path.join(self._root_dir, ".gigantum", ".checkout")):
+                os.remove(os.path.join(self._root_dir, ".gigantum", ".checkout"))
+            self._checkout_id = None
         except ValueError as e:
             logger.error(f"Cannot checkout branch {branch_name}: {e}")
             raise LabbookException(e)
@@ -622,6 +656,7 @@ class LabBook(object):
         try:
             logger.info(f"Adding new remote {remote_name} at {url}")
             self.git.add_remote(remote_name, url)
+            self.git.fetch(remote=remote_name)
         except Exception as e:
             # Unsure what specific exception add_remote creates, so make a catchall.
             logger.exception(e)
@@ -646,226 +681,6 @@ class LabBook(object):
             logger.exception(e)
             raise LabbookException(e)
 
-    def pull(self, remote: str = "origin"):
-        """Pull and update from a remote git repository
-
-        Deprecated.
-
-        Args:
-            remote(str): Remote Git repository to pull from. Default is "origin"
-
-        Returns:
-            None
-        """
-
-        try:
-            logger.info(f"{str(self)} pulling from remote {remote}")
-            self.git.pull(remote=remote)
-        except Exception as e:
-            logger.exception(e)
-            raise LabbookException(e)
-
-    @_validate_git
-    def local_sync(self, username: Optional[str] = None) -> None:
-        """Sync locally only to gm.workspace branch - don't do anything with remote. Creates a user's
-         local workspace if necessary.
-
-        Args:
-            username(str): Active username
-        
-        Returns:
-            None
-
-        Raises:
-            LabbookException
-        """
-        try:
-            with self.lock_labbook():
-                self._sweep_uncommitted_changes()
-                if username and f"gm.workspace-{username}" not in self.get_branches()['local']:
-                    self.checkout_branch("gm.workspace")
-                    self.checkout_branch(f"gm.workspace-{username}", new=True)
-                    self.git.merge("gm.workspace")
-                    self.git.commit(f"Created and merged new user workspace gm.workspace-{username}")
-                else:
-                    orig_branch = self.active_branch
-                    self.checkout_branch("gm.workspace")
-                    self.git.merge(orig_branch)
-                    self.git.commit(f"Merged from local workspace")
-                    self.checkout_branch(orig_branch)
-        except Exception as e:
-            logger.exception(e)
-            raise LabbookException(e)
-
-    @_validate_git
-    def sync(self, username: str, remote: str = "origin") -> int:
-        """Sync workspace and personal workspace with the remote.
-
-        Args:
-            username(str): Username of current user (populated by API)
-            remote(str): Name of the Git remote
-
-        Returns:
-            int: Number of commits pulled from remote (0 implies no upstream changes pulled in).
-
-        Raises:
-            LabbookException on any problems.
-        """
-
-        # Note, BVB: For now, this method only supports the initial branching workflow of having
-        # "workspace" and "workspace-{user}" branches. In the future, its signature will change to support
-        # user feature-branches.
-
-        try:
-            if not self.has_remote:
-                self.local_sync()
-                return 0
-
-            logger.info(f"Syncing {str(self)} for user {username} to remote {remote}")
-            self.git.fetch(remote=remote)
-            with self.lock_labbook():
-                self._sweep_uncommitted_changes()
-
-                ## Checkout the workspace and retrieve any upstream updtes
-                self.checkout_branch("gm.workspace")
-                remote_updates_cnt = self.get_commits_behind_remote()[1]
-                self.pull(remote=remote)
-
-                ## Pull those changes into the personal workspace
-                self.checkout_branch(f"gm.workspace-{username}")
-                self.git.merge("gm.workspace")
-                self.git.add_all(self.root_dir)
-                self.git.commit("Sync -- Merged from gm.workspace")
-                self.push(remote=remote)
-
-                ## Get the local workspace and user's local workspace synced.
-                self.checkout_branch("gm.workspace")
-                self.git.merge(f"gm.workspace-{username}")
-                self.git.add_all(self.root_dir)
-                self.git.commit(f"Sync -- Pulled in {username}'s changes")
-
-                ## Sync it with the remote again. Everything should be up-to-date at this point.
-                self.push(remote=remote)
-                self.checkout_branch(f"gm.workspace-{username}")
-
-                return remote_updates_cnt
-        except Exception as e:
-            logger.exception(e)
-            raise LabbookException(e)
-        finally:
-            ## We should (almost) always have the user's personal workspace checked out.
-            self.checkout_branch(f"gm.workspace-{username}")
-
-    def _publish(self, username: str, remote: str) -> None:
-        # Current branch must be the user's workspace.
-        if f'gm.workspace-{username}' != self.active_branch:
-            raise ValueError('User workspace must be active branch to publish')
-
-        # The gm.workspace branch must exist (if not, then there is a problem in Labbook.new())
-        if not 'gm.workspace' in self.get_branches()['local']:
-            raise ValueError('Branch gm.workspace does not exist in local Labbook branches')
-
-        self.git.fetch(remote=remote)
-
-        # Make sure user's workspace is synced (in case they are working on it on other machines)
-        if self.get_commits_behind_remote(remote_name=remote)[1] > 0:
-            raise ValueError(f'Cannot publish since {self.active_branch} is not synced')
-
-        # Make sure the master workspace is synced before attempting to publish.
-        self.git.checkout("gm.workspace")
-        if self.get_commits_behind_remote(remote_name=remote)[1] > 0:
-            raise ValueError(f'Cannot publish since {self.active_branch} is not synced')
-
-        # Now, it should be safe to pull the user's workspace into the master workspace.
-        self.git.merge(f"gm.workspace-{username}")
-        self.git.add_all(self.root_dir)
-        self.git.commit(f"Merged gm.workspace-{username}")
-
-        # Push the master workspace to the remote, creating if necessary
-        if not f"{remote}/{self.active_branch}" in self.get_branches()['remote']:
-            logger.info(f"Pushing and setting upstream branch {self.active_branch} to {remote}")
-            self.git.repo.git.push("--set-upstream", remote, self.active_branch)
-        else:
-            logger.info(f"Pushing {self.active_branch} to {remote}")
-            self.git.publish_branch(branch_name=self.active_branch, remote_name=remote)
-
-        # Return to the user's workspace, merge it with the global workspace (as a precaution)
-        self.checkout_branch(branch_name=f'gm.workspace-{username}')
-        self.git.merge("gm.workspace")
-        self.git.add_all(self.root_dir)
-        self.git.commit(f"Merged gm.workspace-{username}")
-
-        # Now push the user's workspace to the remote repo (again, as a precaution)
-        if not self.active_branch in self.get_branches()['remote']:
-            logger.info(f"Pushing and setting upstream branch {self.active_branch} to {remote}")
-            self.git.repo.git.push("--set-upstream", remote, self.active_branch)
-        else:
-            logger.info(f"Pushing {self.active_branch} to {remote}")
-            self.git.publish_branch(branch_name=self.active_branch, remote_name=remote)
-
-    def _create_remote_repo(self, username: str, access_token: Optional[str] = None) -> None:
-        """Create a new repository in GitLab,
-
-        Note: It may make more sense to factor this out later on. TODO. """
-
-        try:
-            default_remote = self.labmanager_config.config['git']['default_remote']
-            admin_service = None
-            for remote in self.labmanager_config.config['git']['remotes']:
-                if default_remote == remote:
-                    admin_service = self.labmanager_config.config['git']['remotes'][remote]['admin_service']
-                    break
-
-            if not admin_service:
-                raise ValueError('admin_service could not be found')
-
-            # Add collaborator to remote service
-            mgr = GitLabRepositoryManager(default_remote, admin_service, access_token=access_token or 'invalid',
-                                          username=username, owner=self.owner['username'], labbook_name=self.name)
-            mgr.configure_git_credentials(default_remote, username)
-            mgr.create()
-
-            self.add_remote("origin", f"https://{default_remote}/{username}/{self.name}.git")
-        except Exception as e:
-            logger.exception(e)
-            raise
-
-    @_validate_git
-    def publish(self, username: str, access_token: Optional[str] = None, remote: str = "origin") -> None:
-        try:
-            logger.info(f"Publishing {str(self)} for user {username} to remote {remote}")
-            if self.has_remote:
-                raise ValueError("Cannot publish Labbook when remote already set.")
-            with self.lock_labbook():
-                self._create_remote_repo(username=username, access_token=access_token)
-                self._publish(username=username, remote=remote)
-        except Exception as e:
-            # Unsure what specific exception add_remote creates, so make a catchall.
-            logger.error(f"Labbook {str(self)} may be in corrupted Git state!")
-            logger.exception(e)
-            # TODO - Rollback to before merge
-            raise LabbookException(e)
-        finally:
-            self.checkout_branch(f"gm.workspace-{username}")
-
-    def push(self, remote: str = "origin"):
-        """Push commits to a remote git repository. Assume current working branch."""
-
-        try:
-            logger.info(f"Fetching from remote {remote}")
-            self.git.fetch(remote=remote)
-
-            if not self.active_branch in self.get_branches()['remote']:
-                logger.info(f"Pushing and setting upstream branch {self.active_branch}")
-                self.git.repo.git.push("--set-upstream", remote, self.active_branch)
-            else:
-                logger.info(f"Pushing to {remote}")
-                self.git.publish_branch(branch_name=self.active_branch, remote_name=remote)
-
-        except Exception as e:
-            # Unsure what specific exception add_remote creates, so make a catchall.
-            logger.exception(e)
-            raise LabbookException(e)
 
     @_validate_git
     def insert_file(self, section: str, src_file: str, dst_dir: str,
@@ -905,37 +720,38 @@ class LabBook(object):
                 raise ValueError(f"Target dir `{os.path.join(self.root_dir, dst_dir.replace('..', ''))}` does not exist")
 
             # Copy file to destination
+            rel_path = dst_path.replace(os.path.join(self.root_dir, section), '')
             logger.info(f"Inserting new file for {str(self)} from `{src_file}` to `{dst_path}")
             shutil.copyfile(src_file, dst_path)
 
-            # Get LabBook section info
-            activity_type, activity_detail_type, section_str = self.get_activity_type_from_section(section)
+            if not shims.in_untracked(self.root_dir, section):
+                # If we are setting this section to be untracked
+                activity_type, activity_detail_type, section_str = self.get_activity_type_from_section(section)
 
-            # Create commit
-            rel_path = dst_path.replace(os.path.join(self.root_dir, section), '')
-            commit_msg = f"Added new {section_str} file {rel_path}"
-            self.git.add(dst_path)
-            commit = self.git.commit(commit_msg)
+                # Create commit
+                commit_msg = f"Added new {section_str} file {rel_path}"
+                self.git.add(dst_path)
+                commit = self.git.commit(commit_msg)
 
-            # Create Activity record and detail
-            _, ext = os.path.splitext(rel_path) or 'file'
+                # Create Activity record and detail
+                _, ext = os.path.splitext(rel_path) or 'file'
 
-            # Create detail record
-            adr = ActivityDetailRecord(activity_detail_type, show=False, importance=0)
-            adr.add_value('text/plain', commit_msg)
+                # Create detail record
+                adr = ActivityDetailRecord(activity_detail_type, show=False, importance=0)
+                adr.add_value('text/plain', commit_msg)
 
-            # Create activity record
-            ar = ActivityRecord(activity_type,
-                                message=commit_msg,
-                                show=True,
-                                importance=255,
-                                linked_commit=commit.hexsha,
-                                tags=[ext])
-            ar.add_detail_object(adr)
+                # Create activity record
+                ar = ActivityRecord(activity_type,
+                                    message=commit_msg,
+                                    show=True,
+                                    importance=255,
+                                    linked_commit=commit.hexsha,
+                                    tags=[ext])
+                ar.add_detail_object(adr)
 
-            # Store
-            ars = ActivityStore(self)
-            ars.create_activity_record(ar)
+                # Store
+                ars = ActivityStore(self)
+                ars.create_activity_record(ar)
 
             return self.get_file_info(section, rel_path)
 
@@ -979,6 +795,9 @@ class LabBook(object):
                     errmsg = f"File at {target_path} neither file nor directory"
                     logger.error(errmsg)
                     raise ValueError(errmsg)
+
+                if shims.in_untracked(self.root_dir, section=section):
+                    return True
 
                 commit_msg = f"Removed {target_type} {relative_path}."
                 self.git.remove(target_path)
@@ -1029,6 +848,7 @@ class LabBook(object):
         if not dst_rel_path:
             raise ValueError("dst_rel_path cannot be None or empty")
 
+        is_untracked = shims.in_untracked(self.root_dir, section)
         with self.lock_labbook():
             src_rel_path = LabBook._make_path_relative(src_rel_path)
             dst_rel_path = LabBook._make_path_relative(dst_rel_path)
@@ -1043,44 +863,46 @@ class LabBook(object):
                 src_type = 'directory' if os.path.isdir(src_abs_path) else 'file'
                 logger.info(f"Moving {src_type} `{src_abs_path}` to `{dst_abs_path}`")
 
-                self.git.remove(src_abs_path, keep_file=True)
+                if not is_untracked:
+                    self.git.remove(src_abs_path, keep_file=True)
 
                 shutil.move(src_abs_path, dst_abs_path)
-                commit_msg = f"Moved {src_type} `{src_rel_path}` to `{dst_rel_path}`"
 
-                if os.path.isdir(dst_abs_path):
-                    self.git.add_all(dst_abs_path)
-                else:
-                    self.git.add(dst_abs_path)
+                if not is_untracked:
+                    commit_msg = f"Moved {src_type} `{src_rel_path}` to `{dst_rel_path}`"
 
-                commit = self.git.commit(commit_msg)
+                    if os.path.isdir(dst_abs_path):
+                        self.git.add_all(dst_abs_path)
+                    else:
+                        self.git.add(dst_abs_path)
 
-                # Get LabBook section
-                activity_type, activity_detail_type, section_str = self.get_activity_type_from_section(section)
+                    commit = self.git.commit(commit_msg)
 
-                # Create detail record
-                adr = ActivityDetailRecord(activity_detail_type, show=False, importance=0)
-                adr.add_value('text/markdown', commit_msg)
+                    # Get LabBook section
+                    activity_type, activity_detail_type, section_str = self.get_activity_type_from_section(section)
 
-                # Create activity record
-                ar = ActivityRecord(activity_type,
-                                    message=commit_msg,
-                                    linked_commit=commit.hexsha,
-                                    show=True,
-                                    importance=255,
-                                    tags=['file-move'])
-                ar.add_detail_object(adr)
+                    # Create detail record
+                    adr = ActivityDetailRecord(activity_detail_type, show=False, importance=0)
+                    adr.add_value('text/markdown', commit_msg)
 
-                # Store
-                ars = ActivityStore(self)
-                ars.create_activity_record(ar)
+                    # Create activity record
+                    ar = ActivityRecord(activity_type,
+                                        message=commit_msg,
+                                        linked_commit=commit.hexsha,
+                                        show=True,
+                                        importance=255,
+                                        tags=['file-move'])
+                    ar.add_detail_object(adr)
+
+                    # Store
+                    ars = ActivityStore(self)
+                    ars.create_activity_record(ar)
 
                 return self.get_file_info(section, dst_rel_path)
             except Exception as e:
                 logger.critical("Failed moving file in labbook. Repository may be in corrupted state.")
                 logger.exception(e)
                 raise
-
 
     @_validate_git
     def makedir(self, relative_path: str, make_parents: bool = True, create_activity_record: bool = False) -> None:
@@ -1100,19 +922,28 @@ class LabBook(object):
         with self.lock_labbook():
             relative_path = LabBook._make_path_relative(relative_path)
             new_directory_path = os.path.join(self.root_dir, relative_path)
+            section = relative_path.split(os.sep)[0]
+            git_untracked = shims.in_untracked(self.root_dir, section)
             if os.path.exists(new_directory_path):
-                raise ValueError(f'Directory `{new_directory_path}` already exists')
+                #raise ValueError(f'Directory `{new_directory_path}` already exists')
+                return
             else:
                 logger.info(f"Making new directory in `{new_directory_path}`")
                 os.makedirs(new_directory_path, exist_ok=make_parents)
+                if git_untracked:
+                    logger.warning(f'New {str(self)} untracked directory `{new_directory_path}`')
+                    return
                 new_dir = ''
                 for d in relative_path.split(os.sep):
                     new_dir = os.path.join(new_dir, d)
                     full_new_dir = os.path.join(self.root_dir, new_dir)
-                    with open(os.path.join(full_new_dir, '.gitkeep'), 'w') as gitkeep:
-                        gitkeep.write("This file is necessary to keep this directory tracked by Git"
-                                      " and archivable by compression tools. Do not delete or modify!")
-                    self.git.add_all(new_directory_path)
+
+                    gitkeep_path = os.path.join(full_new_dir, '.gitkeep')
+                    if not os.path.exists(gitkeep_path):
+                        with open(gitkeep_path, 'w') as gitkeep:
+                            gitkeep.write("This file is necessary to keep this directory tracked by Git"
+                                          " and archivable by compression tools. Do not delete or modify!")
+                        self.git.add(gitkeep_path)
 
                 if create_activity_record:
                     # Create detail record
@@ -1211,15 +1042,15 @@ class LabBook(object):
         return sorted(stats, key=lambda a: a['key'])
 
     def create_favorite(self, section: str, relative_path: str,
-                        description: Optional[str] = None, position: Optional[int] = None,
-                        is_dir: bool = False) -> Dict[str, Any]:
+                        description: Optional[str] = None, is_dir: bool = False) -> Dict[str, Any]:
         """Mark an existing file as a Favorite
+
+        Data is stored in a json document, with each object name the relative path to the file
 
         Args:
             section(str): lab book subdir where file exists (code, input, output)
-            relative_path(str): Relative path within the root_dir to the file to favorite
+            relative_path(str): Relative path within the section to the file to favorite
             description(str): A short string containing information about the favorite
-            position(int): The position to insert the favorite. If omitted, will append.
             is_dir(bool): If true, relative_path will expected to be a directory
 
         Returns:
@@ -1250,7 +1081,7 @@ class LabBook(object):
                 # No favorites have been created
                 os.makedirs(favorites_dir)
 
-            favorite_data: List[Dict[str, Any]] = []
+            favorite_data: Dict[str, Any] = dict()
             if os.path.exists(os.path.join(favorites_dir, f'{section}.json')):
                 # Read existing data
                 with open(os.path.join(favorites_dir, f'{section}.json'), 'rt') as f_data:
@@ -1261,53 +1092,49 @@ class LabBook(object):
                 if relative_path[-1] != os.path.sep:
                     relative_path = relative_path + os.path.sep
 
-            favorite_record = {"key": relative_path,
-                               "description": description,
-                               "is_dir": is_dir}
+            if relative_path in favorite_data:
+                raise ValueError(f"Favorite `{relative_path}` already exists in {section}.")
 
-            if any(f['key'] == favorite_record['key'] for f in favorite_data):
-                raise ValueError(f"Favorite `{favorite_record['key']}` already exists.")
-
-            if position:
-                # insert at specific location
-                if position >= len(favorite_data):
-                    raise ValueError("Invalid index to insert favorite")
-
-                if position < 0:
-                    raise ValueError("Invalid index to insert favorite")
-
-                favorite_data.insert(position, favorite_record)
-                result_index = position
+            # Get last index
+            if favorite_data:
+                last_index = max([int(favorite_data[x]['index']) for x in favorite_data])
+                index_val = last_index + 1
             else:
-                # append
-                favorite_data.append(favorite_record)
-                result_index = len(favorite_data) - 1
+                index_val = 0
 
-            # Add index values
-            favorite_data = [dict(fav_data, index=idx_val) for fav_data, idx_val in zip(favorite_data,
-                                                                                        range(len(favorite_data)))]
+            # Create new record
+            favorite_data[relative_path] = {"key": relative_path,
+                                            "index": index_val,
+                                            "description": description,
+                                            "is_dir": is_dir}
+
+            # Always be sure to sort the ordered dict
+            favorite_data = OrderedDict(sorted(favorite_data.items(), key=lambda val: val[1]['index']))
 
             # Write favorites to lab book
-            with open(os.path.join(favorites_dir, f'{section}.json'), 'wt') as f_data:
-                json.dump(favorite_data, f_data)
+            fav_data_file = os.path.join(favorites_dir, f'{section}.json')
+            with open(fav_data_file, 'wt') as f_data:
+                json.dump(favorite_data, f_data, indent=2)
 
             # Remove cached favorite key data
             self._favorite_keys = None
 
-            return favorite_data[result_index]
+            # Commit the changes
+            self.git.add(fav_data_file)
+            self.git.commit(f"Committing new Favorite file {fav_data_file}")
 
-    def update_favorite(self, section: str, index: int,
+            return favorite_data[relative_path]
+
+    def update_favorite(self, section: str, relative_path: str,
                         new_description: Optional[str] = None,
-                        new_index: Optional[int] = None,
-                        new_key: Optional[str] = None) -> Dict[str, Any]:
+                        new_index: Optional[int] = None) -> Dict[str, Any]:
         """Mark an existing file as a Favorite
 
         Args:
             section(str): lab book subdir where file exists (code, input, output)
-            index(int): The position of the favorite to edit
+            relative_path(str): Relative path within the section to the file to favorite
             new_description(str): A short string containing information about the favorite
             new_index(int): The position to move the favorite
-            new_key(int): An updated key for the favorite
 
         Returns:
             dict
@@ -1326,64 +1153,57 @@ class LabBook(object):
             with open(favorites_file, 'rt') as f_data:
                 favorite_data = json.load(f_data)
 
-            # Ensure the index is valid
-            if index < 0 or index >= len(favorite_data):
-                raise ValueError(f"Invalid favorite index {index}")
+            # Ensure the favorite already exists is valid
+            if relative_path not in favorite_data:
+                raise ValueError(f"Favorite {relative_path} in section {section} does not exist. Cannot update.")
 
             # Update description if needed
             if new_description:
-                logger.info(f"Updating description for {favorite_data[index]['key']} favorite")
-                favorite_data[index]['description'] = new_description
+                logger.info(f"Updating description for {relative_path} favorite in section {section}.")
+                favorite_data[relative_path]['description'] = new_description
 
-            # Update key if needed
-            if new_key:
-                # Remove any leading "/" -- without doing so os.path.join will break.
-                target_path_rel = LabBook._make_path_relative(os.path.join(section, new_key))
-                target_path = os.path.join(self.root_dir, target_path_rel.replace('..', ''))
+            # Update the index if needed
+            if new_index is not None:
+                if new_index < 0 or new_index > len(favorite_data.keys()) - 1:
+                    raise ValueError(f"Invalid index during favorite update: {new_index}")
 
-                if not os.path.exists(target_path):
-                    raise ValueError(f"Target file/dir `{target_path}` does not exist")
+                if new_index < favorite_data[relative_path]['index']:
+                    # Increment index of all items "after" updated index
+                    for fav in favorite_data:
+                        if favorite_data[fav]['index'] >= new_index:
+                            favorite_data[fav]['index'] = favorite_data[fav]['index'] + 1
 
-                logger.info(f"Updating key for {favorite_data[index]['key']} favorite")
-                favorite_data[index]['key'] = new_key
+                elif new_index > favorite_data[relative_path]['index']:
+                    # Decrement index of all items "before" updated index
+                    for fav in favorite_data:
+                        if favorite_data[fav]['index'] <= new_index:
+                            favorite_data[fav]['index'] = favorite_data[fav]['index'] - 1
 
-            if new_index and new_index != index:
-                if new_index < 0 or new_index >= len(favorite_data):
-                    raise ValueError("Invalid index to insert favorite")
+                # Update new index
+                favorite_data[relative_path]['index'] = new_index
 
-                updated_record = favorite_data[index]
-                if new_index > index:
-                    # Insert then delete
-                    favorite_data.insert(new_index + 1, updated_record)
-                    del favorite_data[index]
-                else:
-                    # delete then insert
-                    del favorite_data[index]
-                    favorite_data.insert(new_index, updated_record)
-
-                result_index = new_index
-            else:
-                result_index = index
-
-            # Add index values
-            favorite_data = [dict(fav_data, index=idx_val) for fav_data, idx_val in zip(favorite_data,
-                                                                                        range(len(favorite_data)))]
+            # Always be sure to sort the ordered dict
+            favorite_data = OrderedDict(sorted(favorite_data.items(), key=lambda val: val[1]['index']))
 
             # Write favorites to lab book
             with open(favorites_file, 'wt') as f_data:
-                json.dump(favorite_data, f_data)
+                json.dump(favorite_data, f_data, indent=2)
 
             # Remove cached favorite key data
             self._favorite_keys = None
 
-            return favorite_data[result_index]
+            # Commit the changes
+            self.git.add(favorites_file)
+            self.git.commit(f"Committing update to Favorite file {favorites_file}")
 
-    def remove_favorite(self, section: str, position: int) -> None:
+            return favorite_data[relative_path]
+
+    def remove_favorite(self, section: str, relative_path: str) -> None:
         """Mark an existing file as a Favorite
 
         Args:
             section(str): lab book subdir where file exists (code, input, output)
-            position(int): The position to insert the favorite. If omitted, will append.
+            relative_path(str): Relative path within the section to the file to favorite
 
         Returns:
             None
@@ -1394,41 +1214,45 @@ class LabBook(object):
         with self.lock_labbook():
             # Open existing Favorites json if exists
             favorites_dir = os.path.join(self.root_dir, '.gigantum', 'favorites')
-            if not os.path.exists(favorites_dir):
-                # No favorites have been created
-                raise ValueError(f"No favorites have been created yet. Cannot remove item {position}!")
 
-            favorite_data: List[Dict[str, Any]] = []
-            if os.path.exists(os.path.join(favorites_dir, f'{section}.json')):
-                # Read existing data
-                with open(os.path.join(favorites_dir, f'{section}.json'), 'rt') as f_data:
-                    favorite_data = json.load(f_data)
+            data_file = os.path.join(favorites_dir, f'{section}.json')
+            if not os.path.exists(data_file):
+                raise ValueError(f"No {section} favorites have been created yet. Cannot remove item {relative_path}!")
 
-            if position >= len(favorite_data):
-                raise ValueError("Invalid index to remove favorite")
-            if position < 0:
-                raise ValueError("Invalid index to remove favorite")
+            # Read existing data
+            with open(data_file, 'rt') as f_data:
+                favorite_data = json.load(f_data)
+
+            if relative_path not in favorite_data:
+                raise ValueError(f"Favorite {relative_path} not found in {section}. Cannot remove.")
 
             # Remove favorite at index value
-            del favorite_data[position]
+            del favorite_data[relative_path]
 
-            # Add index values
-            favorite_data = [dict(fav_data, index=idx_val) for fav_data, idx_val in zip(favorite_data,
-                                                                                        range(len(favorite_data)))]
+            # Always be sure to sort the ordered dict
+            favorite_data = OrderedDict(sorted(favorite_data.items(), key=lambda val: val[1]['index']))
+
+            # Reset index vals
+            for idx, fav in enumerate(favorite_data):
+                favorite_data[fav]['index'] = idx
 
             # Write favorites to back lab book
-            with open(os.path.join(favorites_dir, f'{section}.json'), 'wt') as f_data:
-                json.dump(favorite_data, f_data)
+            with open(data_file, 'wt') as f_data:
+                json.dump(favorite_data, f_data, indent=2)
 
-            logger.info(f"Removed {section} favorite #{position}")
+            logger.info(f"Removed {section} favorite {relative_path}")
 
             # Remove cached favorite key data
             self._favorite_keys = None
 
+            # Commit the changes
+            self.git.add(data_file)
+            self.git.commit(f"Committing update to Favorite file {data_file}")
+
             return None
 
-    def get_favorites(self, section: str) -> List[Optional[Dict[str, Any]]]:
-        """Get Favorite data
+    def get_favorites(self, section: str) -> OrderedDict:
+        """Get Favorite data in an OrderedDict, sorted by index
 
         Args:
             section(str): lab book subdir where file exists (code, input, output)
@@ -1439,17 +1263,17 @@ class LabBook(object):
         if section not in ['code', 'input', 'output']:
             raise ValueError("Favorites only supported in `code`, `input`, and `output` Lab Book directories")
 
-        favorite_data: List[Optional[Dict[str, Any]]] = []
+        favorite_data: OrderedDict = OrderedDict()
         favorites_dir = os.path.join(self.root_dir, '.gigantum', 'favorites')
         if os.path.exists(os.path.join(favorites_dir, f'{section}.json')):
             # Read existing data
             with open(os.path.join(favorites_dir, f'{section}.json'), 'rt') as f_data:
-                favorite_data = json.load(f_data)
+                favorite_data = json.load(f_data, object_pairs_hook=OrderedDict)
 
         return favorite_data
 
     def new(self, owner: Dict[str, str], name: str, username: Optional[str] = None,
-            description: Optional[str] = None) -> str:
+            description: Optional[str] = None, bypass_lfs: bool = False) -> str:
         """Method to create a new minimal LabBook instance on disk
 
         /[LabBook name]
@@ -1495,7 +1319,7 @@ class LabBook(object):
                         "name": name,
                         "description": self._santize_input(description or '')},
             "owner": owner,
-            "schema": self.LABBOOK_DATA_SCHEMA_VERSION
+            "schema": CURRENT_SCHEMA
         }
 
         # Validate data
@@ -1504,7 +1328,7 @@ class LabBook(object):
         logger.info("Creating new labbook on disk for {}/{}/{} ...".format(username, owner, name))
 
         # lock while creating initial directory
-        with self.lock_labbook(lock_key=f"new_labbook_lock|{username}|{owner}|{name}"):
+        with self.lock_labbook(lock_key=f"new_labbook_lock|{username}|{owner['username']}|{name}"):
             # Verify or Create user subdirectory
             # Make sure you expand a user dir string
             starting_dir = os.path.expanduser(self.labmanager_config.config["git"]["working_directory"])
@@ -1535,56 +1359,77 @@ class LabBook(object):
             os.makedirs(new_root_dir)
             self._set_root_dir(new_root_dir)
 
-        # Init repository
-        self.git.initialize()
+            # Init repository
+            self.git.initialize()
 
-        # Create Directory Structure
-        dirs = [
-            'code', 'input', 'output', '.gigantum',
-            os.path.join('.gigantum', 'env'),
-            os.path.join('.gigantum', 'env', 'base_image'),
-            os.path.join('.gigantum', 'env', 'dev_env'),
-            os.path.join('.gigantum', 'env', 'custom'),
-            os.path.join('.gigantum', 'env', 'package_manager'),
-            os.path.join('.gigantum', 'activity'),
-            os.path.join('.gigantum', 'activity', 'log'),
-            os.path.join('.gigantum', 'activity', 'index'),
-            os.path.join('.gigantum', 'activity', 'importance'),
-        ]
+            # Setup LFS
+            if self.labmanager_config.config["git"]["lfs_enabled"] and not bypass_lfs:
+                # Make sure LFS install is setup
+                subprocess.run(f"git lfs install", shell=True, check=True, cwd=new_root_dir)
 
-        for d in dirs:
-            self.makedir(d, make_parents=True)
+                # Track input and output directories
+                subprocess.run(f"git lfs track input/**", shell=True, check=True, cwd=new_root_dir)
+                subprocess.run(f"git lfs track output/**", shell=True, check=True, cwd=new_root_dir)
 
-        # Create labbook.yaml file
-        self._save_labbook_data()
+                # Commit .gitattributes file
+                self.git.add(os.path.join(self.root_dir, ".gitattributes"))
+                self.git.commit("Configuring LFS")
 
-        # Create blank Dockerfile
-        # TODO: Add better base dockerfile once environment service defines this
-        with open(os.path.join(self.root_dir, ".gigantum", "env", "Dockerfile"), 'wt') as dockerfile:
-            dockerfile.write("FROM ubuntu:16.04")
+            # Create Directory Structure
+            dirs = [
+                'code', 'input', 'output', '.gigantum',
+                os.path.join('.gigantum', 'env'),
+                os.path.join('.gigantum', 'env', 'base'),
+                os.path.join('.gigantum', 'env', 'custom'),
+                os.path.join('.gigantum', 'env', 'package_manager'),
+                os.path.join('.gigantum', 'activity'),
+                os.path.join('.gigantum', 'activity', 'log'),
+                os.path.join('.gigantum', 'activity', 'index'),
+                os.path.join('.gigantum', 'activity', 'importance'),
+            ]
 
-        # Create .gitignore default file
-        shutil.copyfile(os.path.join(resource_filename('lmcommon', 'labbook'), 'gitignore.default'),
-                        os.path.join(self.root_dir, ".gitignore"))
+            for d in dirs:
+                self.makedir(d, make_parents=True)
 
-        # Commit
-        # TODO: Once users are properly added, create a GitAuthor instance before commit
-        for s in ['code', 'input', 'output', '.gigantum']:
-            self.git.add_all(os.path.join(self.root_dir, s))
-        self.git.add(os.path.join(self.root_dir, ".gigantum", "labbook.yaml"))
-        self.git.add(os.path.join(self.root_dir, ".gigantum", "env", "Dockerfile"))
-        self.git.add(os.path.join(self.root_dir, ".gitignore"))
-        self.git.create_branch(name="gm.workspace")
-        self.git.commit(f"Creating new empty LabBook: {name}")
+            # Create labbook.yaml file
+            self._save_labbook_data()
 
-        user_workspace_branch = f"gm.workspace-{username}"
-        self.git.create_branch(user_workspace_branch)
-        self.checkout_branch(branch_name=user_workspace_branch)
+            # Save build info
+            try:
+                buildinfo = Configuration().config['build_info']
+            except KeyError:
+                logger.warning("Could not obtain build_info from config")
+                buildinfo = None
+            buildinfo = {
+                'creation_utc': datetime.datetime.utcnow().isoformat(),
+                'build_info': buildinfo
+            }
 
-        if self.active_branch != user_workspace_branch:
-            raise ValueError(f"active_branch should be '{user_workspace_branch}'")
+            buildinfo_path = os.path.join(self.root_dir, '.gigantum', 'buildinfo')
+            with open(buildinfo_path, 'w') as f:
+                json.dump(buildinfo, f)
+            self.git.add(buildinfo_path)
 
-        return self.root_dir
+            # Create .gitignore default file
+            shutil.copyfile(os.path.join(resource_filename('lmcommon', 'labbook'), 'gitignore.default'),
+                            os.path.join(self.root_dir, ".gitignore"))
+
+            # Commit
+            for s in ['code', 'input', 'output', '.gigantum']:
+                self.git.add_all(os.path.join(self.root_dir, s))
+            self.git.add(os.path.join(self.root_dir, ".gigantum", "labbook.yaml"))
+            self.git.add(os.path.join(self.root_dir, ".gitignore"))
+            self.git.create_branch(name="gm.workspace")
+            self.git.commit(f"Creating new empty LabBook: {name}")
+
+            user_workspace_branch = f"gm.workspace-{username}"
+            self.git.create_branch(user_workspace_branch)
+            self.checkout_branch(branch_name=user_workspace_branch)
+
+            if self.active_branch != user_workspace_branch:
+                raise ValueError(f"active_branch should be '{user_workspace_branch}'")
+
+            return self.root_dir
 
     def from_key(self, key: str) -> None:
         """Method to populate labbook from a unique key.
@@ -1666,6 +1511,11 @@ class LabBook(object):
         # Load LabBook data file
         self._load_labbook_data()
         self._validate_labbook_data()
+
+        # If an old labbook that still uses master branch
+        # Eventually, this clause will be removed.
+        if self.active_branch == 'master':
+            shims.to_workspace_branch(self)
 
     def from_name(self, username: str, owner: str, labbook_name: str):
         """Method to populate a LabBook instance based on the user and name of the labbook

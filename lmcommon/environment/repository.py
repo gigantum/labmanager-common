@@ -55,7 +55,7 @@ class ComponentRepository(object):
         """
         if component_class not in self.list_index_data:
             # Load data for the first time
-            with open(os.path.join(self.local_repo_directory, "{}_list_index.pickle".format(component_class)),
+            with open(os.path.join(self.local_repo_directory, f"{component_class}_list_index.pickle"),
                       'rb') as fh:
                 self.list_index_data[component_class] = pickle.load(fh)
 
@@ -65,7 +65,7 @@ class ComponentRepository(object):
         """Private method to get detail index data from either the file or memory
 
         Args:
-            component_class(str): Name of the component class (e.g. base_image)
+            component_class(str): Name of the component class (e.g. "base" or "custom")
 
         Returns:
             dict: the data stored in the index file
@@ -89,14 +89,12 @@ class ComponentRepository(object):
 
         return index_data
 
-    def get_component_versions(self, component_class: str, repository: str, namespace: str,
-                               component: str) -> List[str]:
+    def get_component_versions(self, component_class: str, repository: str, component: str) -> List[str]:
         """Method to get a detailed list of all available versions for a single component
 
         Args:
             component_class(str): class of the component (e.g. base_image, development_env, etc)
             repository(str): name of the component as provided via the list (<namespace>_<repo name>)
-            namespace(str): namespace within the component repo
             component(str): name of the component
 
         Returns:
@@ -108,24 +106,19 @@ class ComponentRepository(object):
         if repository not in index_data:
             raise ValueError("Repository `{}` not found.".format(repository))
 
-        if namespace not in index_data[repository]:
-            raise ValueError("Namespace `{}` not found in repository `{}`.".format(namespace, repository))
-
-        if component not in index_data[repository][namespace]:
+        if component not in index_data[repository]:
             raise ValueError("Component `{}` not found in repository `{}`.".format(component, repository))
 
-        return list(index_data[repository][namespace][component].items())
+        return list(index_data[repository][component].items())
 
-    def get_component(self, component_class: str, repository: str, namespace: str,
-                      component: str, version: str) -> Dict[str, Any]:
+    def get_component(self, component_class: str, repository: str, component: str, revision: int) -> Dict[str, Any]:
         """Method to get a detailed list of all available versions for a single component
 
         Args:
             component_class(str): class of the component (e.g. base_image, development_env, etc)
             repository(str): name of the component as provided via the list (<namespace>_<repo name>)
-            namespace(str): namespace within the component repo
             component(str): name of the component
-            version(str): the version string of the component
+            revision(str): the version string of the component
 
         Returns:
             dict
@@ -135,16 +128,10 @@ class ComponentRepository(object):
         if repository not in index_data:
             raise ValueError("Repository `{}` not found.".format(repository))
 
-        if namespace not in index_data[repository]:
-            raise ValueError("Namespace `{}` not found in repository `{}`.".format(namespace, repository))
-
-        if component not in index_data[repository][namespace]:
+        if component not in index_data[repository]:
             raise ValueError("Component `{}` not found in repository `{}`.".format(component, repository))
 
-        if version not in index_data[repository][namespace][component]:
-            raise ValueError("Version `{}` not found in repository `{}`.".format(version, repository))
+        if revision not in index_data[repository][component]:
+            raise ValueError("Version `{}` not found in repository `{}`.".format(revision, repository))
 
-        return index_data[repository][namespace][component][version]
-
-
-
+        return index_data[repository][component][revision]

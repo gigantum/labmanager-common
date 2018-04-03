@@ -24,6 +24,8 @@ import os
 import time
 from typing import Optional
 import zipfile
+import subprocess
+import shutil
 
 from rq import get_current_job
 from docker.errors import NotFound
@@ -31,7 +33,12 @@ from docker.errors import NotFound
 from lmcommon.activity.monitors.devenv import DevEnvMonitorManager
 from lmcommon.configuration import get_docker_client, Configuration
 from lmcommon.labbook import LabBook
+from lmcommon.labbook import shims as labbook_shims
 from lmcommon.logging import LMLogger
+from lmcommon.workflows import GitWorkflow, sync_locally
+from lmcommon.container.core import (build_docker_image as build_image,
+                                     start_labbook_container as start_container,
+                                     stop_labbook_container as stop_container)
 
 
 # PLEASE NOTE -- No global variables!
@@ -57,7 +64,7 @@ def export_labbook_as_zip(labbook_path: str, lb_export_directory: str) -> str:
 
         labbook: LabBook = LabBook()
         labbook.from_directory(labbook_path)
-        labbook.local_sync()
+        sync_locally(labbook)
 
         logger.info(f"(Job {p}) Exporting `{labbook.root_dir}` to `{lb_export_directory}`")
         if not os.path.exists(lb_export_directory):
@@ -82,7 +89,8 @@ def export_labbook_as_zip(labbook_path: str, lb_export_directory: str) -> str:
 
 
 def import_labboook_from_zip(archive_path: str, username: str, owner: str,
-                             config_file: Optional[str] = None, base_filename: Optional[str] = None) -> str:
+                             config_file: Optional[str] = None, base_filename: Optional[str] = None,
+                             remove_source: bool = True) -> str:
     """Method to import a labbook from a zip file
 
     Args:
@@ -91,6 +99,7 @@ def import_labboook_from_zip(archive_path: str, username: str, owner: str,
         owner(str): Owner username
         config_file(str): Optional path to a labmanager config file
         base_filename(str): The desired basename for the upload, without an upload ID prepended
+        remove_source(bool): Flag indicating if the source file should removed after import
 
     Returns:
         str: directory path of imported labbook
@@ -109,7 +118,7 @@ def import_labboook_from_zip(archive_path: str, username: str, owner: str,
 
         logger.info(f"(Job {p}) Using {config_file or 'default'} LabManager configuration.")
         lm_config = Configuration(config_file)
-        lm_working_dir: str = lm_config.config['git']['working_directory']
+        lm_working_dir: str = os.path.expanduser(lm_config.config['git']['working_directory'])
 
         # Infer the final labbook name
         inferred_labbook_name = os.path.basename(archive_path).split('_')[0]
@@ -128,34 +137,58 @@ def import_labboook_from_zip(archive_path: str, username: str, owner: str,
         if not os.path.isdir(new_lb_path):
             raise ValueError(f"(Job {p}) Expected LabBook not found at {new_lb_path}")
 
+        logger.info(f'(Job {p}) Extracted imported archive to {new_lb_path}')
         # Make the user also the new owner of the Labbook on import.
-        lb = LabBook()
+        lb = LabBook(config_file)
         lb.from_directory(new_lb_path)
-        d = lb.data
-        if d:
-            d['owner']['username'] = owner
-        lb._save_labbook_data()
+        logger.info(f'(Job {p}) Extracted archive resolves to new LabBook {str(lb)}')
+
+        r = subprocess.check_output("git config core.fileMode false", cwd=lb.root_dir, shell=True)
+
+        if not lb._data:
+            raise ValueError(f'Could not load data from imported LabBook {lb}')
+        lb._data['owner']['username'] = owner
 
         # Also, remove any lingering remotes. If it gets re-published, it will be to a new remote.
         if lb.has_remote:
             lb.git.remove_remote('origin')
         # This makes sure the working directory is set properly.
-        lb.local_sync(username=username)
+        sync_locally(lb, username=username)
+
+        if not lb.is_repo_clean:
+            raise ValueError(f'Imported LabBook {lb} should have clean repo after import')
+
+        lb._save_labbook_data()
+        if not lb.is_repo_clean:
+            lb.git.add('.gigantum/labbook.yaml')
+            lb.git.commit(message="Updated owner in labbook.yaml")
+
+        if lb._data['owner']['username'] != owner:
+            raise ValueError(f'Error importing LabBook {lb} - cannot set owner')
 
         logger.info(f"(Job {p}) LabBook {inferred_labbook_name} imported to {new_lb_path}")
+
+        if remove_source:
+            try:
+                logger.info(f'Deleting archive for {str(lb)} at `{archive_path}`')
+                os.remove(archive_path)
+            except FileNotFoundError as e:
+                logger.error(f'Could not delete archive for {str(lb)} at `{archive_path}`: {e}')
+
         return new_lb_path
     except Exception as e:
         logger.exception(f"(Job {p}) Error on import_labbook_from_zip({archive_path}): {e}")
         raise
 
 
-def build_docker_image(path, tag, pull, nocache) -> str:
-    """Return a dictionary of metadata pertaining to the given task's Redis key.
+def build_labbook_image(path: str, username: Optional[str] = None,
+                        tag: Optional[str] = None, nocache: bool = False) -> str:
+    """Return a docker image ID of given LabBook.
 
     Args:
-        path(str): Pass-through arg to directory containing Dockerfile.
-        tag(str): Pass-through arg to tag of docker image.
-        pull(bool): Pass-through arg for docker build.
+        path: Pass-through arg to labbook root.
+        username: Username of active user.
+        tag: Pass-through arg to tag of docker image.
         nocache(bool): Pass-through arg to docker build.
 
     Returns:
@@ -163,89 +196,50 @@ def build_docker_image(path, tag, pull, nocache) -> str:
     """
 
     logger = LMLogger.get_logger()
-    logger.info("Starting build_docker_image in pid {}".format(os.getpid()))
+    logger.info(f"Starting build_labbook_image({path}, {username}, {tag}, {nocache}) in pid {os.getpid()}")
 
     try:
-        docker_client = get_docker_client()
-        [logger.info(ln) for ln in docker_client.api.build(path=path,
-                                                           tag=tag,
-                                                           nocache=nocache,
-                                                           pull=pull,
-                                                           stream=True, decode=True)]
 
-        # Assume build worked and get the image
-        completed_image = docker_client.images.get(tag)
-
-        logger.info("Completed build_docker_image in pid {}: {}".format(os.getpid(), str(completed_image)))
-        logger.info("test: {}".format(completed_image.id))
-        return completed_image.id
+        image_id = build_image(path, override_image_tag=tag, nocache=nocache, username=username)
+        logger.info(f"Completed build_labbook_image in pid {os.getpid()}: {image_id}")
+        return image_id
     except Exception as e:
-        logger.error("Error on build_docker_image in pid {}: {}".format(os.getpid(), e))
+        logger.error(f"Error on build_labbook_image in pid {os.getpid()}: {e}")
         raise
 
 
-def start_docker_container(docker_image_id, ports, volumes, environment) -> str:
-    """Return a dictionary of metadata pertaining to the given task's Redis key.
+def start_labbook_container(root: str, config_path:str, username: Optional[str] = None,
+                            override_image_id: Optional[str] = None) -> str:
+    """Return the ID of the LabBook Docker container ID.
 
     Args:
-        docker_image_id(str): Name of docker image to launch into container
-        ports(dict): Dictionary mapping of exposed ports - pass through to docker container run
-        volumes(dict): Dictionary of mapped directories between guest and host -- pass through to docker run.
-        environment(list): List of environment variables - pass through to docker run
+        root: Root directory of labbook
+        config_path: Path to config file (labbook.labmanager_config.config_file)
+        username: Username of active user
+        override_image_id: Force using this name of docker image (do not infer)
 
     Returns:
-        Docker container desc
+        Docker container ID
     """
 
     logger = LMLogger.get_logger()
-    logger.info(
-        "Starting launch_docker_image(docker_image_id={}, ports={}, volumes={}) in pid {}".format(docker_image_id,
-                                                                                                  str(ports),
-                                                                                                  str(volumes),
-                                                                                                  os.getpid()))
+    logger.info(f"Starting start_labbook_container(root={root}, config_path={config_path}, username={username}, "
+                f"override_image_id={override_image_id}) in pid {os.getpid()}")
 
     try:
-        docker_client = get_docker_client()
-
-        try:
-            # Note: We might need to consider using force in c.remove(), but for now we decided against it
-            # because force will stop a running container. If the user has unsaved work this could be bad.
-            # Since the stop mutation stops and removes the container, under normal operation you
-            # shouldn't have to force a start.
-            c = docker_client.containers.get(docker_image_id)
-            c.remove()
-            logger.warning(
-                "Warning in pid {}: Removed existing container by name `{}`".format(os.getpid(), docker_image_id))
-        except NotFound:
-            logger.info("In pid {}: No existing image `{}` to force delete. This is nominal.".format(os.getpid(),
-                                                                                                     docker_image_id))
-
-        img = docker_client.images.get(docker_image_id)
-        if float(docker_client.version()['ApiVersion']) < 1.25:
-            container = docker_client.containers.run(img,
-                                                     detach=True,
-                                                     name=docker_image_id,
-                                                     ports=ports,
-                                                     volumes=volumes,
-                                                     environment=environment)
-        else:
-            docker_client.containers.prune()
-            container = docker_client.containers.run(img,
-                                                     detach=True,
-                                                     init=True,
-                                                     name=docker_image_id,
-                                                     ports=ports,
-                                                     volumes=volumes,
-                                                     environment=environment)
-        logger.info("Completed launch_docker_container in pid {}: {}".format(os.getpid(), str(container)))
-        return str(container)
+        c_id, pmap = start_container(labbook_root=root, config_path=config_path,
+                                    override_image_id=override_image_id, username=username)
+        logger.info(f"Completed start_labbook_container in pid {os.getpid()}: {c_id}, port mapping={str(pmap)}")
+        return c_id
     except Exception as e:
         logger.error("Error on launch_docker_container in pid {}: {}".format(os.getpid(), e))
         raise
 
 
-def stop_docker_container(image_tag):
+def stop_labbook_container(image_tag: str):
     """Return a dictionary of metadata pertaining to the given task's Redis key.
+
+    TODO - Take labbook as argument rather than image tag.
 
     Args:
         image_tag(str): Container to stop
@@ -255,21 +249,17 @@ def stop_docker_container(image_tag):
     """
 
     logger = LMLogger.get_logger()
-    logger.info("Starting stop_docker_container in pid {}".format(os.getpid()))
+    logger.info(f"Starting stop_labbook_container({image_tag}) in pid {os.getpid()}")
 
     try:
-        docker_client = get_docker_client()
-        container = docker_client.containers.get(image_tag)
-        container.stop()
-        container.remove()
-        logger.info("Completed stop_docker_container in pid {}: {}".format(os.getpid(), str(container)))
+        stop_container(image_tag)
         return 0
     except Exception as e:
-        logger.error("Error on stop_docker_container in pid {}: {}".format(os.getpid(), e))
+        logger.error("Error on stop_labbook_container in pid {}: {}".format(os.getpid(), e))
         raise
 
 
-def run_dev_env_monitor(dev_env_name, key):
+def run_dev_env_monitor(dev_env_name, key) -> int:
     """Run method to check if new Activity Monitors for a given dev env need to be started/stopped
 
         Args:
@@ -286,6 +276,8 @@ def run_dev_env_monitor(dev_env_name, key):
     try:
         demm = DevEnvMonitorManager()
         dev_env = demm.get_monitor_instance(dev_env_name)
+        if not dev_env:
+            raise ValueError('dev_env is None')
         dev_env.run(key)
         return 0
     except Exception as e:
@@ -293,7 +285,8 @@ def run_dev_env_monitor(dev_env_name, key):
         raise e
 
 
-def start_and_run_activity_monitor(module_name, class_name, user, owner, labbook_name, monitor_key, session_metadata):
+def start_and_run_activity_monitor(module_name, class_name, user, owner, labbook_name, monitor_key, author_name,
+                                   author_email, session_metadata):
     """Run method to run the activity monitor. It is a long running job.
 
         Args:
@@ -313,7 +306,8 @@ def start_and_run_activity_monitor(module_name, class_name, user, owner, labbook
         monitor_cls = getattr(m, class_name)
 
         # Instantiate monitor class
-        monitor = monitor_cls(user, owner, labbook_name, monitor_key)
+        monitor = monitor_cls(user, owner, labbook_name, monitor_key,
+                              author_name=author_name, author_email=author_email)
 
         # Start the monitor
         monitor.start(session_metadata)

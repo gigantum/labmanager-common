@@ -18,16 +18,20 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 from lmcommon.labbook import LabBook
+from typing import Optional
+import time
 import redis
 from docker.errors import NotFound
 
 from lmcommon.logging import LMLogger
 from lmcommon.configuration import get_docker_client
 from lmcommon.environment import ComponentManager
+from lmcommon.gitlib.git import GitAuthor
 from lmcommon.activity.monitors import DevEnvMonitorManager
 
 from lmcommon.dispatcher import Dispatcher, JobKey
 from lmcommon.dispatcher.jobs import run_dev_env_monitor
+from lmcommon.container.utils import infer_docker_image_name
 
 
 logger = LMLogger.get_logger()
@@ -46,13 +50,16 @@ logger = LMLogger.get_logger()
 #       process_id: <id for the background task>
 #        ... custom fields for the specific activity monitor class
 
-def start_labbook_monitor(labbook: LabBook, username: str, database: int = 1) -> None:
+def start_labbook_monitor(labbook: LabBook, username: str, dev_tool: str, database: int = 1,
+                          author: Optional[GitAuthor] = None) -> None:
     """Method to start Development Environment Monitors for a given Lab Book if available
 
     Args:
         labbook(LabBook): A populated LabBook instance to start monitoring
         username(str): The username of the logged in user
+        dev_tool(str): The name of the development tool to monitor
         database(int): The redis database ID to use for key storage. Default should be 1
+        author(GitAuthor): A GitAuthor instance for the current logged in user starting the monitor
 
     Returns:
         None
@@ -78,36 +85,36 @@ def start_labbook_monitor(labbook: LabBook, username: str, database: int = 1) ->
             logger.warn("Shutting down zombie Activity Monitoring for {}.".format(key.decode()))
             stop_dev_env_monitors(key.decode(), redis_conn, labbook.name)
 
-    # Check Lab Book for Development Environments
-    cm = ComponentManager(labbook)
-    dev_envs = cm.get_component_list('dev_env')
-
     # Check if Dev Env is supported and then start Dev Env Monitor
     dev_env_mgr = DevEnvMonitorManager(database=database)
-    for de in dev_envs:
-        try:
-            if dev_env_mgr.is_available(de['info']['name']):
-                # Add record to redis for Dev Env Monitor
-                dev_env_monitor_key = "dev_env_monitor:{}:{}:{}:{}".format(username,
-                                                                           labbook.owner['username'],
-                                                                           labbook.name,
-                                                                           de['info']['name'])
 
-                # Schedule dev env
-                d = Dispatcher()
-                kwargs = {'dev_env_name': de['info']['name'],
-                          'key': dev_env_monitor_key}
-                job_key = d.schedule_task(run_dev_env_monitor, kwargs=kwargs, repeat=None, interval=5)
+    if dev_env_mgr.is_available(dev_tool):
+        # Add record to redis for Dev Env Monitor
+        dev_env_monitor_key = "dev_env_monitor:{}:{}:{}:{}".format(username,
+                                                                   labbook.owner['username'],
+                                                                   labbook.name,
+                                                                   dev_tool)
 
-                redis_conn.hset(dev_env_monitor_key, "container_name", "{}-{}-{}".format(username,
-                                                                                         labbook.owner['username'],
-                                                                                         labbook.name))
-                redis_conn.hset(dev_env_monitor_key, "process_id", job_key.key_str)
-                redis_conn.hset(dev_env_monitor_key, "labbook_root", labbook.root_dir)
-                logger.info("Started `{}` dev env monitor for lab book `{}`".format(de['info']['name'], labbook.name))
+        # Schedule dev env
+        d = Dispatcher()
+        kwargs = {'dev_env_name': dev_tool,
+                  'key': dev_env_monitor_key}
+        job_key = d.schedule_task(run_dev_env_monitor, kwargs=kwargs, repeat=None, interval=3)
 
-        except Exception as e:
-            logger.error(e)
+        redis_conn.hset(dev_env_monitor_key, "container_name", infer_docker_image_name(labbook.name,
+                                                                                       labbook.owner['username'],
+                                                                                       username))
+        redis_conn.hset(dev_env_monitor_key, "process_id", job_key.key_str)
+        redis_conn.hset(dev_env_monitor_key, "labbook_root", labbook.root_dir)
+
+        # Set author information so activity records can be committed on behalf of the user
+        if author:
+            redis_conn.hset(dev_env_monitor_key, "author_name", author.name)
+            redis_conn.hset(dev_env_monitor_key, "author_email", author.email)
+
+        logger.info("Started `{}` dev env monitor for lab book `{}`".format(dev_tool, labbook.name))
+    else:
+        raise ValueError(f"{dev_tool} Developer Tool does not support monitoring")
 
 
 def stop_dev_env_monitors(dev_env_key: str, redis_conn: redis.Redis, labbook_name: str) -> None:
@@ -121,25 +128,33 @@ def stop_dev_env_monitors(dev_env_key: str, redis_conn: redis.Redis, labbook_nam
     Returns:
 
     """
+    # Unschedule dev env monitor
+    d = Dispatcher()
+    process_id = redis_conn.hget(dev_env_key, "process_id")
+    if process_id:
+        logger.info("Dev Tool process id to stop: `{}` ".format(process_id))
+        d.unschedule_task(JobKey(process_id.decode()))
+
+        _, dev_env_name = dev_env_key.rsplit(":", 1)
+        logger.info("Stopped dev tool monitor `{}` for lab book `{}`. PID {}".format(dev_env_name, labbook_name,
+                                                                                    process_id))
+        # Remove dev env monitor key
+        redis_conn.delete(dev_env_key)
+
+        # Make sure the monitor is unscheduled so it doesn't start activity monitors again
+        time.sleep(2)
+    else:
+        logger.info("Shutting down container with no Dev Tool monitoring processes to stop.")
+
     # Get all related activity monitor keys
-    activity_monitor_keys = redis_conn.keys("{}:activity_monitor".format(dev_env_key))
+    activity_monitor_keys = redis_conn.keys("{}:activity_monitor*".format(dev_env_key))
 
     # Signal all activity monitors to exit
     for am in activity_monitor_keys:
         # Set run flag in redis
-        redis_conn.hset(am, "run", False)
+        redis_conn.hset(am.decode(), "run", False)
 
         logger.info("Signaled activity monitor for lab book `{}` to stop".format(labbook_name))
-
-    # Unschedule dev env monitor
-    d = Dispatcher()
-    process_id = redis_conn.hget(dev_env_key, "process_id")
-    logger.info("Dev env process id to stop: `{}` ".format(process_id))
-    d.unschedule_task(JobKey(process_id.decode()))
-
-    _, dev_env_name = dev_env_key.rsplit(":", 1)
-    logger.info("Stopped dev env monitor `{}` for lab book `{}`. PID {}".format(dev_env_name, labbook_name,
-                                                                                process_id))
 
 
 def stop_labbook_monitor(labbook: LabBook, username: str, database: int = 1) -> None:
@@ -159,13 +174,12 @@ def stop_labbook_monitor(labbook: LabBook, username: str, database: int = 1) -> 
 
     # Get Dev envs in the lab book
     cm = ComponentManager(labbook)
-    dev_envs = cm.get_component_list('dev_env')
+    base_data = cm.base_fields
 
-    for de in dev_envs:
+    for dt in base_data['development_tools']:
         dev_env_monitor_key = "dev_env_monitor:{}:{}:{}:{}".format(username,
                                                                    labbook.owner['username'],
                                                                    labbook.name,
-                                                                   de['info']['name'])
+                                                                   dt)
 
         stop_dev_env_monitors(dev_env_monitor_key, redis_conn, labbook.name)
-

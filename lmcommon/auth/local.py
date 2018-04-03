@@ -21,7 +21,6 @@ from lmcommon.auth.identity import IdentityManager, User, AuthenticationError
 from lmcommon.configuration import Configuration
 import os
 import json
-from jose import jwt
 import requests
 
 from typing import Optional, Dict
@@ -52,64 +51,41 @@ class LocalIdentityManager(IdentityManager):
     def user(self, value: User) -> None:
         self._user = value
 
-    def _get_jwt_public_key(self, id_token: str) -> Optional[Dict[str, str]]:
-        """Method to get the public key for JWT signing
-
-        Args:
-            id_token(str): The JSON Web Token recieved from the identity provider
+    def is_authenticated(self, access_token: Optional[str] = None) -> bool:
+        """Method to check if the user is currently authenticated in the context of this identity manager
 
         Returns:
-            dict
+            bool
         """
-        url = "https://" + self.config.config['auth']['provider_domain'] + "/.well-known/jwks.json"
-        response = requests.get(url)
-        jwks = response.json()
-        unverified_header = jwt.get_unverified_header(id_token)
-
-        rsa_key: dict = {}
-        for key in jwks["keys"]:
-            if key["kid"] == unverified_header["kid"]:
-                rsa_key = {
-                    "kty": key["kty"],
-                    "kid": key["kid"],
-                    "use": key["use"],
-                    "n": key["n"],
-                    "e": key["e"]
-                }
-
-        return rsa_key
-
-    def _get_profile_attribute(self, profile_data: Dict[str, str], attribute: str,
-                               required: bool =True) -> Optional[str]:
-        """Method to get a profile attribute, and if required, raise exception if missing.
-
-        Args:
-            profile_data(dict): Dictionary of data returned from /userinfo query
-            attribute(str): Name of the attribute to get
-            required(bool): If True, will raise exception if param is missing or not set
-
-        Returns:
-            str
-        """
-        if attribute in profile_data.keys():
-            if profile_data[attribute]:
-                return profile_data[attribute]
-            else:
-                if required:
-                    raise AuthenticationError({"code": "missing_data",
-                                "description": f"The required field `{attribute}` was missing from the user profile"},
-                                        401)
-                else:
-                    return None
+        user = self._load_user()
+        if user:
+            return True
         else:
-            if required:
-                raise AuthenticationError({"code": "missing_data",
-                          "description": f"The required field `{attribute}` was missing from the user profile"}, 401)
-            else:
-                return None
+            is_valid = self.is_token_valid(access_token)
+            if is_valid:
+                # Load the user profile now so the user doesn't have to log in again later
+                self.get_user_profile(access_token)
 
-    def authenticate(self, access_token: Optional[str] = None) -> Optional[User]:
-        """Method to authenticate a user by verifying the jwt signiture OR loading from backend storage
+            return is_valid
+
+    def is_token_valid(self, access_token: Optional[str] = None) -> bool:
+        """Method to check if the user's Auth0 session is still valid
+
+        Returns:
+            bool
+        """
+        if not access_token:
+            return False
+        else:
+            try:
+                _ = self.validate_access_token(access_token)
+            except AuthenticationError:
+                return False
+
+            return True
+
+    def get_user_profile(self, access_token: Optional[str] = None) -> Optional[User]:
+        """Method to authenticate a user by verifying the jwt signature OR loading from backend storage
 
         Args:
             access_token(str): JSON web token from Auth0
@@ -122,58 +98,37 @@ class LocalIdentityManager(IdentityManager):
         if user:
             return user
         else:
-            # Validate JWT signiture
             if not access_token:
                 err_dict = {"code": "missing_token",
                             "description": "JWT must be provided to authenticate user if no local "
                                            "stored identity is available"}
                 raise AuthenticationError(err_dict, 401)
 
-            # Get public RSA key
-            rsa_key = self._get_jwt_public_key(access_token)
+            # Validate JWT token
+            _ = self.validate_access_token(access_token)
 
-            if rsa_key:
-                try:
-                    payload = jwt.decode(access_token, rsa_key,
-                                         algorithms=self.config.config['auth']['signing_algorithm'],
-                                         audience=self.config.config['auth']['audience'],
-                                         issuer="https://" + self.config.config['auth']['provider_domain'] + "/")
+            # Go get the user profile data
+            url = "https://" + self.config.config['auth']['provider_domain'] + "/userinfo"
+            response = requests.get(url, headers={'Authorization': f'Bearer {access_token}'})
+            if response.status_code != 200:
+                AuthenticationError({"code": "profile_unauthorized",
+                                     "description": "Failed to get user profile data"}, 401)
+            user_profile = response.json()
 
-                    # Go get the user profile data
-                    url = "https://" + self.config.config['auth']['provider_domain'] + "/userinfo"
-                    response = requests.get(url, headers={'Authorization': f'Bearer {access_token}'})
-                    if response.status_code != 200:
-                        AuthenticationError({"code": "profile_unauthorized",
-                                             "description": "Failed to get user profile data"}, 401)
-                    user_profile = response.json()
+            # Create user identity
+            self.user = User()
+            self.user.email = self._get_profile_attribute(user_profile, "email", required=True)
+            self.user.username = self._get_profile_attribute(user_profile, "nickname", required=True)
+            self.user.given_name = self._get_profile_attribute(user_profile, "given_name", required=False)
+            self.user.family_name = self._get_profile_attribute(user_profile, "family_name", required=False)
 
-                except jwt.ExpiredSignatureError:
-                    raise AuthenticationError({"code": "token_expired",
-                                               "description": "token is expired"}, 401)
-                except jwt.JWTClaimsError:
-                    raise AuthenticationError({"code": "invalid_claims",
-                                               "description":
-                                                   "incorrect claims,"
-                                                   "please check the audience and issuer"}, 401)
-                except Exception:
-                    raise AuthenticationError({"code": "invalid_header",
-                                               "description":
-                                                   "Unable to parse authentication"
-                                                   " token."}, 400)
+            # Save User to local storage
+            self._save_user()
 
-                # Create user identity
-                self.user = User()
-                self.user.email = self._get_profile_attribute(user_profile, "email", required=True)
-                self.user.username = self._get_profile_attribute(user_profile, "nickname", required=True)
-                self.user.given_name = self._get_profile_attribute(user_profile, "given_name", required=False)
-                self.user.family_name = self._get_profile_attribute(user_profile, "family_name", required=False)
+            # Check if it's the first time this user has logged into this instance
+            self._check_first_login(self.user.username, access_token)
 
-                # Save User to local storage
-                self._save_user()
-
-                return self.user
-
-            raise AuthenticationError({"code": "invalid_header", "description": "Unable to find appropriate key"}, 400)
+            return self.user
 
     def logout(self) -> None:
         """Method to logout a user if applicable
@@ -185,8 +140,9 @@ class LocalIdentityManager(IdentityManager):
         if os.path.exists(data_file):
             os.remove(data_file)
 
-        logger.info("Removed user identity from local storage.")
         self.user = None
+        self.rsa_key = None
+        logger.info("Removed user identity from local storage.")
 
     def _save_user(self) -> None:
         """Method to save a User props to disk
@@ -210,7 +166,8 @@ class LocalIdentityManager(IdentityManager):
         # If user data exists, remove it first
         data_file = os.path.join(self.auth_dir, 'user.json')
         if os.path.exists(data_file):
-            raise IOError("User identity data already exists. Must explicitly remove to store new identity.")
+            os.remove(data_file)
+            logger.warning(f"User identity data already exists. Overwriting with {data['username']}")
 
         with open(data_file, 'wt') as user_file:
             json.dump(data, user_file)

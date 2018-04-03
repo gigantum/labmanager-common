@@ -24,11 +24,15 @@ from lmcommon.logging import LMLogger
 
 logger = LMLogger.get_logger()
 
-SCHEMA_VERSIONS = {
+# The current LabBook schema version
+CURRENT_SCHEMA = 1
+
+LABBOOK_SCHEMA_VERSIONS = {
     # Note: Each time a new schema version is needed, add it into this dictionary
     # with its version number as its key.
-
-    '0.1': {
+    #
+    # These are all the supported schemas
+    1: {
         'labbook': {
             'id': str,
             'name': str,
@@ -37,28 +41,19 @@ SCHEMA_VERSIONS = {
         'owner': {
             'username': str
         },
-        'schema': str
-    },
-    '0.2': {
-        'labbook': {
-            'id': str,
-            'name': str,
-            'description': str
-        },
-        'owner': {
-            'username': str
-        },
-        'schema': str
+        'schema': int
     }
 }
 
+# TODO: Add validation methods and formalized schemas for Environment Component Definitions
 
-def validate_schema(schema_version: str, lb_data: Optional[Dict[str, Any]]) -> bool:
+
+def validate_labbook_schema(schema_version: int, lb_data: Optional[Dict[str, Any]]) -> bool:
     """ Validate a labbook's data against a known schema. Returns true if schema matches
     version appropriately.
 
     Args:
-        schema_version(str): Schema version to validate against
+        schema_version(int): Schema version to validate against
         lb_data(Dict): Labbook's data dict.
 
     Returns:
@@ -66,7 +61,7 @@ def validate_schema(schema_version: str, lb_data: Optional[Dict[str, Any]]) -> b
 
     """
 
-    if not schema_version or schema_version not in SCHEMA_VERSIONS.keys():
+    if not schema_version or schema_version not in LABBOOK_SCHEMA_VERSIONS.keys():
         logger.error(f"schema_version {schema_version} not found in schema versions")
         return False
 
@@ -74,7 +69,7 @@ def validate_schema(schema_version: str, lb_data: Optional[Dict[str, Any]]) -> b
         logger.error(f"lb_data is None or empty")
         return False
 
-    schema = Schema(SCHEMA_VERSIONS[schema_version])
+    schema = Schema(LABBOOK_SCHEMA_VERSIONS[schema_version])
     try:
         schema.validate(lb_data)
         return True

@@ -29,6 +29,39 @@ from lmcommon.logging import LMLogger
 logger = LMLogger.get_logger()
 
 
+def check_and_add_user(admin_service: str, access_token: str, username: str) -> None:
+    """Method to check if a user exists in GitLab and if not, create it
+
+    Args:
+        admin_service(str): URL of the GitLab Auth service
+        access_token(str): The logged in user's access token
+        username(str): The logged in user's username
+
+    Returns:
+        None
+    """
+    # Check for user
+    response = requests.get(f"https://{admin_service}/user",
+                            headers={"Authorization": f"Bearer {access_token}"})
+    if response.status_code == 200:
+        # User exists, do nothing
+        pass
+    elif response.status_code == 404:
+        assert response.json()['exists'] is False, "User not found in repository, but an error occurred"
+
+        # user does not exist, add!
+        response = requests.post(f"https://{admin_service}/user",
+                                 headers={"Authorization": f"Bearer {access_token}"})
+        if response.status_code != 201:
+            logger.error("Failed to create new user in GitLab")
+            logger.error(response.json())
+            raise ValueError("Failed to create new user in GitLab")
+
+        logger.info(f"Created new user `{username}` in remote git server")
+    else:
+        raise ValueError("Failed to check for user in repository")
+
+
 class GitLabRepositoryManager(object):
     """Class to manage administrative operations to a remote GitLab repository for a labbook"""
     def __init__(self, remote_host: str, admin_service: str, access_token: str,

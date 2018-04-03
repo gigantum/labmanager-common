@@ -22,7 +22,7 @@ import os
 
 from lmcommon.fixtures import mock_config_file_with_auth
 from lmcommon.configuration import Configuration
-from lmcommon.auth.identity import get_identity_manager
+from lmcommon.auth.identity import get_identity_manager, IdentityManager
 from lmcommon.auth.local import LocalIdentityManager
 from lmcommon.auth import User
 
@@ -75,3 +75,5 @@ class TestIdentity(object):
         assert mgr.config == config
         assert mgr.auth_dir == os.path.join(mock_config_file_with_auth[1], '.labmanager', 'identity')
         assert mgr.user is None
+        assert mgr.rsa_key is None
+        assert mgr._user is None

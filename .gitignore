@@ -103,3 +103,5 @@ ENV/
 \.idea/
 .DS_Store
 /lmcommon/auth/tests/auth_config.json
+/.pytest_cache/v/cache/lastfailed
+/.pytest_cache

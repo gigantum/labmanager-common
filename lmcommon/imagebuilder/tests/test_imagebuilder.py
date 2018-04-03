@@ -27,6 +27,7 @@ import uuid
 import shutil
 import yaml
 import pickle
+import pprint
 
 
 import docker
@@ -34,7 +35,8 @@ import git
 
 from lmcommon.imagebuilder import ImageBuilder
 from lmcommon.environment import ComponentManager, RepositoryManager
-from lmcommon.fixtures import labbook_dir_tree, mock_config_file
+from lmcommon.fixtures import labbook_dir_tree, mock_config_file, setup_index, mock_config_with_repo
+import lmcommon.fixtures
 from lmcommon.labbook import LabBook
 from lmcommon.configuration import get_docker_client
 
@@ -49,7 +51,7 @@ class TestImageBuilder(object):
         """Ensure the FROM line exists in the _load_baseimage function. """
         ib = ImageBuilder(labbook_dir_tree)
         docker_lines = ib._load_baseimage()
-        assert any(["FROM gigdev/ubuntu1604-python3:7a7c9d41-2017-08-03" in l for l in docker_lines])
+        assert any(["FROM gigdev/gm-quickstart" in l for l in docker_lines])
 
     def test_load_baseimage_only_from(self, labbook_dir_tree):
         """Ensure that _load_baseimage ONLY sets the FROM line, all others are comments or empty"""
@@ -60,9 +62,10 @@ class TestImageBuilder(object):
         package_manager_dir = os.path.join(labbook_dir_tree, '.gigantum', 'env', 'package_manager')
         with open(os.path.join(package_manager_dir, 'apt_docker.yaml'), 'w') as apt_dep:
             content = os.linesep.join([
-                'package_manager: apt-get',
-                'name: docker',
-                'version: 0.0 this is ignored'
+                'manager: apt',
+                'package: docker',
+                'version: 1.2.3',
+                'from_base: false'
             ])
             apt_dep.write(content)
 
@@ -70,72 +73,78 @@ class TestImageBuilder(object):
         pkg_lines = [l for l in ib._load_packages() if 'RUN' in l]
         assert 'RUN apt-get -y install docker' in pkg_lines
 
-    def test_package_pip3(self, labbook_dir_tree):
+    def test_package_pip(self, labbook_dir_tree):
         package_manager_dir = os.path.join(labbook_dir_tree, '.gigantum', 'env', 'package_manager')
         with open(os.path.join(package_manager_dir, 'pip3_docker.yaml'), 'w') as apt_dep:
             content = os.linesep.join([
-                'package_manager: pip3',
-                'name: docker',
-                'version: 0.0 this is ignored'
+                'manager: pip3',
+                'package: docker',
+                'version: "2.0.1"',
+                'from_base: false'
             ])
             apt_dep.write(content)
 
         ib = ImageBuilder(labbook_dir_tree)
         pkg_lines = [l for l in ib._load_packages() if 'RUN' in l]
-        assert 'RUN pip3 install docker' in pkg_lines
+        assert 'RUN pip install docker==2.0.1' in pkg_lines
 
-    def test_development_environment_loaded(self, labbook_dir_tree):
+        with open(os.path.join(package_manager_dir, 'pip3_docker.yaml'), 'w') as apt_dep:
+            content = os.linesep.join([
+                'manager: pip',
+                'package: docker',
+                'version: "2.0.1"',
+                'from_base: true'
+            ])
+            apt_dep.write(content)
+
         ib = ImageBuilder(labbook_dir_tree)
-        docker_lines = ib.assemble_dockerfile().split(os.linesep)
-
-        # Ensure only one ENTRYPOINT
-        assert len([l for l in docker_lines if 'ENTRYPOINT' in l and l[0] != '#']) == 1
-        # Ensure only one WORKDIR
-        assert len([l for l in docker_lines if 'WORKDIR' in l and l[0] != '#']) == 1
-        # Ensure only one CMD
-        assert len([l for l in docker_lines if 'CMD' in l and l[0] != '#']) == 1
+        pkg_lines = [l for l in ib._load_packages() if 'RUN' in l]
+        assert 'RUN pip install docker==2.0.1' not in pkg_lines
 
     def test_validate_dockerfile(self, labbook_dir_tree):
         """Test if the Dockerfile builds and can launch the image. """
         package_manager_dir = os.path.join(labbook_dir_tree, '.gigantum', 'env', 'package_manager')
         with open(os.path.join(package_manager_dir, 'pip3_docker.yaml'), 'w') as apt_dep:
             content = os.linesep.join([
-                'package_manager: pip3',
-                'name: docker',
-                'version: 0.0 this is ignored'
+                'manager: pip3',
+                'package: docker',
+                'version: 2.0.1',
+                'from_base: false'
             ])
             apt_dep.write(content)
 
         with open(os.path.join(package_manager_dir, 'apt_docker.yaml'), 'w') as apt_dep:
             content = os.linesep.join([
-                'package_manager: apt-get',
-                'name: docker',
-                'version: 0.0 this is ignored'
+                'manager: apt',
+                'package: docker',
+                'version: 1.2.3',
+                'from_base: false'
             ])
             apt_dep.write(content)
 
         with open(os.path.join(package_manager_dir, 'pip3_requests.yaml'), 'w') as apt_dep:
             content = os.linesep.join([
-                'package_manager: pip3',
-                'name: requests',
-                'version: 0.0 this is ignored'
+                'manager: pip3',
+                'package: requests',
+                'version: "2.18.4"',
+                'from_base: false'
             ])
             apt_dep.write(content)
 
         ib = ImageBuilder(labbook_dir_tree)
-        with open(os.path.join(labbook_dir_tree, ".gigantum", "env", "Dockerfile"),
-                  "w") as dockerfile:
-            dockerfile_text = ib.assemble_dockerfile()
-            print(dockerfile_text)
+        n = ib.assemble_dockerfile(write=False)
+        pprint.pprint(n)
+        with open(os.path.join(labbook_dir_tree, ".gigantum", "env", "Dockerfile"), "w") as dockerfile:
+            dockerfile_text = ib.assemble_dockerfile(write=False)
             dockerfile.write(dockerfile_text)
 
         test_lines = ['## Adding individual packages',
                       'RUN apt-get -y install docker',
-                      'RUN pip3 install docker',
-                      'RUN pip3 install requests']
+                      'RUN pip install docker==2.0.1',
+                      'RUN pip install requests==2.18.4']
 
         for line in test_lines:
-            assert line in dockerfile_text
+            assert line in dockerfile_text.split(os.linesep)
 
     def test_custom_package(self, labbook_dir_tree):
         package_manager_dir = os.path.join(labbook_dir_tree, '.gigantum', 'env', 'custom')
@@ -145,74 +154,3 @@ class TestImageBuilder(object):
 
         assert 'RUN apt-get -y install libjpeg-dev libtiff5-dev zlib1g-dev libfreetype6-dev liblcms2-dev libopenjpeg-dev' in pkg_lines
         assert 'RUN pip3 install Pillow==4.2.1' in pkg_lines
-
-    def test_build_docker_image(self, mock_config_file): # , labbook_dir_tree):
-        # Build the environment component repo
-        # Build the environment component repo
-        erm = RepositoryManager(mock_config_file[0])
-        erm.update_repositories()
-        erm.index_repositories()
-
-        # Create a labook
-        lb = LabBook(mock_config_file[0])
-
-        labbook_dir = lb.new(name="catbook-test-dockerbuild", description="Testing docker building.",
-                             owner={"username": "test"})
-
-        # Create Component Manager
-        cm = ComponentManager(lb)
-
-        # Add a component
-        cm.add_component("base_image", "gig-dev_environment-components", "gigantum", "ubuntu1604-python3", "0.4")
-        cm.add_component("dev_env", "gig-dev_environment-components", "gigantum", "jupyter-ubuntu", "0.1")
-
-        ib = ImageBuilder(lb.root_dir)
-        unit_test_tag = "unit-test-please-delete"
-        client = get_docker_client()
-
-        # NOTE: DO NOT run these following lines on CircleCI
-        if getpass.getuser() != 'circleci':
-            # Right now assume username is "default"
-            docker_image_id = ib.build_image(docker_client=client, image_tag=unit_test_tag,
-                                             nocache=True, username='default')['docker_image_id']
-            client.images.remove(docker_image_id, force=True, noprune=False)
-
-    @pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Cannot build images on CircleCI")
-    def test_rebuild_docker_image(self, mock_config_file):
-        # NOTE: DO NOT run test on CircleCI
-        # Build the environment component repo
-        erm = RepositoryManager(mock_config_file[0])
-        erm.update_repositories()
-        erm.index_repositories()
-
-        # Create a labook
-        lb = LabBook(mock_config_file[0])
-
-        labbook_dir = lb.new(name="catbook-test-dockerbuild", description="Testing docker building.",
-                             owner={"username": "test"})
-
-        # Create Component Manager
-        cm = ComponentManager(lb)
-
-        # Add a component
-        cm.add_component("base_image", "gig-dev_environment-components", "gigantum", "ubuntu1604-python3", "0.4")
-        cm.add_component("dev_env", "gig-dev_environment-components", "gigantum", "jupyter-ubuntu", "0.1")
-
-        ib = ImageBuilder(lb.root_dir)
-        unit_test_tag = "unit-test-please-delete"
-        client = get_docker_client()
-
-        # Build image once
-        # Right now assume username is "default"
-        ib.build_image(docker_client=client, image_tag=unit_test_tag, username='default')
-
-        # Start container
-        docker_container = client.containers.run(unit_test_tag, detach=True, name=unit_test_tag)
-
-        # Try to build it again
-        # Right now assume username is "default"
-        docker_image_id = ib.build_image(docker_client=client, image_tag=unit_test_tag,
-                                         username='default')['docker_image_id']
-
-        # Clean up
-        client.images.remove(docker_image_id, force=True, noprune=False)

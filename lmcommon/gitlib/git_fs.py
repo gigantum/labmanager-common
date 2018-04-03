@@ -631,12 +631,10 @@ class GitFilesystem(GitRepoInterface):
         options = []
         if delete_remote:
             options.append("-r")
-        if force:
-            options.append("-f")
 
-        if options:
+        if options or force:
             # Currently, using direct git interface to apply -dr option for remote branch deletion
-            options.insert(0, "-d")
+            options.insert(0, "-D" if force else "-d")
             options.append(name)
             self.repo.git.branch(*options)
         else:
