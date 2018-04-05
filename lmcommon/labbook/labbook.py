@@ -1674,3 +1674,67 @@ class LabBook(object):
             dict
         """
         return self.git.log_entry(commit)
+
+    def write_readme(self, contents: str) -> None:
+        """Method to write a string to the readme file within the LabBook. Must write ENTIRE document at once.
+
+        Args:
+            contents(str): entire readme document in markdown format
+
+        Returns:
+            None
+        """
+        # Validate readme data
+        if len(contents) > (1000000 * 5):
+            raise ValueError("Readme file is larger than the 5MB limit")
+
+        if type(contents) is not str:
+            raise TypeError("Invalid content. Must provide string")
+
+        readme_file = os.path.join(self.root_dir, 'README.md')
+        readme_exists = os.path.exists(readme_file)
+
+        # Write file to disk
+        with open(readme_file, 'wt') as rf:
+            rf.write(contents)
+
+        # Create commit
+        if readme_exists:
+            commit_msg = f"Updated LabBook README"
+        else:
+            commit_msg = f"Added README to LabBook"
+
+        self.git.add(readme_file)
+        commit = self.git.commit(commit_msg)
+
+        # Create detail record
+        adr = ActivityDetailRecord(ActivityDetailType.LABBOOK, show=False, importance=0)
+        adr.add_value('text/plain', commit_msg)
+
+        # Create activity record
+        ar = ActivityRecord(ActivityType.LABBOOK,
+                            message=commit_msg,
+                            show=False,
+                            importance=255,
+                            linked_commit=commit.hexsha,
+                            tags=['readme'])
+        ar.add_detail_object(adr)
+
+        # Store
+        ars = ActivityStore(self)
+        ars.create_activity_record(ar)
+
+    def get_readme(self) -> Optional[str]:
+        """Method to read the readme document
+
+        Returns:
+            (str): entire readme document in markdown format
+        """
+        readme_file = os.path.join(self.root_dir, 'README.md')
+        contents = None
+        if os.path.exists(readme_file):
+            with open(readme_file, 'rt') as rf:
+                contents = rf.read()
+        
+        return contents
+

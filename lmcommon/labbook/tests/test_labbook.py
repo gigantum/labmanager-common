@@ -524,3 +524,62 @@ class TestLabBook(object):
         assert log_data[0]['committer']['name'] == "Gigantum AutoCommit"
         assert log_data[0]['committer']['email'] == "noreply@gigantum.io"
 
+    def test_read_write_readme(self, mock_config_file):
+        """Test creating a reading and writing a readme file to the labbook"""
+        lb = LabBook(mock_config_file[0], author=GitAuthor(name="test", email="test@test.com"))
+
+        labbook_dir = lb.new(username="test", name="labbook1", description="my first labbook",
+                             owner={"username": "test"})
+
+        assert lb.get_readme() is None
+        assert os.path.exists(os.path.join(lb.root_dir, 'README.md')) is False
+
+        lb.write_readme("## Summary\nThis is my readme")
+
+        assert os.path.exists(os.path.join(lb.root_dir, 'README.md')) is True
+
+        assert lb.get_readme() == "## Summary\nThis is my readme"
+
+    def test_readme_size_limit(self, mock_config_file):
+        """Test creating a reading and writing a readme file to the labbook"""
+        lb = LabBook(mock_config_file[0], author=GitAuthor(name="test", email="test@test.com"))
+
+        labbook_dir = lb.new(username="test", name="labbook1", description="my first labbook",
+                             owner={"username": "test"})
+
+        assert lb.get_readme() is None
+        assert os.path.exists(os.path.join(lb.root_dir, 'README.md')) is False
+
+        with pytest.raises(ValueError):
+            lb.write_readme("A" * (6 * 1000000))
+
+        assert lb.get_readme() is None
+        assert os.path.exists(os.path.join(lb.root_dir, 'README.md')) is False
+
+    def test_readme_wierd_strings(self, mock_config_file):
+        """Test creating a reading and writing a readme file to the labbook with complex strings"""
+        lb = LabBook(mock_config_file[0], author=GitAuthor(name="test", email="test@test.com"))
+
+        labbook_dir = lb.new(username="test", name="labbook1", description="my first labbook",
+                             owner={"username": "test"})
+
+        assert lb.get_readme() is None
+        assert os.path.exists(os.path.join(lb.root_dir, 'README.md')) is False
+
+        rand_str = os.urandom(1000000)
+        with pytest.raises(TypeError):
+            lb.write_readme(rand_str)
+
+        assert lb.get_readme() is None
+        assert os.path.exists(os.path.join(lb.root_dir, 'README.md')) is False
+
+        with pytest.raises(TypeError):
+            lb.write_readme(None)
+
+        assert lb.get_readme() is None
+        assert os.path.exists(os.path.join(lb.root_dir, 'README.md')) is False
+
+        lb.write_readme("")
+
+        assert lb.get_readme() == ""
+        assert os.path.exists(os.path.join(lb.root_dir, 'README.md')) is True
