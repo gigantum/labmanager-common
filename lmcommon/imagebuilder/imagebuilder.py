@@ -212,28 +212,6 @@ class ImageBuilder(object):
             with lb.lock_labbook():
                 with open(dockerfile_name, "w") as dockerfile:
                     dockerfile.write(os.linesep.join(docker_lines))
-
-                # TODO: Remove sleep after GitPython is removed from stack
-                time.sleep(2)
-                short_message = "Re-Generated Dockerfile"
-                lb.git.add(dockerfile_name)
-                commit = lb.git.commit(short_message)
-
-                # Create detail record
-                adr = ActivityDetailRecord(ActivityDetailType.ENVIRONMENT, show=False)
-                adr.add_value('text/plain', short_message)
-
-                # Create activity record
-                ar = ActivityRecord(ActivityType.ENVIRONMENT,
-                                    message=short_message,
-                                    show=False,
-                                    linked_commit=commit.hexsha,
-                                    tags=['dockerfile'])
-                ar.add_detail_object(adr)
-
-                # Store
-                ars = ActivityStore(lb)
-                ars.create_activity_record(ar)
         else:
             logger.info("Dockerfile NOT being written; write=False; {}".format(dockerfile_name))
 

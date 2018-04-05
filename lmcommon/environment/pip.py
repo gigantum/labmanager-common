@@ -44,9 +44,10 @@ class PipPackageManager(PackageManager):
         Returns:
             list(str): The list of package names that match the search string
         """
-        search_result = subprocess.check_output([sys.executable, '-m', 'pip', 'search', search_str])
+        search_result = subprocess.run(['pip', 'search', search_str], check=True,
+                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
-        lines = search_result.decode().splitlines()
+        lines = search_result.stdout.decode().splitlines()
         return [x.split(' ')[0] for x in lines]
 
     def list_versions(self, package_name: str) -> List[str]:
@@ -121,8 +122,9 @@ class PipPackageManager(PackageManager):
         Returns:
             list
         """
-        packages = subprocess.check_output([sys.executable, '-m', 'pip', 'list', '--format=json'])
-        return json.loads(packages.decode())
+        packages = subprocess.run(['pip', 'list', '--format=json'], check=True,
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        return json.loads(packages.stdout.decode())
 
     def list_available_updates(self) -> List[Dict[str, str]]:
         """Method to get a list of all installed packages that could be updated and the new version string
@@ -136,8 +138,9 @@ class PipPackageManager(PackageManager):
         Returns:
             list
         """
-        packages = subprocess.check_output([sys.executable, '-m', 'pip', 'list', '--format=json', '-o'])
-        return json.loads(packages.decode())
+        packages = subprocess.run(['pip', 'list', '--format=json', '-o'], check=True,
+                                            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        return json.loads(packages.stdout.decode())
 
     def is_valid(self, package_name: str, package_version: Optional[str] = None) -> PackageValidation:
         """Method to validate package names and versions
