@@ -21,6 +21,7 @@
 import git
 import subprocess
 import datetime
+import time
 from typing import Optional
 
 from lmcommon.gitlib.gitlab import GitLabRepositoryManager
@@ -39,6 +40,34 @@ class MergeError(WorkflowsException):
 
 class GitLabRemoteError(WorkflowsException):
     pass
+
+
+def git_garbage_collect(labbook: LabBook) -> None:
+    """Run "git gc" (garbage collect) over the repo. If run frequently enough, this only takes a short time
+    even on large repos.
+
+    Note!! This method assumes the subject labbook has already been locked!
+
+    Args:
+        labbook: Subject LabBook
+
+    Returns:
+        None
+
+    Raises:
+        subprocess.CalledProcessError when git gc fails.
+        """
+    logger.info(f"Running git gc (Garbage Collect) in {str(labbook)}...")
+    start_time = time.time()
+    try:
+        r = subprocess.run(['git', 'gc'], stderr=subprocess.PIPE, stdout=subprocess.PIPE,
+                           check=True, cwd=labbook.root_dir)
+        finish_time = time.time()
+        logger.info(f"Finished git gc in {str(labbook)} after {finish_time - start_time}s")
+    except subprocess.CalledProcessError as x:
+        fail_time = time.time()
+        logger.error(f"Failed git gc after {fail_time - start_time}s with code {x.returncode}: {x.stderr}")
+        raise
 
 
 def push(labbook: LabBook, remote: str) -> None:
@@ -122,6 +151,8 @@ def publish_to_remote(labbook: LabBook, username: str, remote: str) -> None:
     if not 'gm.workspace' in labbook.get_branches()['local']:
         raise ValueError('Branch gm.workspace does not exist in local Labbook branches')
 
+
+    git_garbage_collect(labbook)
     labbook.git.fetch(remote=remote)
 
     # Make sure user's workspace is synced (in case they are working on it on other machines)
@@ -192,6 +223,8 @@ def sync_with_remote(labbook: LabBook, username: str, remote: str, force: bool) 
         with labbook.lock_labbook():
             labbook._sweep_uncommitted_changes()
 
+            git_garbage_collect(labbook)
+
             ## Checkout the workspace and retrieve any upstream updtes
             labbook.checkout_branch("gm.workspace")
             remote_updates_cnt = labbook.get_commits_behind_remote()[1]
@@ -251,6 +284,9 @@ def sync_locally(labbook: LabBook, username: Optional[str] = None) -> None:
     try:
         with labbook.lock_labbook():
             labbook._sweep_uncommitted_changes()
+
+            git_garbage_collect(labbook)
+
             if username and f"gm.workspace-{username}" not in labbook.get_branches()['local']:
                 labbook.checkout_branch("gm.workspace")
                 labbook.checkout_branch(f"gm.workspace-{username}", new=True)
