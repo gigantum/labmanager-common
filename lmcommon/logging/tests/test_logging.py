@@ -20,46 +20,55 @@
 
 import pytest
 import tempfile
+import json
 from unittest.mock import PropertyMock, patch
 from lmcommon.logging import LMLogger
 import logging
 import os
+
 
 @pytest.fixture(scope="module")
 def mock_config_file():
     with tempfile.NamedTemporaryFile(mode="wt", suffix=".log") as log_file:
         with tempfile.NamedTemporaryFile(mode="wt") as fp:
             # Write a temporary config file
-            fp.write("""{
-      "version": 1,
-      "loggers": {
-        "labmanager": {
-          "level": "INFO",
-          "handlers": ["fileHandler", "consoleHandler"],
-          "propagate": 0
-        }
-      },
-      "handlers": {
-        "consoleHandler": {
-          "class": "logging.StreamHandler",
-          "level": "CRITICAL",
-          "formatter": "labmanagerFormatter",
-          "stream":  "ext://sys.stdout"
-        },
-        "fileHandler": {
-          "class": "logging.handlers.RotatingFileHandler", 
-          "formatter": "labmanagerFormatter",
-          "filename": "<LOGFILE>",
-          "maxBytes": 2048,
-          "backupCount": 20
-        }
-      },
-      "formatters": {
-        "labmanagerFormatter": {
-          "format": "%(asctime)s %(levelname)-10s %(filename)s in %(funcName)s (line %(lineno)d): %(message)s"
-        }
-      }
-    }""".replace("<LOGFILE>", log_file.name))
+            fp.write("""
+            
+{
+  "version": 1,
+  "loggers": {
+    "labmanager": {
+      "level": "INFO",
+      "handlers": ["fileHandler", "consoleHandler"],
+      "propagate": 0
+    }
+  },
+  "handlers": {
+    "consoleHandler": {
+      "class": "logging.StreamHandler",
+      "level": "DEBUG",
+      "formatter": "json",
+      "stream":  "ext://sys.stdout"
+    },
+    "fileHandler": {
+      "class": "logging.handlers.RotatingFileHandler",
+      "formatter": "json",
+      "filename": "<LOGFILE>",
+      "maxBytes": 8000000,
+      "backupCount": 20
+    }
+  },
+  "formatters": {
+    "labmanagerFormatter": {
+      "format": "%(asctime)s %(levelname)-10s %(filename)s in %(funcName)s (line %(lineno)d): %(message)s"
+    },
+    "json": {
+      "()": "lmcommon.JsonFormatter"
+    }
+  }
+}
+
+""".replace("<LOGFILE>", log_file.name))
             fp.seek(0)
 
             yield fp.name  # provide the fixture value
@@ -115,14 +124,16 @@ class TestLogging(object):
         logger.error("##ER_ROR##")
 
         with open(lmlog.log_file, 'rt') as test_file:
-            data = test_file.readlines()
+            data = [json.loads(s) for s in test_file.readlines()]
 
-            assert "##IN_FO##" in data[0]
-            assert "INFO" in data[0]
-            assert "##WA_RN##" in data[1]
-            assert "WARNING" in data[1]
-            assert "##ER_ROR##" in data[2]
-            assert "ERROR" in data[2]
+            assert all([d['filename'] == 'test_logging.py' for d in data])
+
+            assert "##IN_FO##" in data[0]['message']
+            assert "INFO" == data[0]['levelname']
+            assert "##WA_RN##" in data[1]['message']
+            assert "WARNING" == data[1]['levelname']
+            assert "##ER_ROR##" in data[2]['message']
+            assert "ERROR" == data[2]['levelname']
 
     def test_load_logger_by_name(self, mock_config_file):
         """Test loading the logger by name rather than by LMLogger.logger. """
@@ -135,6 +146,9 @@ class TestLogging(object):
 
         with open(lmlog.log_file, 'rt') as test_file:
             data = test_file.readlines()
+            for d in data:
+                # Make sure it's JSON parseable
+                assert json.loads(d)
 
             assert any(['test_load_logger_by_name' in d for d in data])
 
@@ -155,8 +169,11 @@ class TestLogging(object):
 
         with open(lmlog.log_file, 'rt') as test_file:
             data = test_file.readlines()
-
-            assert any(['Traceback (most recent call last)' in d for d in data])
+            for d in data:
+                # Make sure it's JSON parseable
+                assert json.loads(d)
+            # Note sometimes 'exec_info' returns None so we have to do (... or "") to make it an iterable.
+            assert any(['Traceback (most recent call last)' in (d.get('exc_info') or "") for d in [json.loads(x) for x in data if x]])
 
     def test_log_exception_using_error_to_log(self, mock_config_file):
         """Test that the logging of exceptions appear as expected. """
@@ -174,4 +191,10 @@ class TestLogging(object):
         with open(lmlog.log_file, 'rt') as test_file:
             data = test_file.readlines()
 
-            assert any(['AssertionError' in d for d in data])
+            found = False
+            for d in data:
+                # Make sure it's JSON parseable
+                n = json.loads(d)
+                assert n, "Loaded JSON entry must not be None"
+
+            assert any(['AssertionError' in (d['exc_info'] or "") for d in [json.loads(x) for x in data if x]])
