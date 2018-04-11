@@ -32,6 +32,7 @@ from contextlib import contextmanager
 from pkg_resources import resource_filename
 import gitdb
 from collections import OrderedDict
+from natsort import natsorted
 
 from lmcommon.configuration import Configuration, get_docker_client
 from lmcommon.gitlib import get_git_interface, GitAuthor, GitRepoInterface
@@ -1608,47 +1609,75 @@ class LabBook(object):
         # Once the git repo is cloned, the problem just becomes a regular import from file system.
         self.from_directory(est_root_dir)
 
-    def list_local_labbooks(self, username: str = None) -> Optional[Dict[Optional[str], List[Dict[str, str]]]]:
+    def list_local_labbooks(self, username: str,
+                            sort_mode: str = "az",
+                            reverse: bool = False) -> List[Dict[str, str]]:
         """Method to list available LabBooks
 
         Args:
             username(str): Username to filter the query on
+            sort_mode(sort_mode): String specifying how labbooks should be sorted
+            reverse(bool): Reverse sorting if True
+
+        Supported sorting modes:
+            - az: naturally sort
+            - created_on: sort by creation date, newest first
+            - modified_on: sort by modification date, newest first
 
         Returns:
-            dict: A dictionary containing labbooks grouped by local username
+            dict: A list of labbooks for a given user
         """
         # Make sure you expand a user string
         working_dir = os.path.expanduser(self.labmanager_config.config["git"]["working_directory"])
 
-        if not username:
-            # Return all available labbooks
-            files_collected = glob.glob(os.path.join(working_dir,
-                                                     "*",
-                                                     "*",
-                                                     "labbooks",
-                                                     "*"))
-        else:
-            # Return only labbooks for the provided user
-            files_collected = glob.glob(os.path.join(working_dir,
-                                                     username,
-                                                     "*",
-                                                     "labbooks",
-                                                     "*"))
+        # Return only labbooks for the provided user
+        files_collected = glob.glob(os.path.join(working_dir,
+                                                 username,
+                                                 "*",
+                                                 "labbooks",
+                                                 "*"))
+
         # Sort to give deterministic response
         files_collected = sorted(files_collected)
 
         # Generate dictionary to return
-        result: Optional[Dict[Optional[str], List[Dict[str, str]]]] = None
+        result: List[Dict[str, str]] = list()
         for dir_path in files_collected:
             if os.path.isdir(dir_path):
                 _, username, owner, _, labbook = dir_path.rsplit(os.path.sep, 4)
-                if result:
-                    if username not in result:
-                        result[username] = [{"owner": owner, "name": labbook}]
-                    else:
-                        result[username].append({"owner": owner, "name": labbook})
+
+                lb_item = {"owner": owner, "name": labbook}
+
+                if sort_mode == 'az':
+                    lb_item['sort_val'] = labbook
+                elif sort_mode == 'created_on':
+                    # get create data from yaml file
+                    lb = LabBook()
+                    lb.from_directory(dir_path)
+                    lb_item['sort_val'] = lb.creation_date
+
+                elif sort_mode == 'modified_on':
+                    # lookup date of last commit
+                    lb = LabBook()
+                    lb.from_directory(dir_path)
+                    lb_item['sort_val'] = lb.git.log(max_count=1)[0]['committed_on']
+
                 else:
-                    result = {username: [{"owner": owner, "name": labbook}]}
+                    raise ValueError(f"Unsupported sort_mode: {sort_mode}")
+
+                result.append(lb_item)
+
+        # Apply sort
+        if sort_mode in ['created_on', 'modified_on']:
+            # Sort on datetime objects, flipping the reverse state to match default sort behavior
+            result = sorted(result, key=lambda x: x['sort_val'], reverse=not reverse)
+        else:
+            # Use natural sort for labbook names
+            result = natsorted(result, key=lambda x: x['sort_val'], reverse=reverse)
+
+        # Remove sort_val from dictionary before returning
+        for item in result:
+            del item['sort_val']
 
         return result
 

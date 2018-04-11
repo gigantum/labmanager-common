@@ -21,7 +21,7 @@ import pytest
 import getpass
 import os
 import yaml
-import pprint
+import time
 
 from lmcommon.labbook import LabBook, LabbookException
 from lmcommon.gitlib.git import GitAuthor
@@ -210,53 +210,178 @@ class TestLabBook(object):
         with pytest.raises(ValueError):
             lb.rename('labbook1')
 
-    def test_list_labbooks(self, mock_config_file):
-        """Test listing labbooks for all users"""
+    def test_list_labbooks_az(self, mock_config_file):
+        """Test list az labbooks"""
         lb1, lb2, lb3, lb4 = LabBook(mock_config_file[0]), LabBook(mock_config_file[0]),\
                              LabBook(mock_config_file[0]), LabBook(mock_config_file[0])
 
-        labbook_dir1 = lb1.new(owner={"username": "user1"}, name="labbook1", description="my first labbook")
-        labbook_dir2 = lb2.new(owner={"username": "user1"}, name="labbook2", description="my second labbook")
-        labbook_dir3 = lb3.new(owner={"username": "user2"}, name="labbook3", description="my other labbook")
-        labbook_dir4 = lb4.new(owner={"username": "user2"}, username="user1", name="labbook4",
-                              description="another users labbook")
-
-        assert labbook_dir1 == os.path.join(mock_config_file[1], "user1", "user1", "labbooks", "labbook1")
-        assert labbook_dir2 == os.path.join(mock_config_file[1], "user1", "user1", "labbooks", "labbook2")
-        assert labbook_dir3 == os.path.join(mock_config_file[1], "user2", "user2", "labbooks", "labbook3")
-        assert labbook_dir4 == os.path.join(mock_config_file[1], "user1", "user2", "labbooks", "labbook4")
-
-        labbooks = lb1.list_local_labbooks()
-
-        assert len(labbooks) == 2
-        assert "user1" in labbooks
-        assert "user2" in labbooks
-        assert len(labbooks["user1"]) == 3
-        assert len(labbooks["user2"]) == 1
-        assert labbooks["user1"][0] == {"name": "labbook1", "owner": "user1"}
-        assert labbooks["user1"][1] == {"name": "labbook2", "owner": "user1"}
-        assert labbooks["user1"][2] == {"name": "labbook4", "owner": "user2"}
-        assert labbooks["user2"][0] == {"name": "labbook3", "owner": "user2"}
-
-    def test_list_labbooks_for_user(self, mock_config_file):
-        """Test list only a single user's labbooks"""
-        lb1, lb2, lb3 = LabBook(mock_config_file[0]), LabBook(mock_config_file[0]), LabBook(mock_config_file[0])
-
-        labbook_dir1 = lb1.new(owner={"username": "user1"}, name="labbook1", description="my first labbook")
-        labbook_dir2 = lb2.new(owner={"username": "user1"}, name="labbook2", description="my second labbook")
-        labbook_dir3 = lb3.new(owner={"username": "user2"}, name="labbook3", description="my other labbook")
-
-        assert labbook_dir1 == os.path.join(mock_config_file[1], "user1", "user1", "labbooks", "labbook1")
-        assert labbook_dir2 == os.path.join(mock_config_file[1], "user1", "user1", "labbooks", "labbook2")
-        assert labbook_dir3 == os.path.join(mock_config_file[1], "user2", "user2", "labbooks", "labbook3")
+        labbook_dir1 = lb1.new(username="user1", owner={"username": "user1"},
+                               name="labbook0", description="my first labbook")
+        labbook_dir2 = lb2.new(username="user1", owner={"username": "user1"},
+                               name="labbook12", description="my second labbook")
+        labbook_dir3 = lb3.new(username="user1", owner={"username": "user2"},
+                               name="labbook3", description="my other labbook")
+        labbook_dir4 = lb4.new(username="user2", owner={"username": "user1"},
+                               name="labbook4", description="my other labbook")
 
         labbooks = lb1.list_local_labbooks(username="user1")
 
-        assert len(labbooks) == 1
-        assert "user1" in labbooks
-        assert len(labbooks["user1"]) == 2
-        assert labbooks["user1"][0] == {"name": "labbook1", "owner": "user1"}
-        assert labbooks["user1"][1] == {"name": "labbook2", "owner": "user1"}
+        assert len(labbooks) == 3
+        assert labbooks[0]['name'] == 'labbook0'
+        assert labbooks[1]['name'] == 'labbook3'
+        assert labbooks[2]['name'] == 'labbook12'
+
+    def test_list_labbooks_az_reversed(self, mock_config_file):
+        """Test list az labbooks, reversed"""
+        lb1, lb2, lb3, lb4 = LabBook(mock_config_file[0]), LabBook(mock_config_file[0]),\
+                             LabBook(mock_config_file[0]), LabBook(mock_config_file[0])
+
+        labbook_dir1 = lb1.new(username="user1", owner={"username": "user1"},
+                               name="labbook1", description="my first labbook")
+        labbook_dir2 = lb2.new(username="user1", owner={"username": "user1"},
+                               name="labbook2", description="my second labbook")
+        labbook_dir3 = lb3.new(username="user1", owner={"username": "user2"},
+                               name="labbook3", description="my other labbook")
+
+        labbook_dir4 = lb4.new(username="user2", owner={"username": "user1"},
+                               name="labbook4", description="my other labbook")
+
+        assert labbook_dir1 == os.path.join(mock_config_file[1], "user1", "user1", "labbooks", "labbook1")
+        assert labbook_dir2 == os.path.join(mock_config_file[1], "user1", "user1", "labbooks", "labbook2")
+        assert labbook_dir3 == os.path.join(mock_config_file[1], "user1", "user2", "labbooks", "labbook3")
+        assert labbook_dir4 == os.path.join(mock_config_file[1], "user2", "user1", "labbooks", "labbook4")
+
+        with pytest.raises(ValueError):
+            lb1.list_local_labbooks(username="user1", sort_mode='asdf')
+
+        labbooks = lb1.list_local_labbooks(username="user1", reverse=True, sort_mode='az')
+
+        assert len(labbooks) == 3
+        assert labbooks[0]['name'] == 'labbook3'
+        assert labbooks[1]['name'] == 'labbook2'
+        assert labbooks[2]['name'] == 'labbook1'
+
+    def test_list_labbooks_create_date(self, mock_config_file):
+        """Test list create dated sorted labbooks"""
+        lb1, lb2, lb3 = LabBook(mock_config_file[0]), LabBook(mock_config_file[0]), LabBook(mock_config_file[0])
+
+        lb1.new(username="user1", owner={"username": "user1"},
+                name="labbook3", description="my first labbook")
+        lb2.new(username="user1", owner={"username": "user1"},
+                name="asdf", description="my second labbook")
+        lb3.new(username="user1", owner={"username": "user2"},
+                name="labbook1", description="my other labbook")
+
+        labbooks = lb1.list_local_labbooks(username="user1", sort_mode="created_on")
+
+        assert len(labbooks) == 3
+        assert labbooks[0]['name'] == 'labbook1'
+        assert labbooks[1]['name'] == 'asdf'
+        assert labbooks[2]['name'] == 'labbook3'
+
+    def test_list_labbooks_create_date_reversed(self, mock_config_file):
+        """Test list create dated sorted labbooks reversed"""
+        lb1, lb2, lb3, lb4 = LabBook(mock_config_file[0]), LabBook(mock_config_file[0]),\
+                             LabBook(mock_config_file[0]), LabBook(mock_config_file[0])
+
+        lb1.new(username="user1", owner={"username": "user1"},
+                name="labbook3", description="my first labbook")
+        lb2.new(username="user1", owner={"username": "user1"},
+                name="asdf", description="my second labbook")
+        lb3.new(username="user1", owner={"username": "user2"},
+                name="labbook1", description="my other labbook")
+        lb4.new(username="user1", owner={"username": "user1"},
+                name="labbook4", description="my other labbook")
+
+        labbooks = lb1.list_local_labbooks(username="user1", sort_mode="created_on", reverse=True)
+
+        assert len(labbooks) == 4
+        assert labbooks[0]['name'] == 'labbook3'
+        assert labbooks[1]['name'] == 'asdf'
+        assert labbooks[2]['name'] == 'labbook1'
+        assert labbooks[3]['name'] == 'labbook4'
+
+    def test_list_labbooks_modified_date(self, mock_config_file):
+        """Test list modified dated sorted labbooks"""
+        lb1, lb2, lb3, lb4 = LabBook(mock_config_file[0]), LabBook(mock_config_file[0]),\
+                             LabBook(mock_config_file[0]), LabBook(mock_config_file[0])
+
+        lb1.new(username="user1", owner={"username": "user1"},
+                name="labbook3", description="my first labbook")
+        time.sleep(2)
+        lb2.new(username="user1", owner={"username": "user1"},
+                name="asdf", description="my second labbook")
+        time.sleep(2)
+        lb3.new(username="user1", owner={"username": "user2"},
+                name="labbook1", description="my other labbook")
+        time.sleep(2)
+        lb4.new(username="user1", owner={"username": "user1"},
+                name="hhghg", description="my other labbook")
+        
+        labbooks = lb1.list_local_labbooks(username="user1", sort_mode="modified_on")
+
+        assert len(labbooks) == 4
+        assert labbooks[0]['name'] == 'hhghg'
+        assert labbooks[1]['name'] == 'labbook1'
+        assert labbooks[2]['name'] == 'asdf'
+        assert labbooks[3]['name'] == 'labbook3'
+
+        # modify a repo
+        time.sleep(2)
+        with open(os.path.join(lb2.root_dir, "code", "test.txt"), 'wt') as tf:
+            tf.write("asdfasdf")
+
+        lb2.git.add_all()
+        lb2.git.commit("Changing the repo")
+
+        labbooks = lb1.list_local_labbooks(username="user1", sort_mode="modified_on")
+
+        assert len(labbooks) == 4
+        assert labbooks[0]['name'] == 'asdf'
+        assert labbooks[1]['name'] == 'hhghg'
+        assert labbooks[2]['name'] == 'labbook1'
+        assert labbooks[3]['name'] == 'labbook3'
+
+    def test_list_labbooks_modified_date_reversed(self, mock_config_file):
+        """Test list modified dated sorted labbooks"""
+        lb1, lb2, lb3, lb4 = LabBook(mock_config_file[0]), LabBook(mock_config_file[0]),\
+                             LabBook(mock_config_file[0]), LabBook(mock_config_file[0])
+
+        lb1.new(username="user1", owner={"username": "user1"},
+                name="labbook3", description="my first labbook")
+        time.sleep(2)
+        lb2.new(username="user1", owner={"username": "user1"},
+                name="asdf", description="my second labbook")
+        time.sleep(2)
+        lb3.new(username="user1", owner={"username": "user2"},
+                name="labbook1", description="my other labbook")
+        time.sleep(2)
+        lb4.new(username="user1", owner={"username": "user1"},
+                name="hhghg", description="my other labbook")
+
+        labbooks = lb1.list_local_labbooks(username="user1", sort_mode="modified_on", reverse=True)
+
+        assert len(labbooks) == 4
+        assert labbooks[3]['name'] == 'hhghg'
+        assert labbooks[2]['name'] == 'labbook1'
+        assert labbooks[1]['name'] == 'asdf'
+        assert labbooks[0]['name'] == 'labbook3'
+
+        # modify a repo
+        time.sleep(2)
+        with open(os.path.join(lb2.root_dir, "code", "test.txt"), 'wt') as tf:
+            tf.write("asdfasdf")
+
+        lb2.git.add_all()
+        lb2.git.commit("Changing the repo")
+
+        labbooks = lb1.list_local_labbooks(username="user1", sort_mode="modified_on", reverse=True)
+
+        assert len(labbooks) == 4
+        assert labbooks[3]['name'] == 'asdf'
+        assert labbooks[2]['name'] == 'hhghg'
+        assert labbooks[1]['name'] == 'labbook1'
+        assert labbooks[0]['name'] == 'labbook3'
 
     def test_load_from_directory(self, mock_config_file):
         """Test loading a labbook from a directory"""
