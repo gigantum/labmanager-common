@@ -76,7 +76,7 @@ def _create_temp_work_dir(override_dict: dict = None, lfs_enabled: bool = True):
         },
         'git': {
             'working_directory': unit_test_working_dir,
-            'backend': 'filesystem',
+            'backend': 'filesystem-shim',
             'lfs_enabled': lfs_enabled
         },
         'auth': {
@@ -122,13 +122,18 @@ def _MOCK_create_remote_repo2(labbook, username: str, access_token = None) -> No
     assert r.bare is True
     labbook.add_remote(remote_name="origin", url=working_dir)
 
+
 @pytest.fixture()
 def sample_src_file():
-    with tempfile.NamedTemporaryFile(mode="w") as sample_f:
+    with tempfile.NamedTemporaryFile(mode="w", delete=False) as sample_f:
         # Fill sample file with some deterministic crap
         sample_f.write("n4%nm4%M435A EF87kn*C" * 40)
         sample_f.seek(0)
-        yield sample_f.name
+    yield sample_f.name
+    try:
+        os.remove(sample_f.name)
+    except:
+        pass
 
 
 @pytest.fixture()
@@ -355,17 +360,22 @@ def remote_labbook_repo():
     labbook_dir = lb.new(username="test", name="sample-repo-lb", description="my first labbook",
                              owner={"username": "test"})
     lb.checkout_branch("testing-branch", new=True)
-    with tempfile.TemporaryDirectory() as tmpdirname:
-        with open(os.path.join(tmpdirname, 'codefile.c'), 'wb') as codef:
-            codef.write(b'// Cody McCodeface ...')
+    #with tempfile.TemporaryDirectory() as tmpdirname:
+    with open(os.path.join('/tmp', 'codefile.c'), 'wb') as codef:
+        codef.write(b'// Cody McCodeface ...')
 
-        lb.insert_file("code", codef.name, "")
+    lb.insert_file("code", "/tmp/codefile.c", "")
 
+    assert lb.is_repo_clean
     lb.checkout_branch("gm.workspace")
 
     # Location of the repo to push/pull from
     yield lb.root_dir
     shutil.rmtree(working_dir)
+    try:
+        os.remove('/tmp/codefile.c')
+    except:
+        pass
 
 
 @pytest.fixture()

@@ -224,7 +224,7 @@ class GitFilesystem(GitRepoInterface):
             None
         """
         logger.info("Adding file {} to Git repository in {}".format(filename, self.working_directory))
-        self.repo.index.add([filename])
+        x = self.repo.index.add([filename])
 
     def add_all(self, relative_directory=None):
         """Add all changes/files using the `git add -A` command

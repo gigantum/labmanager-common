@@ -1,4 +1,8 @@
 .DS_Store
+**/.DS_Store
+/**/.DS_Store
+
+
 # Ignore the checkout context file, because it should always get recreated when a repo moves or is checked out
 .gigantum/.checkout
 .gigantum/activity/log/.detaildb

@@ -32,6 +32,8 @@ from contextlib import contextmanager
 from pkg_resources import resource_filename
 import gitdb
 from collections import OrderedDict
+
+from git.exc import GitCommandError
 from natsort import natsorted
 
 from lmcommon.configuration import Configuration, get_docker_client
@@ -721,9 +723,10 @@ class LabBook(object):
                 raise ValueError(f"Target dir `{os.path.join(self.root_dir, dst_dir.replace('..', ''))}` does not exist")
 
             # Copy file to destination
-            rel_path = dst_path.replace(os.path.join(self.root_dir, section), '')
-            logger.info(f"Inserting new file for {str(self)} from `{src_file}` to `{dst_path}")
+            rel_path = os.path.relpath(dst_path, self.root_dir) #dst_path.replace(os.path.join(self.root_dir, section), '')
+            logger.info(f"Inserting new file for {str(self)} from `{src_file}` to `{rel_path}` ({dst_path})")
             shutil.copyfile(src_file, dst_path)
+            assert os.path.exists(dst_path)
 
             if not shims.in_untracked(self.root_dir, section):
                 # If we are setting this section to be untracked
@@ -731,8 +734,21 @@ class LabBook(object):
 
                 # Create commit
                 commit_msg = f"Added new {section_str} file {rel_path}"
-                self.git.add(dst_path)
-                commit = self.git.commit(commit_msg)
+                try:
+                    self.git.add(rel_path)
+                    commit = self.git.commit(commit_msg)
+                except GitCommandError as e:
+                    logger.error(f"Cannot add {rel_path} to git repo!")
+                    os.remove(dst_path)
+                    raise e
+                except subprocess.CalledProcessError as c:
+                    logger.error(c)
+                    os.remove(dst_path)
+                    raise LabbookException(f'File `{dst_filename}` matches ignored pattern and cannot be added')
+                except Exception as x:
+                    logger.error(f"({type(x)}) Cannot add {rel_path} to git repo!")
+                    os.remove(dst_path)
+                    raise x
 
                 # Create Activity record and detail
                 _, ext = os.path.splitext(rel_path) or 'file'
@@ -754,7 +770,7 @@ class LabBook(object):
                 ars = ActivityStore(self)
                 ars.create_activity_record(ar)
 
-            return self.get_file_info(section, rel_path)
+            return self.get_file_info(section, rel_path.replace(f"{section}/", '', 1))
 
     @_validate_git
     def delete_file(self, section: str, relative_path: str, directory: bool = False) -> bool:
