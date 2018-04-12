@@ -676,8 +676,7 @@ class LabBook(object):
         """
 
         try:
-            logger.debug(f"Getting branches for {str(self)}")
-            self.git.fetch()
+            # Note - do NOT fetch here - fetch should be done before this is called.
             return self.git.list_branches()
         except Exception as e:
             # Unsure what specific exception add_remote creates, so make a catchall.
