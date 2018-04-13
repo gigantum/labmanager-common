@@ -1669,7 +1669,15 @@ class LabBook(object):
                     # get create data from yaml file
                     lb = LabBook()
                     lb.from_directory(dir_path)
-                    lb_item['sort_val'] = lb.creation_date
+                    create_date = lb.creation_date
+
+                    # SHIM - Can be removed on major release
+                    if not create_date:
+                        # This is an old labbook with no creation data metadata
+                        first_commit = lb.git.repo.git.rev_list('HEAD', max_parents=0)
+                        create_date = lb.git.log_entry(first_commit)['committed_on'].replace(tzinfo=None)
+
+                    lb_item['sort_val'] = create_date
 
                 elif sort_mode == 'modified_on':
                     # lookup date of last commit

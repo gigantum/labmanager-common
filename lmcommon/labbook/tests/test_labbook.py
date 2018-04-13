@@ -279,6 +279,37 @@ class TestLabBook(object):
         assert labbooks[1]['name'] == 'asdf'
         assert labbooks[2]['name'] == 'labbook3'
 
+    def test_list_labbooks_create_date_no_metadata(self, mock_config_file):
+        """Test list create dated sorted labbooks"""
+        lb1, lb2, lb3 = LabBook(mock_config_file[0]), LabBook(mock_config_file[0]), LabBook(mock_config_file[0])
+
+        lb1.new(username="user1", owner={"username": "user1"},
+                name="labbook3", description="my first labbook")
+        time.sleep(1.1)
+        lb2.new(username="user1", owner={"username": "user1"},
+                name="asdf", description="my second labbook")
+        time.sleep(1.1)
+        lb3.new(username="user1", owner={"username": "user2"},
+                name="labbook1", description="my other labbook")
+        time.sleep(1.1)
+
+        labbooks = lb1.list_local_labbooks(username="user1", sort_mode="created_on")
+
+        assert len(labbooks) == 3
+        assert labbooks[0]['name'] == 'labbook1'
+        assert labbooks[1]['name'] == 'asdf'
+        assert labbooks[2]['name'] == 'labbook3'
+
+        os.remove(os.path.join(lb1.root_dir, '.gigantum', 'buildinfo'))
+        os.remove(os.path.join(lb3.root_dir, '.gigantum', 'buildinfo'))
+
+        labbooks = lb1.list_local_labbooks(username="user1", sort_mode="created_on")
+
+        assert len(labbooks) == 3
+        assert labbooks[0]['name'] == 'labbook1'
+        assert labbooks[1]['name'] == 'asdf'
+        assert labbooks[2]['name'] == 'labbook3'
+
     def test_list_labbooks_create_date_reversed(self, mock_config_file):
         """Test list create dated sorted labbooks reversed"""
         lb1, lb2, lb3, lb4 = LabBook(mock_config_file[0]), LabBook(mock_config_file[0]),\
