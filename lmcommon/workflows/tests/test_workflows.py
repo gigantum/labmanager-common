@@ -56,20 +56,24 @@ class TestLabbookShareProtocol(object):
         assert lb.active_branch == "gm.workspace-test"
         b = lb.get_branches()
         assert len(b['local']) == 2
-        assert len(b['remote']) == 2
+        #assert len(b['remote']) == 2
 
-        # Make sure the branches are manifested in the remote repository.
         assert any(['gm.workspace' in str(x) for x in b['remote']])
-        assert any(['gm.workspace-test' in str(x) for x in b['remote']])
+
+        # Local branch should not be manifested in remote (FOR NOW)
+        assert not any(['gm.workspace-test' in str(x) for x in b['remote']])
 
         ## 2 - Now make more updates and do it again
         lb.delete_file(section="code", relative_path="testy-tacked-dir", directory=True)
+        assert not os.path.exists(os.path.join(lb.root_dir, 'code', 'testy-tacked-dir'))
         lb.makedir(relative_path='input/new-input-dir', create_activity_record=True)
         assert lb.active_branch == "gm.workspace-test"
         wf.sync('test')
         assert lb.active_branch == "gm.workspace-test"
+
         lb.checkout_branch('gm.workspace')
         assert os.path.exists(os.path.join(lb.root_dir, 'input', 'new-input-dir'))
+        assert not os.path.exists(os.path.join(lb.root_dir, 'code', 'testy-tacked-dir'))
 
     @mock.patch('lmcommon.workflows.core.create_remote_gitlab_repo', new=_MOCK_create_remote_repo)
     def test_simple_single_user_two_instances(self, pause_wait_for_redis, remote_bare_repo, mock_labbook_lfs_disabled,
@@ -81,8 +85,10 @@ class TestLabbookShareProtocol(object):
         workplace_lb.makedir(relative_path='code/testy-tracked-dir', create_activity_record=True)
         wf = GitWorkflow(workplace_lb)
         wf.publish('test')
-        workplace_lb.makedir(relative_path='code/second-silly-dir', create_activity_record=True)
+
+        workplace_lb.makedir(relative_path='code/dir-created-after-publish', create_activity_record=True)
         wf.sync('test')
+        assert os.path.exists(os.path.join(workplace_lb.root_dir, 'code', 'dir-created-after-publish'))
 
         repo_location = workplace_lb.remote
 
@@ -91,6 +97,7 @@ class TestLabbookShareProtocol(object):
         home_lb.from_remote(repo_location, username="test", owner="test", labbook_name="labbook1")
         assert home_lb.active_branch == "gm.workspace-test"
         assert os.path.exists(os.path.join(home_lb.root_dir, 'code', 'testy-tracked-dir'))
+        assert os.path.exists(os.path.join(home_lb.root_dir, 'code', 'dir-created-after-publish'))
 
         home_lb.makedir(relative_path='output/sample-output-dir', create_activity_record=True)
         home_lb.makedir(relative_path='input/stuff-for-inputs', create_activity_record=True)
@@ -182,9 +189,11 @@ class TestLabbookShareProtocol(object):
         with pytest.raises(MergeError):
             # There's a conflict - cannot merge
             wf_test_user.sync(username='test')
+        assert test_user_lb.is_repo_clean
 
-        # Now we force overwrite local changes
+        # Now after we have a conflict and the merge is aborted. Let's try it again with force=True
         wf_test_user.sync(username='test', force=True)
+        assert test_user_lb.is_repo_clean
 
         # Now check no untracked changes
         status = test_user_lb.git.status()
@@ -197,3 +206,28 @@ class TestLabbookShareProtocol(object):
 
         # Make sure the test user's file was overwritten with most recent from upstream
         assert 'zzzzz' in lines
+
+    @mock.patch('lmcommon.workflows.core.create_remote_gitlab_repo', new=_MOCK_create_remote_repo)
+    def test_two_users_have_one_remove_a_file(self, pause_wait_for_redis, remote_bare_repo, mock_labbook_lfs_disabled,
+                                         mock_config_file):
+        ## 1 - Make initial set of contributions to Labbook.
+        test_user_lb = mock_labbook_lfs_disabled[2]
+        test_user_lb.makedir(relative_path='code/testy-tracked-dir', create_activity_record=True)
+        test_wf = GitWorkflow(test_user_lb)
+        test_wf.publish('test')
+
+        remote_repo = test_user_lb.remote
+
+        bob_user_lb = LabBook(mock_labbook_lfs_disabled[0])
+        bob_user_lb.from_remote(remote_repo, username="bob", owner="test", labbook_name="labbook1")
+        bob_wf = GitWorkflow(bob_user_lb)
+        assert bob_user_lb.active_branch == "gm.workspace-bob"
+        bob_user_lb.delete_file(section='code', relative_path='testy-tracked-dir', directory=True)
+        assert not os.path.exists(os.path.join(bob_user_lb.root_dir, 'code', 'testy-tracked-dir'))
+        bob_user_lb.makedir(relative_path='input/stuff-for-inputs-yyy', create_activity_record=True)
+        bob_wf.sync('bob')
+
+        test_wf.sync('test')
+        assert os.path.exists(os.path.join(test_user_lb.root_dir, 'input/stuff-for-inputs-yyy'))
+        assert not os.path.exists(os.path.join(test_user_lb.root_dir, 'code', 'testy-tracked-dir'))
+        assert test_user_lb.active_branch == "gm.workspace-test"

@@ -798,26 +798,20 @@ class LabBook(object):
             else:
                 target_type = 'file' if os.path.isfile(target_path) else 'directory'
                 logger.info(f"Removing {target_type} at `{target_path}`")
-                if os.path.isdir(target_path):
-                    if directory:
-                        shutil.rmtree(target_path)
-                    else:
-                        errmsg = f"Cannot recursively remove directory unless `directory` arg is True"
-                        logger.error(errmsg)
-                        raise ValueError(errmsg)
-                elif os.path.isfile(target_path):
-                    os.remove(target_path)
-                else:
-                    errmsg = f"File at {target_path} neither file nor directory"
-                    logger.error(errmsg)
-                    raise ValueError(errmsg)
 
                 if shims.in_untracked(self.root_dir, section=section):
+                    logger.info(f"Removing untracked target {target_path}")
+                    if os.path.isdir(target_path):
+                        shutil.rmtree(target_path)
+                    else:
+                        os.remove(target_path)
                     return True
 
                 commit_msg = f"Removed {target_type} {relative_path}."
-                self.git.remove(target_path)
+                self.git.remove(target_path, force=True, keep_file=False)
+                assert not os.path.exists(target_path)
                 commit = self.git.commit(commit_msg)
+
                 if os.path.isfile(target_path):
                     _, ext = os.path.splitext(target_path)
                 else:
@@ -843,7 +837,11 @@ class LabBook(object):
                 ars = ActivityStore(self)
                 ars.create_activity_record(ar)
 
-                return True
+                if not os.path.exists(target_path):
+                    return True
+                else:
+                    logger.error(f"{target_path} should have been deleted, but remains.")
+                    return False
 
     @_validate_git
     def move_file(self, section: str, src_rel_path: str, dst_rel_path: str) -> Dict[str, Any]:

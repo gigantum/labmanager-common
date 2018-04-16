@@ -120,10 +120,7 @@ class TestLabbookFileOperations(object):
         base_name = os.path.basename(sample_src_file)
 
         assert os.path.exists(os.path.join(lb.root_dir, 'output', 'testdir', base_name))
-
-        with pytest.raises(ValueError):
-            lb.delete_file("output", "testdir", directory=False)
-
+        # Note! Now that remove() uses force=True, no special action is needed for directories.
         # Delete the directory
         lb.delete_file("output", "testdir", directory=True)
         assert not os.path.exists(os.path.join(lb.root_dir, 'output', 'testdir', base_name))

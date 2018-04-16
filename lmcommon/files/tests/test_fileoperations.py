@@ -106,7 +106,7 @@ class TestFileOps(object):
         assert hash_2 == hash_3
         assert FileOperations.is_set_untracked(labbook=lb, section='input') is True
 
-    def test_with_the_whole_suite_of_file_operations(self, mock_labbook):
+    def test_with_the_whole_suite_of_file_operations_on_an_UNTRACKED_labbook(self, mock_labbook):
         x, y, lb = mock_labbook
 
         hash_0 = lb.git.commit_hash
@@ -116,13 +116,18 @@ class TestFileOps(object):
 
         with open('/tmp/unittestfile', 'w') as f:
             f.write('àbčdęfghįjkłmñöpqrštūvwxÿż0123456789')
+        assert not os.path.exists(os.path.join(lb.root_dir, 'input', 'unittestfile'))
         r = lb.insert_file(section="input", src_file=f.name, dst_dir='')
+        assert os.path.exists(os.path.join(lb.root_dir, 'input', 'unittestfile'))
         hash_2 = lb.git.commit_hash
 
         deleted = lb.delete_file(section='input', relative_path='unittestfile')
         hash_3 = lb.git.commit_hash
         assert deleted is True
-        assert not os.path.exists(os.path.join(lb.root_dir, 'input', 'unittestfile'))
+        target_path = os.path.join(lb.root_dir, 'input', 'unittestfile')
+        assert not os.path.exists(target_path)
+        assert lb.is_repo_clean
+        # Hash_2 == hash_3 because we delete a file in an UNTRACKED section
         assert hash_2 == hash_3
 
         lb.makedir('input/sample-untracked-dir/nested-dir')
