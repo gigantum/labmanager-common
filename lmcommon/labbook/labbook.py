@@ -1434,6 +1434,10 @@ class LabBook(object):
             self.git.add(os.path.join(self.root_dir, ".gigantum", "labbook.yaml"))
             self.git.add(os.path.join(self.root_dir, ".gitignore"))
             self.git.create_branch(name="gm.workspace")
+
+            # NOTE: this string is used to indicate there are no more activity records to get. Changing the string will
+            # break activity paging.
+            # TODO: Improve method for detecting the first activity record
             self.git.commit(f"Creating new empty LabBook: {name}")
 
             user_workspace_branch = f"gm.workspace-{username}"

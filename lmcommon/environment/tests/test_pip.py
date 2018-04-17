@@ -26,7 +26,7 @@ class TestPipPackageManager(object):
     def test_search(self):
         """Test search command"""
         mrg = PipPackageManager()
-        result = mrg.search("gigant")
+        result = mrg.search("peppercorn")
         assert len(result) == 2
 
         result = mrg.search("gigantum")

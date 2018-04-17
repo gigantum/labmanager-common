@@ -144,8 +144,7 @@ class CondaPackageManagerBase(PackageManager):
         if result:
             # Parse json
             data = json.loads(result)
-
-            for p in data.get('actions')[0].get('LINK'):
+            for p in data.get('actions').get('LINK'):
                 if p.get('name') == package_name:
                     return p.get("version")
 
@@ -174,7 +173,7 @@ class CondaPackageManagerBase(PackageManager):
             data = json.loads(result)
 
             versions = dict()
-            for p in data.get('actions')[0].get('LINK'):
+            for p in data.get('actions').get('LINK'):
                 versions[p.get('name')] = p.get("version")
 
             output_versions = [versions[p] for p in package_names]
