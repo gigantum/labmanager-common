@@ -35,7 +35,8 @@ import git
 
 from lmcommon.imagebuilder import ImageBuilder
 from lmcommon.environment import ComponentManager, RepositoryManager
-from lmcommon.fixtures import labbook_dir_tree, mock_config_file, setup_index, mock_config_with_repo
+from lmcommon.fixtures import labbook_dir_tree, mock_config_file, setup_index, mock_config_with_repo, mock_labbook, \
+    ENV_UNIT_TEST_BASE, ENV_UNIT_TEST_REPO, ENV_UNIT_TEST_REV
 import lmcommon.fixtures
 from lmcommon.labbook import LabBook
 from lmcommon.configuration import get_docker_client
@@ -154,3 +155,20 @@ class TestImageBuilder(object):
 
         assert 'RUN apt-get -y install libjpeg-dev libtiff5-dev zlib1g-dev libfreetype6-dev liblcms2-dev libopenjpeg-dev' in pkg_lines
         assert 'RUN pip3 install Pillow==4.2.1' in pkg_lines
+
+    def test_docker_snippet(self, mock_labbook):
+        lb = mock_labbook[2]
+        package_manager_dir = os.path.join(lb.root_dir, '.gigantum', 'env', 'custom')
+        erm = RepositoryManager(mock_labbook[0])
+        erm.update_repositories()
+        erm.index_repositories()
+        cm = ComponentManager(lb)
+        custom = ['RUN true', 'RUN touch /tmp/cat', 'RUN rm /tmp/cat']
+        cm.add_component("base", ENV_UNIT_TEST_REPO, ENV_UNIT_TEST_BASE, ENV_UNIT_TEST_REV)
+        cm.add_package("pip", "requests", "2.18.4")
+        cm.add_docker_snippet('test-docker', custom, description="Apostrophe's and wėįrd çhårāčtêrś")
+        ib = ImageBuilder(lb.root_dir)
+        l = ib.assemble_dockerfile()
+        assert all([any([i in l for i in custom]) for n in custom])
+
+        pprint.pprint(l)

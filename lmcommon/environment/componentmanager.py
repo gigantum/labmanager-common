@@ -63,6 +63,8 @@ class ComponentManager(object):
     """Class to manage the Environment Components of a given LabBook
     """
 
+    DEFAULT_CUSTOM_DOCKER_NAME = 'user-custom-docker'
+
     def __init__(self, labbook: LabBook) -> None:
         """Constructor
 
@@ -90,7 +92,8 @@ class ComponentManager(object):
         # Create/validate directory structure
         subdirs = ['base',
                    'package_manager',
-                   'custom']
+                   'custom',
+                   'docker']
 
         for subdir in subdirs:
             if not os.path.exists(os.path.join(self.env_dir, subdir)):
@@ -126,6 +129,88 @@ exec gosu giguser "$@"
             short_message = "Adding missing entrypoint.sh, required for container automation"
             self.labbook.git.add(entrypoint_file)
             self.labbook.git.commit(short_message)
+
+    def add_docker_snippet(self, name: str, docker_content: List[str], description: Optional[str] = None) -> None:
+        """ Add a custom docker snippet to the environment (replacing custom dependency).
+
+        Args:
+            name: Name or identifier of the custom docker snippet
+            docker_content: Content of the docker material (May make this a list of strings instead)
+            description: Human-readable verbose description of what the snippet is intended to accomplish.
+
+        Returns:
+            None
+        """
+
+        if not name:
+            raise ValueError('Argument `name` cannot be None or empty')
+
+        if not name.replace('-', '').replace('_', '').isalnum():
+            raise ValueError('Argument `name` must be alphanumeric string (- and _ accepted)')
+
+        if not docker_content:
+            raise ValueError('Argument `content` cannot be None or empty')
+
+        file_data = {
+            'name': name,
+            'timestamp_utc': datetime.datetime.utcnow().isoformat(),
+            'description': description or "",
+            'content': docker_content
+        }
+
+        with self.labbook.lock_labbook():
+            docker_dir = os.path.join(self.labbook.root_dir, '.gigantum', 'env', 'docker')
+            docker_file = os.path.join(docker_dir, f'{name}.yaml')
+            os.makedirs(docker_dir, exist_ok=True)
+            yaml_dump = yaml.dump(file_data, default_flow_style=False)
+            with open(docker_file, 'w') as df:
+                df.write(yaml_dump)
+
+            logger.info(f"Wrote custom Docker snippet `{name}` to {str(self.labbook)}")
+            short_message = f"Wrote custom Docker snippet `{name}`"
+            self.labbook.git.add(docker_file)
+            commit = self.labbook.git.commit(short_message)
+            adr = ActivityDetailRecord(ActivityDetailType.ENVIRONMENT, show=True)
+            adr.add_value('text/plain', '\n'.join(docker_content))
+            ar = ActivityRecord(ActivityType.ENVIRONMENT,
+                                message=short_message,
+                                show=True,
+                                linked_commit=commit.hexsha,
+                                tags=["environment", "docker", "snippet"])
+            ar.add_detail_object(adr)
+            ars = ActivityStore(self.labbook)
+            ars.create_activity_record(ar)
+
+    def remove_docker_snippet(self, name: str) -> None:
+        """Remove a custom docker snippet
+
+        Args:
+            name: Name or identifer of snippet to remove
+
+        Returns:
+            None
+        """
+        docker_dir = os.path.join(self.labbook.root_dir, '.gigantum', 'env', 'docker')
+        docker_file = os.path.join(docker_dir, f'{name}.yaml')
+
+        if not os.path.exists(docker_file):
+            raise ValueError(f'Docker snippet name `{name}` does not exist')
+
+        with self.labbook.lock_labbook():
+            self.labbook.git.remove(docker_file, keep_file=False)
+            short_message = f"Removed custom Docker snippet `{name}`"
+            logger.info(short_message)
+            commit = self.labbook.git.commit(short_message)
+            adr = ActivityDetailRecord(ActivityDetailType.ENVIRONMENT, show=False)
+            adr.add_value('text/plain', short_message)
+            ar = ActivityRecord(ActivityType.ENVIRONMENT,
+                                message=short_message,
+                                show=False,
+                                linked_commit=commit.hexsha,
+                                tags=["environment", "docker", "snippet"])
+            ar.add_detail_object(adr)
+            ars = ActivityStore(self.labbook)
+            ars.create_activity_record(ar)
 
     def add_package(self, package_manager: str, package_name: str,
                     package_version: Optional[str] = None, force: bool = False,

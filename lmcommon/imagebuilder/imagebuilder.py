@@ -126,7 +126,6 @@ class ImageBuilder(object):
 
     def _load_packages(self) -> List[str]:
         """Load packages from yaml files in expected location in directory tree. """
-        """ Contents of docker setup that must be at end of Dockerfile. """
         root_dir = os.path.join(self.labbook_directory, '.gigantum', 'env', 'package_manager')
         package_files = [os.path.join(root_dir, n) for n in os.listdir(root_dir) if 'yaml' in n]
         docker_lines = ['## Adding individual packages']
@@ -149,6 +148,20 @@ class ImageBuilder(object):
                 docker_lines.extend(
                     get_package_manager(pkg_fields['manager']).generate_docker_install_snippet([pkg_info]))
 
+        return docker_lines
+
+    def _load_docker_snippets(self) -> List[str]:
+        docker_lines = ['# Custom docker snippets']
+        root_dir = os.path.join(self.labbook_directory, '.gigantum', 'env', 'docker')
+        if not os.path.exists(root_dir):
+            logger.warning(f"No `docker` subdirectory for environment in labbook")
+            return []
+
+        for snippet_file in [f for f in os.listdir(root_dir) if '.yaml' in f]:
+            docker_data = yaml.load(open(os.path.join(root_dir, snippet_file)))
+            docker_lines.append(f'# Custom Docker: {docker_data["name"]} - {len(docker_data["content"])}'
+                                f'line(s) - (Created {docker_data["timestamp_utc"]})')
+            docker_lines.extend(docker_data['content'])
         return docker_lines
 
     def _post_image_hook(self) -> List[str]:
@@ -188,6 +201,7 @@ class ImageBuilder(object):
         assembly_pipeline = [self._load_baseimage,
                              self._post_image_hook,
                              self._load_custom,
+                             self._load_docker_snippets,
                              self._load_packages,
                              self._entrypoint_hooks]
 
