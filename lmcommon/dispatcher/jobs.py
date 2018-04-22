@@ -339,6 +339,10 @@ def test_sleep(n):
     logger.info("Starting test_sleep({}) in pid {}".format(n, os.getpid()))
 
     try:
+        job = get_current_job()
+        job.meta['sample'] = 'test_sleep metadata'
+        job.save_meta()
+
         time.sleep(n)
         logger.info("Completed test_sleep in pid {}".format(os.getpid()))
         return 0

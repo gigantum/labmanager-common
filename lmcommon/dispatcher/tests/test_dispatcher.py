@@ -103,14 +103,16 @@ class TestDispatcher(object):
         job_ref = d.dispatch_task(bg_jobs.test_exit_success)
         time.sleep(1)
 
-        res = d.query_task(job_ref)
-        assert res
-        assert res.status == 'finished'
-        assert res.result == 0
-        assert res.failure_message is None
+        try:
+            res = d.query_task(job_ref)
 
-
-        w.terminate()
+            assert res
+            assert res.status == 'finished'
+            assert res.result == 0
+            assert res.failure_message is None
+            assert res.finished_at is not None
+        finally:
+            w.terminate()
 
     def test_failing_task(self, temporary_worker):
         w, d = temporary_worker
@@ -155,6 +157,8 @@ class TestDispatcher(object):
         time.sleep(3)
         assert d.query_task(job_ref_1).status == 'finished'
         assert d.query_task(job_ref_2).status == 'finished'
+        n = d.query_task(job_ref_1)
+        assert n.meta.get('sample') == 'test_sleep metadata'
 
     def test_fail_dependent_job(self, temporary_worker):
         w, d = temporary_worker

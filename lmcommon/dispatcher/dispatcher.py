@@ -75,7 +75,7 @@ class JobStatus(object):
         self.meta: Dict[str, str] = cast(Dict[str, str], redis_dict.get('meta') or {})
         self.exc_info: Optional[str] = cast(str, redis_dict.get('exc_info'))
         self.started_at: Optional[datetime] = cast(datetime, redis_dict.get('started_at'))
-        self.finished_at: Optional[datetime] = cast(datetime, redis_dict.get('finished_at'))
+        self.finished_at: Optional[datetime] = cast(datetime, redis_dict.get('ended_at'))
 
     def __str__(self) -> str:
         return f'<BackgroundJob {str(self.job_key)}>'
