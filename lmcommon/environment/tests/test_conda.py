@@ -29,11 +29,29 @@ class TestConda3PackageManager(object):
     def test_search(self):
         """Test search command"""
         mrg = Conda3PackageManager()
-        result = mrg.search("requests")
+        result = mrg.search("reque*")
         assert type(result) == list
         assert type(result[0]) == str
         assert len(result) > 6
         assert "requests" in result
+
+    @pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Conda not available on CircleCI")
+    def test_search_no_wildcard(self):
+        """Test search command"""
+        mrg = Conda3PackageManager()
+        result = mrg.search("reque")
+        assert type(result) == list
+        assert type(result[0]) == str
+        assert len(result) > 6
+        assert "requests" in result
+
+    @pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Conda not available on CircleCI")
+    def test_search_empty(self):
+        """Test search command with no result"""
+        mrg = Conda3PackageManager()
+        result = mrg.search("asdffdghdfghdraertasdfsadfa")
+        assert type(result) == list
+        assert len(result) == 0
 
     @pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Conda not available on CircleCI")
     def test_list_versions(self):
@@ -171,6 +189,24 @@ class TestConda2PackageManager(object):
         assert type(result[0]) == str
         assert len(result) > 6
         assert "requests" in result
+
+    @pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Conda not available on CircleCI")
+    def test_search_no_wildcard(self):
+        """Test search command"""
+        mrg = Conda2PackageManager()
+        result = mrg.search("reque")
+        assert type(result) == list
+        assert type(result[0]) == str
+        assert len(result) > 6
+        assert "requests" in result
+
+    @pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Conda not available on CircleCI")
+    def test_search_empty(self):
+        """Test search command with no result"""
+        mrg = Conda2PackageManager()
+        result = mrg.search("asdffdghdfghdraertasdfsadfa")
+        assert type(result) == list
+        assert len(result) == 0
 
     @pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Conda not available on CircleCI")
     def test_list_versions(self):

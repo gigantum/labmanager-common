@@ -23,7 +23,7 @@ import datetime
 import time
 from typing import Optional, List
 
-from lmcommon.gitlib.gitlab import GitLabRepositoryManager
+from lmcommon.gitlib.gitlab import GitLabManager
 from lmcommon.labbook import LabBook, LabbookException, LabbookMergeException
 from lmcommon.logging import LMLogger
 
@@ -153,10 +153,9 @@ def create_remote_gitlab_repo(labbook: LabBook, username: str, access_token: Opt
 
     try:
         # Add collaborator to remote service
-        mgr = GitLabRepositoryManager(default_remote, admin_service, access_token=access_token or 'invalid',
-                                      username=username, owner=labbook.owner['username'], labbook_name=labbook.name)
+        mgr = GitLabManager(default_remote, admin_service, access_token=access_token or 'invalid')
         mgr.configure_git_credentials(default_remote, username)
-        mgr.create()
+        mgr.create_labbook(namespace=labbook.owner['username'], labbook_name=labbook.name)
         labbook.add_remote("origin", f"https://{default_remote}/{username}/{labbook.name}.git")
     except Exception as e:
         raise GitLabRemoteError(e)
@@ -168,9 +167,8 @@ def publish_to_remote(labbook: LabBook, username: str, remote: str) -> None:
         raise ValueError('User workspace must be active branch to publish')
 
     # The gm.workspace branch must exist (if not, then there is a problem in Labbook.new())
-    if not 'gm.workspace' in labbook.get_branches()['local']:
+    if 'gm.workspace' not in labbook.get_branches()['local']:
         raise ValueError('Branch gm.workspace does not exist in local Labbook branches')
-
 
     git_garbage_collect(labbook)
     labbook.git.fetch(remote=remote)

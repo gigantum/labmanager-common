@@ -18,11 +18,14 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 import requests
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict, Any
 import subprocess
 import pexpect
 import re
 import os
+from urllib.parse import quote_plus
+from natsort import natsorted
+
 
 from lmcommon.logging import LMLogger
 
@@ -42,7 +45,7 @@ def check_and_add_user(admin_service: str, access_token: str, username: str) -> 
     """
     # Check for user
     response = requests.get(f"https://{admin_service}/user",
-                            headers={"Authorization": f"Bearer {access_token}"})
+                            headers={"Authorization": f"Bearer {access_token}"}, timeout=10)
     if response.status_code == 200:
         # User exists, do nothing
         pass
@@ -51,7 +54,7 @@ def check_and_add_user(admin_service: str, access_token: str, username: str) -> 
 
         # user does not exist, add!
         response = requests.post(f"https://{admin_service}/user",
-                                 headers={"Authorization": f"Bearer {access_token}"})
+                                 headers={"Authorization": f"Bearer {access_token}"}, timeout=10)
         if response.status_code != 201:
             logger.error("Failed to create new user in GitLab")
             logger.error(response.json())
@@ -62,59 +65,67 @@ def check_and_add_user(admin_service: str, access_token: str, username: str) -> 
         raise ValueError("Failed to check for user in repository")
 
 
-class GitLabRepositoryManager(object):
-    """Class to manage administrative operations to a remote GitLab repository for a labbook"""
-    def __init__(self, remote_host: str, admin_service: str, access_token: str,
-                 username: str, owner: str, labbook_name: str) -> None:
-        """Constructor"""
+class GitLabManager(object):
+    """Class to manage administrative operations to a remote GitLab server"""
+    def __init__(self, remote_host: str, admin_service: str, access_token: str) -> None:
+        # GitLab Server URL
         self.remote_host = remote_host
+        # Admin Service URL
         self.admin_service = admin_service
+
+        # Current user's bearer token
         self.access_token = access_token
+        # Current user's GitLab impersonation token
+        self._gitlab_token: Optional[str] = None
 
-        self.username = username
-        self.owner = owner
-        self.labbook_name = labbook_name
+    @staticmethod
+    def get_repository_id(namespace: str, labbook_name: str) -> str:
+        """Method to transform a namespace and labbook name to a project ID
 
-        # User's remote access token
-        self._user_token: Optional[str] = None
-        # ID of the repository in GitLab
-        self._repository_id: Optional[int] = None
+        Args:
+            namespace(str): Namespace in gitlab, currently the "owner"
+            labbook_name(str): LabBook name (i.e. project name in gitlab)
+
+        Returns:
+            str
+        """
+        return quote_plus(f"{namespace}/{labbook_name}")
 
     @property
     def user_token(self) -> Optional[str]:
         """Method to get the user's API token from the auth microservice"""
-        if not self._user_token:
+        if not self._gitlab_token:
             # Get the token
             response = requests.get(f"https://{self.admin_service}/key",
-                                    headers={"Authorization": f"Bearer {self.access_token}"})
+                                    headers={"Authorization": f"Bearer {self.access_token}"}, timeout=10)
             if response.status_code == 200:
-                self._user_token = response.json()['key']
+                self._gitlab_token = response.json()['key']
             elif response.status_code == 404:
                 # User not found so create it!
                 response = requests.post(f"https://{self.admin_service}/user",
-                                         headers={"Authorization": f"Bearer {self.access_token}"})
+                                         headers={"Authorization": f"Bearer {self.access_token}"}, timeout=10)
                 if response.status_code != 201:
                     logger.error("Failed to create new user in GitLab")
                     logger.error(response.json())
                     raise ValueError("Failed to create new user in GitLab")
 
-                logger.info(f"Created new user `{self.username}` in remote git server")
+                logger.info(f"Created new user in remote git server")
 
                 # New get the key so the current request that triggered this still succeeds
                 response = requests.get(f"https://{self.admin_service}/key",
-                                        headers={"Authorization": f"Bearer {self.access_token}"})
+                                        headers={"Authorization": f"Bearer {self.access_token}"}, timeout=10)
                 if response.status_code == 200:
-                    self._user_token = response.json()['key']
+                    self._gitlab_token = response.json()['key']
                 else:
-                    logger.error("Failed to get user access key from server")
+                    logger.error("Failed to get user access key from server after creation. Status Code: {response.status_code}")
                     logger.error(response.json())
-                    raise ValueError("Failed to get user access key from server")
+                    raise ValueError("Failed to get user access key from server after creation")
             else:
-                logger.error("Failed to get user access key from server")
+                logger.error(f"Failed to get user access key from server. Status Code: {response.status_code}")
                 logger.error(response.json())
                 raise ValueError("Failed to get user access key from server")
 
-        return self._user_token
+        return self._gitlab_token
 
     def _get_user_id_from_username(self, username: str) -> int:
         """Method to get a user's id in GitLab based on their username
@@ -127,58 +138,108 @@ class GitLabRepositoryManager(object):
         """
         # Call API to get ID of the user
         response = requests.get(f"https://{self.remote_host}/api/v4/users?username={username}",
-                                headers={"PRIVATE-TOKEN": self.user_token})
+                                headers={"PRIVATE-TOKEN": self.user_token}, timeout=10)
         if response.status_code != 200:
-            logger.error("Failed to get id for user when adding collaborator")
+            logger.error(f"Failed to query for user ID from username. Status Code: {response.status_code}")
             logger.error(response.json())
-            raise ValueError("Failed to get id for user when adding collaborator")
+            raise ValueError("Failed to query for user ID from username.")
 
-        user_id = response.json()[0]['id']
+        user_id = None
+        for user in response.json():
+            if user['username'] == username:
+                user_id = user['id']
+                break
+
+        if user_id is None:
+            raise ValueError(f"User ID not found when querying by username: {username}")
 
         return user_id
 
-    def repository_id(self) -> Optional[int]:
-        """Method to get the repository's ID in GitLab"""
-        if not self._repository_id:
-            # Get the id
-            response = requests.get(f"https://{self.remote_host}/api/v4/projects?search={self.labbook_name}",
-                                    headers={"PRIVATE-TOKEN": self.user_token})
-            if response.status_code == 200:
-                data = response.json()
-                if len(data) == 0:
-                    logger.error(f"Failed to get repository id. {self.labbook_name} does not exist.")
-                    raise ValueError(f"Failed to get repository id. {self.labbook_name} does not exist.")
+    def list_labbooks(self, sort_mode: str = "az", reverse: bool = False) -> List[Dict[str, Any]]:
+        """Method to list all remote labbooks for a user
 
-                self._repository_id = data[0]['id']
-            else:
-                logger.error("Failed to get repository ID from server")
-                logger.error(response.json())
-                raise ValueError("Failed to get repository ID from server")
+        Args:
+            sort_mode(sort_mode): String specifying how labbooks should be sorted
+            reverse(bool): Reverse sorting if True
 
-        return self._repository_id
-
-    def exists(self) -> bool:
-        """Method to check if the remote repository already exists
+        Supported sorting modes:
+            - az: naturally sort
+            - created_on: sort by creation date, newest first
+            - modified_on: sort by modification date, newest first
 
         Returns:
             bool
         """
-        try:
-            _ = self.repository_id()
-            return True
-        except ValueError:
-            return False
+        # Call API to check for project
+        response = requests.get(f"https://{self.remote_host}/api/v4/projects/",
+                                headers={"PRIVATE-TOKEN": self.user_token}, timeout=10)
 
-    def create(self) -> None:
+        if response.status_code == 200:
+            # TODO: Add description after async task to populate description in GitLab is implemented
+            labbooks = [{"id": p.get("id"),
+                         "namespace": p.get("namespace").get("name"),
+                         "labbook_name": p.get("name"),
+                         "description": "",
+                         "created_on": p.get("created_at"),
+                         "modified_on": p.get("last_activity_at")} for p in response.json()]
+            if sort_mode == 'az':
+                labbooks = natsorted(labbooks, key=lambda x: x['labbook_name'], reverse=reverse)
+
+            elif sort_mode == 'created_on':
+                labbooks = sorted(labbooks, key=lambda x: x['created_on'], reverse=not reverse)
+
+            elif sort_mode == 'modified_on':
+                labbooks = sorted(labbooks, key=lambda x: x['modified_on'], reverse=not reverse)
+
+            else:
+                raise ValueError(f"Unsupported sort_mode: {sort_mode}")
+            return labbooks
+
+        else:
+            msg = f"Failed to list LabBooks. Status Code: {response.status_code}"
+            logger.error(msg)
+            logger.error(response.json())
+            raise ValueError(msg)
+
+    def labbook_exists(self, namespace: str, labbook_name: str) -> bool:
+        """Method to check if the remote repository already exists
+
+        Args:
+            namespace(str): Namespace in gitlab, currently the "owner"
+            labbook_name(str): LabBook name (i.e. project name in gitlab)
+
+        Returns:
+            bool
+        """
+        # Call API to check for project
+        repo_id = self.get_repository_id(namespace, labbook_name)
+        response = requests.get(f"https://{self.remote_host}/api/v4/projects/{repo_id}",
+                                headers={"PRIVATE-TOKEN": self.user_token}, timeout=10)
+
+        if response.status_code == 200:
+            return True
+        elif response.status_code == 404:
+            return False
+        else:
+            msg = f"Failed to check if {namespace}/{labbook_name} exists. Status Code: {response.status_code}"
+            logger.error(msg)
+            logger.error(response.json())
+            raise ValueError(msg)
+
+    def create_labbook(self, namespace: str, labbook_name: str) -> None:
         """Method to create the remote repository
+
+        Args:
+            namespace(str): Namespace in gitlab, currently the "owner"
+            labbook_name(str): LabBook name (i.e. project name in gitlab)
 
         Returns:
 
         """
-        if self.exists():
+        if self.labbook_exists(namespace, labbook_name):
             raise ValueError("Cannot create remote repository that already exists")
 
-        data = {"name": self.labbook_name,
+        data = {"name": labbook_name,
                 "issues_enabled": False,
                 "jobs_enabled": False,
                 "wiki_enabled": False,
@@ -192,32 +253,59 @@ class GitLabRepositoryManager(object):
         # Call API to create project
         response = requests.post(f"https://{self.remote_host}/api/v4/projects",
                                  headers={"PRIVATE-TOKEN": self.user_token},
-                                 json=data)
+                                 json=data, timeout=10)
 
         if response.status_code != 201:
             logger.error("Failed to create remote repository")
             logger.error(response.json())
             raise ValueError("Failed to create remote repository")
         else:
-            logger.info(f"Created remote repository for {self.username}/{self.owner}/{self.labbook_name}")
+            logger.info(f"Created remote repository {namespace}/{labbook_name}")
 
-            # Save ID
-            self._repository_id = response.json()['id']
+    def remove_labbook(self, namespace: str, labbook_name: str) -> None:
+        """Method to remove the remote repository
 
-    def get_collaborators(self) -> Optional[List[Tuple[int, str, bool]]]:
+        Args:
+            namespace(str): Namespace in gitlab, currently the "owner"
+            labbook_name(str): LabBook name (i.e. project name in gitlab)
+
+        Returns:
+            None
+        """
+        if not self.labbook_exists(namespace, labbook_name):
+            raise ValueError("Cannot remove remote repository that does not exist")
+
+        # Call API to remove project
+        repo_id = self.get_repository_id(namespace, labbook_name)
+        response = requests.delete(f"https://{self.remote_host}/api/v4/projects/{repo_id}",
+                                   headers={"PRIVATE-TOKEN": self.user_token}, timeout=10)
+
+        if response.status_code != 202:
+            logger.error(f"Failed to remove remote repository. Status Code: {response.status_code}")
+            logger.error(response.json())
+            raise ValueError("Failed to create remote repository")
+        else:
+            logger.info(f"Deleted remote repository {namespace}/{labbook_name}")
+
+    def get_collaborators(self, namespace: str, labbook_name: str) -> Optional[List[Tuple[int, str, bool]]]:
         """Method to get usernames and IDs of collaborators that have access to the repo
 
         The method returns a list of tuples where the entries in the tuple are (user id, username, is owner)
 
+        Args:
+            namespace(str): Namespace in gitlab, currently the "owner"
+            labbook_name(str): LabBook name (i.e. project name in gitlab)
+
         Returns:
             list
         """
-        if not self.exists():
+        if not self.labbook_exists(namespace, labbook_name):
             raise ValueError("Cannot get collaborators of a repository that does not exist")
 
         # Call API to get all collaborators
-        response = requests.get(f"https://{self.remote_host}/api/v4/projects/{self.repository_id()}/members",
-                                headers={"PRIVATE-TOKEN": self.user_token})
+        repo_id = self.get_repository_id(namespace, labbook_name)
+        response = requests.get(f"https://{self.remote_host}/api/v4/projects/{repo_id}/members",
+                                headers={"PRIVATE-TOKEN": self.user_token}, timeout=10)
 
         if response.status_code != 200:
             logger.error("Failed to get remote repository collaborators")
@@ -227,16 +315,21 @@ class GitLabRepositoryManager(object):
             # Process response
             return [(x['id'], x['username'], x['access_level'] == 40) for x in response.json()]
 
-    def add_collaborator(self, username: str) -> Optional[List[Tuple[int, str, bool]]]:
+    def add_collaborator(self,
+                         namespace: str,
+                         labbook_name: str,
+                         username: str) -> Optional[List[Tuple[int, str, bool]]]:
         """Method to add a collaborator to a remote repository by username
 
         Args:
+            namespace(str): Namespace in gitlab, currently the "owner"
+            labbook_name(str): LabBook name (i.e. project name in gitlab)
             username(str): username to add
 
         Returns:
             list
         """
-        if not self.exists():
+        if not self.labbook_exists(namespace, labbook_name):
             raise ValueError("Cannot add a collaborator to a repository that does not exist")
 
         # Call API to get ID of the user
@@ -245,9 +338,10 @@ class GitLabRepositoryManager(object):
         # Call API to add a collaborator
         data = {"user_id": user_id,
                 "access_level": 30}
-        response = requests.post(f"https://{self.remote_host}/api/v4/projects/{self.repository_id()}/members",
+        repo_id = self.get_repository_id(namespace, labbook_name)
+        response = requests.post(f"https://{self.remote_host}/api/v4/projects/{repo_id}/members",
                                  headers={"PRIVATE-TOKEN": self.user_token},
-                                 json=data)
+                                 json=data, timeout=10)
 
         if response.status_code != 201:
             logger.error("Failed to add collaborator")
@@ -255,29 +349,35 @@ class GitLabRepositoryManager(object):
             raise ValueError("Failed to add collaborator")
         else:
             # Re-query for collaborators and return
-            logger.info(f"Added {username} as a collaborator to {self.labbook_name}")
-            return self.get_collaborators()
+            logger.info(f"Added {username} as a collaborator to {labbook_name}")
+            return self.get_collaborators(namespace, labbook_name)
 
-    def delete_collaborator(self,  username: str) -> Optional[List[Tuple[int, str, bool]]]:
+    def delete_collaborator(self,
+                            namespace: str,
+                            labbook_name: str,
+                            username: str) -> Optional[List[Tuple[int, str, bool]]]:
         """Method to remove a collaborator from a remote repository by user_id
 
         user id is used because it is assumed you've already listed the current collaborators
 
         Args:
+            namespace(str): Namespace in gitlab, currently the "owner"
+            labbook_name(str): LabBook name (i.e. project name in gitlab)
             username(str): username to remove
 
         Returns:
 
         """
-        if not self.exists():
+        if not self.labbook_exists(namespace, labbook_name):
             raise ValueError("Cannot remove a collaborator to a repository that does not exist")
 
-        # Call API to get ID of the user
+        # Lookup username
         user_id = self._get_user_id_from_username(username)
 
         # Call API to remove a collaborator
-        response = requests.delete(f"https://{self.remote_host}/api/v4/projects/{self.repository_id()}/members/{user_id}",
-                                   headers={"PRIVATE-TOKEN": self.user_token})
+        repo_id = self.get_repository_id(namespace, labbook_name)
+        response = requests.delete(f"https://{self.remote_host}/api/v4/projects/{repo_id}/members/{user_id}",
+                                   headers={"PRIVATE-TOKEN": self.user_token}, timeout=10)
 
         if response.status_code != 204:
             logger.error("Failed to remove collaborator")
@@ -285,8 +385,8 @@ class GitLabRepositoryManager(object):
             raise ValueError("Failed to remove collaborator")
         else:
             # Re-query for collaborators and return
-            logger.info(f"Removed {username} as a collaborator to {self.labbook_name}")
-            return self.get_collaborators()
+            logger.info(f"Removed user id `{user_id}` as a collaborator to {labbook_name}")
+            return self.get_collaborators(namespace, labbook_name)
 
     @staticmethod
     def _call_shell(command: str, input_list: Optional[List[str]]=None) -> Tuple[Optional[bytes], Optional[bytes]]:

@@ -61,16 +61,21 @@ class CondaPackageManagerBase(PackageManager):
         Returns:
             list(str): The list of package names that match the search string
         """
+        # Add wildcard for search
+        if search_str[-1] != '*':
+            search_str = search_str + '*'
+
         buffer = StringIO()
         with redirect_stdout(buffer):
             conda.cli.main('conda', 'search', search_str, '--json')
 
         data = json.loads(buffer.getvalue())
-
-        if 'error' in data:
-            if data['error'] == 'PackageNotFoundError':
+        if 'exception_name' in data:
+            if data.get('exception_name') == 'PackagesNotFoundError':
                 # This means you entered an invalid package name that didn't resolve to anything
                 return list()
+            else:
+                raise Exception(f"An error occurred while searching for packages: {data.get('exception_name')}")
 
         if data:
             return list(data.keys())
@@ -95,9 +100,12 @@ class CondaPackageManagerBase(PackageManager):
 
         data = json.loads(buffer.getvalue())
 
-        if 'error' in data:
-            if data['error'] == 'PackageNotFoundError':
-                raise ValueError("Package not found")
+        # TODO: Conda does not seem to throw this anymore. Remove once confirmed
+        if 'exception_name' in data:
+            raise ValueError(f"An error occurred while getting package versions: {data.get('exception_name')}")
+
+        if len(data.get(package_name)) == 0:
+            raise ValueError(f"Package {package_name} not found")
 
         # Check to see if this is a python package. If so, filter based on the current version of python (set in child)
         if any([True for x in data.get(package_name) if self.python_depends_str in x.get('depends')]):
