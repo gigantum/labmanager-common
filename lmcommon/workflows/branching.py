@@ -23,6 +23,7 @@ from typing import Optional, List
 
 from lmcommon.logging import LMLogger
 from lmcommon.labbook import LabBook
+from lmcommon.workflows.core import call_subprocess
 
 logger = LMLogger.get_logger()
 
@@ -159,16 +160,17 @@ class BranchManager(object):
                 self.labbook._sweep_uncommitted_changes()
                 if force:
                     logger.warning("Using force to overwrite local changes")
-                    r = subprocess.check_output(f'git merge -s recursive -X theirs {other_branch}',
-                                                cwd=self.labbook.root_dir, shell=True)
+                    call_subprocess(['git', 'merge', '-s', 'recursive', '-X', 'theirs', other_branch],
+                                    cwd=self.labbook.root_dir)
                 else:
                     try:
-                        self.labbook.git.merge(other_branch)
-                    except git.exc.GitCommandError as merge_error:
+                        call_subprocess(['git', 'merge', other_branch], cwd=self.labbook.root_dir)
+                    except (git.exc.GitCommandError, subprocess.CalledProcessError) as merge_error:
                         logger.error(f"Merge conflict syncing {str(self.labbook)} - Use `force` to overwrite.")
-                        raise BranchException(merge_error)
+                        # TODO - This should be cleaned up (The UI attempts to match on the token "Cannot merge")
+                        raise BranchException(f"Cannot merge - {merge_error}")
                 self.labbook.git.commit(f'Merged from branch `{other_branch}`')
                 logger.info(f"{str(self.labbook)} finished merge")
             except Exception as e:
-                r = subprocess.check_output(f'git reset --hard', cwd=self.labbook.root_dir, shell=True)
+                call_subprocess(['git', 'reset', '--hard'], cwd=self.labbook.root_dir)
                 raise e
