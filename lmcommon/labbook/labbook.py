@@ -1669,8 +1669,12 @@ class LabBook(object):
                     lb_item['sort_val'] = labbook
                 elif sort_mode == 'created_on':
                     # get create data from yaml file
-                    lb = LabBook()
-                    lb.from_directory(dir_path)
+                    try:
+                        lb = LabBook()
+                        lb.from_directory(dir_path)
+                    except Exception as e:
+                        logger.error(e)
+                        continue
                     create_date = lb.creation_date
 
                     # SHIM - Can be removed on major release
@@ -1683,10 +1687,13 @@ class LabBook(object):
 
                 elif sort_mode == 'modified_on':
                     # lookup date of last commit
-                    lb = LabBook()
-                    lb.from_directory(dir_path)
-                    lb_item['sort_val'] = lb.git.log(max_count=1)[0]['committed_on']
-
+                    try:
+                        lb = LabBook()
+                        lb.from_directory(dir_path)
+                        lb_item['sort_val'] = lb.git.log(max_count=1)[0]['committed_on']
+                    except Exception as e:
+                        logger.error(e)
+                        continue
                 else:
                     raise ValueError(f"Unsupported sort_mode: {sort_mode}")
 

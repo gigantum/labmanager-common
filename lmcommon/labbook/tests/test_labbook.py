@@ -310,6 +310,10 @@ class TestLabBook(object):
         assert labbooks[1]['name'] == 'asdf'
         assert labbooks[2]['name'] == 'labbook3'
 
+        os.remove(os.path.join(lb2.root_dir, '.gigantum', 'labbook.yaml'))
+        labbooks = lb1.list_local_labbooks(username="user1", sort_mode='modified_on')
+        assert len(labbooks) == 2
+
     def test_list_labbooks_create_date_reversed(self, mock_config_file):
         """Test list create dated sorted labbooks reversed"""
         lb1, lb2, lb3, lb4 = LabBook(mock_config_file[0]), LabBook(mock_config_file[0]),\
