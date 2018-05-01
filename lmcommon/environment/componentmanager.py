@@ -149,7 +149,7 @@ exec gosu giguser "$@"
             raise ValueError('Argument `name` must be alphanumeric string (- and _ accepted)')
 
         if not docker_content:
-            raise ValueError('Argument `content` cannot be None or empty')
+            docker_content = []
 
         file_data = {
             'name': name,
