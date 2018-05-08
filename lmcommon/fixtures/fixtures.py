@@ -325,6 +325,12 @@ def mock_labbook_lfs_disabled():
 
 
 @pytest.fixture()
+def mock_config_lfs_disabled():
+    conf_file, working_dir = _create_temp_work_dir(lfs_enabled=False)
+    yield conf_file, working_dir
+
+
+@pytest.fixture()
 def mock_labbook_with_populated_env():
     """A pytest fixture that creates a temporary directory and a config file to match. Deletes directory after test"""
 

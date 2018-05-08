@@ -59,7 +59,7 @@ def call_subprocess(cmd_tokens: List[str], cwd: str, check: bool = True) -> None
     logger.debug(f"Executing `{' '.join(cmd_tokens)}` in {cwd}")
     start_time = time.time()
     try:
-        r = subprocess.run(cmd_tokens, cwd=cwd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, check=check)
+        r = subprocess.run(cmd_tokens, cwd=cwd, stderr=subprocess.PIPE, stdout=subprocess.PIPE, check=check)
         finish_time = time.time()
         elapsed_time = finish_time - start_time
         logger.debug(f"Finished command `{' '.join(cmd_tokens)}` in {elapsed_time}s")
@@ -181,7 +181,7 @@ def publish_to_remote(labbook: LabBook, username: str, remote: str) -> None:
         raise ValueError(f'Cannot publish since {labbook.active_branch} is not synced')
 
     # Make sure the master workspace is synced before attempting to publish.
-    labbook.git.checkout("gm.workspace")
+    labbook.checkout_branch("gm.workspace")
 
     if labbook.get_commits_behind_remote(remote_name=remote)[1] > 0:
         raise ValueError(f'Cannot publish since {labbook.active_branch} is not synced')
@@ -194,6 +194,10 @@ def publish_to_remote(labbook: LabBook, username: str, remote: str) -> None:
 
     call_subprocess(['git', 'push', '--set-upstream', 'origin', 'gm.workspace'], cwd=labbook.root_dir)
 
+    if labbook.labmanager_config.config["git"]["lfs_enabled"] is True:
+        t0 = time.time()
+        call_subprocess(['git', 'lfs', 'push', '--all', 'origin', 'gm.workspace'], cwd=labbook.root_dir)
+        logger.info(f"Ran in {str(labbook)} `git lfs push --all` in {t0-time.time()}s")
     # Return to the user's workspace, merge it with the global workspace (as a precaution)
     labbook.checkout_branch(branch_name=f'gm.workspace-{username}')
 
@@ -233,10 +237,14 @@ def sync_with_remote(labbook: LabBook, username: str, remote: str, force: bool) 
             git_garbage_collect(labbook)
 
             tokens = ['git', 'pull', '--commit', 'origin', 'gm.workspace']
-            tokens_force = ['git', 'pull', '--commit', '-s', 'recursive', '-X', 'theirs', 'origin', 'gm.workspace']
+            tokens_force = ['git', 'pull', '--commit', '-s', 'recursive', '-X', 'theirs', 'origin',
+                            'gm.workspace']
+
             checkpoint = labbook.git.commit_hash
             try:
                 call_subprocess(tokens if not force else tokens_force, cwd=labbook.root_dir)
+                if labbook.labmanager_config.config["git"]["lfs_enabled"] is True:
+                    call_subprocess(['git', 'lfs', 'pull', 'origin', 'gm.workspace'], cwd=labbook.root_dir)
             except subprocess.CalledProcessError as x:
                 logger.error(f"{str(labbook)} cannot merge with remote; resetting to revision {checkpoint}...")
                 call_subprocess(['git', 'merge', '--abort'], cwd=labbook.root_dir)
@@ -247,6 +255,10 @@ def sync_with_remote(labbook: LabBook, username: str, remote: str, force: bool) 
             call_subprocess(['git', 'checkout', 'gm.workspace'], cwd=labbook.root_dir)
             call_subprocess(['git', 'merge', f'gm.workspace-{username}'], cwd=labbook.root_dir)
             call_subprocess(['git', 'push', 'origin', 'gm.workspace'], cwd=labbook.root_dir)
+            if labbook.labmanager_config.config["git"]["lfs_enabled"] is True:
+                t0 = time.time()
+                call_subprocess(['git', 'lfs', 'push', '--all', 'origin', 'gm.workspace'], cwd=labbook.root_dir)
+                logger.info(f'Ran in {str(labbook)} `git lfs push all` in {t0-time.time()}s')
             labbook.checkout_branch(f"gm.workspace-{username}")
 
             updates = 0 if checkpoint == checkpoint2 else 1

@@ -582,7 +582,8 @@ class LabBook(object):
                     logger.warning(f"Found {status_key} in {str(self)}: {n}")
                     return False
             return True
-        except gitdb.exc.BadName:
+        except gitdb.exc.BadName as e:
+            logger.error(e)
             return False
 
     def checkout_branch(self, branch_name: str, new: bool = False) -> None:
@@ -1605,21 +1606,40 @@ class LabBook(object):
         starting_dir = os.path.expanduser(self.labmanager_config.config["git"]["working_directory"])
 
         # Expected full path of the newly imported labbook.
+        lb_dir = os.path.join(starting_dir, username, owner, 'labbooks')
         est_root_dir = os.path.join(starting_dir, username, owner, 'labbooks', labbook_name)
         if os.path.exists(est_root_dir):
             errmsg = f"Cannot clone labbook, path already exists at `{est_root_dir}`"
             logger.error(errmsg)
             raise ValueError(errmsg)
 
-        logger.info(f"Cloning labbook from remote origin `{remote_url}` into `{est_root_dir}...")
-        self.git.clone(remote_url, directory=est_root_dir)
-        self.git.fetch()
+        os.makedirs(lb_dir, exist_ok=True)
+
+        if self.labmanager_config.config["git"]["lfs_enabled"] is True:
+            logger.info(f"Cloning labbook with `git lfs clone ...` from remote `{remote_url}` into `{est_root_dir}...")
+
+            t0 = time.time()
+            try:
+                subprocess.run(['git', 'lfs', 'clone', remote_url], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                               check=True, cwd=lb_dir)
+                self.git.set_working_directory(est_root_dir)
+            except subprocess.CalledProcessError as e:
+                logger.error(e)
+                logger.error(f'git lfs clone: stderr={e.stderr.decode()}, stdout={e.stdout.decode()}')
+                shutil.rmtree(est_root_dir, ignore_errors=True)
+                raise
+            logger.info(f"Git LFS cloned from `{remote_url}` in {time.time()-t0}s")
+        else:
+            self.git.clone(remote_url, directory=est_root_dir)
+            self.git.fetch()
+
         logger.info(f"Checking out gm.workspace")
+        # NOTE!! using self.checkout_branch fails w/Git error: "Ref 'HEAD' did not resolve to an object"
         self.git.checkout("gm.workspace")
 
         logger.info(f"Checking out gm.workspace-{username}")
         if f'origin/gm.workspace-{username}' in self.get_branches()['remote']:
-            self.git.checkout(f"gm.workspace-{username}")
+            self.checkout_branch(f"gm.workspace-{username}")
         else:
             self.checkout_branch(f"gm.workspace-{username}", new=True)
 
