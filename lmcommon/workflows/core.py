@@ -87,7 +87,10 @@ def git_garbage_collect(labbook: LabBook) -> None:
         subprocess.CalledProcessError when git gc fails.
         """
     logger.info(f"Running git gc (Garbage Collect) in {str(labbook)}...")
-    call_subprocess(['git', 'gc'], cwd=labbook.root_dir)
+    try:
+        call_subprocess(['git', 'gc'], cwd=labbook.root_dir)
+    except subprocess.CalledProcessError:
+        logger.warning(f"Ignore `git gc` error - {str(labbook)} repo remains unpruned")
 
 
 def push(labbook: LabBook, remote: str) -> None:
@@ -225,7 +228,6 @@ def sync_with_remote(labbook: LabBook, username: str, remote: str, force: bool) 
 
         updates = 0
         logger.info(f"Syncing {str(labbook)} for user {username} to remote {remote}")
-        labbook.git.fetch(remote=remote)
         with labbook.lock_labbook():
             labbook._sweep_uncommitted_changes()
             git_garbage_collect(labbook)
