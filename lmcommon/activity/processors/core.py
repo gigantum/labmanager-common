@@ -17,23 +17,22 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-from typing import (Any, Dict)
+from typing import (Any, Dict, List)
 
-from lmcommon.activity.processors.processor import ActivityProcessor
+from lmcommon.activity.processors.processor import ActivityProcessor, ExecutionData
 from lmcommon.activity import ActivityRecord, ActivityDetailType
 
 
 class ActivityShowBasicProcessor(ActivityProcessor):
     """Class to simply hide an activity record if it doesn't have any detail records that are set to show=True"""
 
-    def process(self, result_obj: ActivityRecord, code: Dict[str, Any], result: Dict[str, Any], status: Dict[str, Any],
-                metadata: Dict[str, Any]) -> ActivityRecord:
+    def process(self, result_obj: ActivityRecord, data: List[ExecutionData],
+                status: Dict[str, Any], metadata: Dict[str, Any]) -> ActivityRecord:
         """Method to update a result object based on code and result data
 
         Args:
             result_obj(ActivityNote): An object containing the note
-            code(dict): A dict containing data specific to the dev env containing code that was executed
-            result(dict): A dict containing data specific to the dev env containing the result of code execution
+            data(list): A list of ExecutionData instances containing the data for this record
             status(dict): A dict containing the result of git status from gitlib
             metadata(str): A dictionary containing Dev Env specific or other developer defined data
 

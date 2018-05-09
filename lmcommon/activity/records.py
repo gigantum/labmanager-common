@@ -177,19 +177,20 @@ class ActivityDetailRecord(object):
         Returns:
             dict
         """
-        # TODO: Should we duplicate type, importance, and show if they are in the git log record?
         if compact:
             # Compact representation and do deep copy so binary conversions don't stick around in the object
             return {"t": self.type.value,
                     "i": self.importance,
                     "s": int(self.show),
-                    "d": copy.deepcopy(self.data)
+                    "d": copy.deepcopy(self.data),
+                    "a": self.tags
                     }
         else:
             return {"type": self.type.value,
                     "importance": self.importance,
                     "show": self.show,
-                    "data": self.data
+                    "data": self.data,
+                    "tags": self.tags
                     }
 
     def to_bytes(self, compress: bool=True) -> bytes:
@@ -244,6 +245,11 @@ class ActivityDetailRecord(object):
                                             show=bool(obj_dict["s"]),
                                             importance=obj_dict["i"]
                                             )
+
+        # add tags if present (missing in "old" labbooks)
+        if "a" in obj_dict:
+            new_instance.tags = obj_dict['a']
+
         new_instance.data = obj_dict['d']
         new_instance.is_loaded = True
         return new_instance

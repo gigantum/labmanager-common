@@ -23,27 +23,37 @@ from typing import (Any, Dict, List)
 from lmcommon.activity import ActivityRecord
 
 
-class StopProcessingException(Exception):
-    """Custom exception to stop activity processing pipeline and bail out from activity process"""
-    pass
+class ExecutionData(object):
+    """A simple class to hold information from the execution of a segment of code for later processing"""
+    def __init__(self):
+        # list of dictionaries containing code snippets
+        self.code: List[Dict[str, Any]] = list()
+
+        # List of dictionaries containing result data
+        self.result: List[Dict[str, Any]] = list()
+
+        # List of tags to be stored with the record
+        self.tags: List[str] = list()
+
+        # Flag indicating if the block errored and should be ignored
+        self.cell_error = False
 
 
 class ActivityProcessor(metaclass=abc.ABCMeta):
     """Class to process activity and return content for an ActivityRecord"""
 
-    def process(self, result_obj: ActivityRecord, code: Dict[str, Any], result: Dict[str, Any],
-                status: Dict[str, Any], metadata: Dict[str, Any]) -> ActivityRecord:
+    def process(self, result_obj: ActivityRecord, data: List[ExecutionData], status: Dict[str, Any],
+                metadata: Dict[str, Any]) -> ActivityRecord:
         """Method to update a result object based on code and result data
 
         Args:
             result_obj(ActivityNote): An object containing the ActivityRecord
-            code(dict): A dict containing data specific to the dev env containing code that was executed
-            result(dict): A dict containing data specific to the dev env containing the result of code execution
-            status(dict): A dictionary containing the git status
+            data(list): A list of ExecutionData instances containing the data for this record
+            status(dict): A dictionary containing the git status for this record
             metadata(dict): A dictionary containing Dev Env specific or other developer defined data
 
         Returns:
-            ActivityNote
+            ActivityRecord
         """
         raise NotImplemented
 
