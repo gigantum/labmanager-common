@@ -31,11 +31,11 @@ class Serializer(object):
         """
         self.serializers = {"text/plain": text.PlainSerializer(),
                             "text/markdown": text.MarkdownSerializer(),
-                            "image/png": image.PngImageSerializer(),
-                            "image/jpeg": image.JpegImageSerializer(),
-                            "image/jpg": image.JpegImageSerializer(),
+                            "image/png": image.Base64ImageSerializer("image/png"),
+                            "image/jpeg": image.Base64ImageSerializer("image/jpeg"),
+                            "image/jpg": image.Base64ImageSerializer("image/jpg"),
                             "image/gif": image.GifImageSerializer(),
-                            "image/bmp": image.BmpImageSerializer()}
+                            "image/bmp": image.Base64ImageSerializer("image/bmp")}
 
     def jsonify(self, mime_type: str, data: Any) -> Any:
         """Method to jsonify an arbitrary data object

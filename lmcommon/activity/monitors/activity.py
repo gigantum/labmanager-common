@@ -171,4 +171,3 @@ class ActivityMonitor(metaclass=abc.ABCMeta):
             None
         """
         raise NotImplemented
-

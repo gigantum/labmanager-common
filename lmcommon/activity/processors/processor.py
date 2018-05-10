@@ -56,4 +56,3 @@ class ActivityProcessor(metaclass=abc.ABCMeta):
             ActivityRecord
         """
         raise NotImplemented
-

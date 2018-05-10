@@ -349,6 +349,3 @@ class JupyterLabNotebookMonitor(ActivityMonitor):
             # Delete the kernel monitor key so the dev env monitor will spin up a new process
             # You may lose some activity if this happens, but the next action will sweep up changes
             redis_conn.delete(self.monitor_key)
-
-
-

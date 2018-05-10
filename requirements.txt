@@ -13,6 +13,7 @@ schema==0.6.6
 blosc==1.5.1
 pexpect==4.3.1
 natsort==5.1.1
+pillow==5.1.0
 
 # Testing support
 pytest==3.5.0
