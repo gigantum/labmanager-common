@@ -111,6 +111,9 @@ class RepositoryManager(object):
         # Set the gitlib to point to that directory
         self.git.set_working_directory(location)
 
+        # XXX HACK
+        self.git.checkout('r-tidyverse')
+
         # Clone the repo
         self.git.fetch()
         self.git.pull()
