@@ -20,56 +20,63 @@
 import pytest
 
 from lmcommon.environment.pip import PipPackageManager
+from lmcommon.fixtures import mock_config_with_repo, build_lb_image_for_env
 
 
 class TestPipPackageManager(object):
-    def test_search(self):
+    def test_search(self, mock_config_with_repo, build_lb_image_for_env):
         """Test search command"""
         mrg = PipPackageManager()
-        result = mrg.search("peppercorn")
+        lb = build_lb_image_for_env[0]
+        username = build_lb_image_for_env[1]
+        result = mrg.search("peppercorn", lb, username)
         assert len(result) == 2
 
-        result = mrg.search("gigantum")
+        result = mrg.search("gigantum", lb, username)
         assert len(result) == 1
         assert result[0] == "gigantum"
 
-    def test_list_versions(self):
+    def test_list_versions(self, build_lb_image_for_env):
         """Test list_versions command"""
         mrg = PipPackageManager()
-
-        result = mrg.list_versions("gigantum")
+        lb = build_lb_image_for_env[0]
+        username = build_lb_image_for_env[1]
+        result = mrg.list_versions("gigantum", lb, username)
 
         assert len(result) > 3
         assert "0.3" in result
         assert "0.4" in result
         assert "0.5" in result
 
-    def test_latest_version(self):
+    def test_latest_version(self, build_lb_image_for_env):
         """Test latest_version command"""
         mrg = PipPackageManager()
-
-        result = mrg.latest_version("gigantum")
+        lb = build_lb_image_for_env[0]
+        username = build_lb_image_for_env[1]
+        result = mrg.latest_version("gigantum", lb, username)
 
         assert result == "0.8"
 
-    def test_latest_versions(self):
+    def test_latest_versions(self, build_lb_image_for_env):
         """Test latest_version command"""
         mrg = PipPackageManager()
-
-        gig_res, req_res = mrg.latest_versions(["gigantum", "requests"])
+        lb = build_lb_image_for_env[0]
+        username = build_lb_image_for_env[1]
+        gig_res, req_res = mrg.latest_versions(["gigantum", "requests"], lb, username)
 
         assert gig_res == "0.8"
         assert req_res.startswith('2.')
 
-    def test_list_installed_packages(self):
+    def test_list_installed_packages(self, build_lb_image_for_env):
         """Test list_installed_packages command
 
         Note, if the contents of the container change, this test will break and need to be updated. Because of this,
         only limited asserts are made to make sure things are coming back in a reasonable format
         """
         mrg = PipPackageManager()
-
-        result = mrg.list_installed_packages()
+        lb = build_lb_image_for_env[0]
+        username = build_lb_image_for_env[1]
+        result = mrg.list_installed_packages(lb, username)
 
         assert type(result) == list
         assert len(result) > 50
@@ -77,18 +84,19 @@ class TestPipPackageManager(object):
         assert type(result[0]['name']) == str
         assert type(result[0]['version']) == str
 
-    def test_list_available_updates(self):
+    def test_list_available_updates(self, build_lb_image_for_env):
         """Test list_available_updates command
 
         Note, if the contents of the container change, this test will break and need to be updated. Because of this,
         only limited asserts are made to make sure things are coming back in a reasonable format
         """
         mrg = PipPackageManager()
-
-        result = mrg.list_available_updates()
+        lb = build_lb_image_for_env[0]
+        username = build_lb_image_for_env[1]
+        result = mrg.list_available_updates(lb, username)
 
         assert type(result) == list
-        assert len(result) < len(mrg.list_installed_packages())
+        assert len(result) < len(mrg.list_installed_packages(lb, username))
         assert type(result[0]) == dict
         assert type(result[0]['name']) == str
         assert type(result[0]['version']) == str
@@ -121,48 +129,50 @@ class TestPipPackageManager(object):
         result = mrg.generate_docker_install_snippet(packages, single_line=True)
         assert result == ['RUN pip install mypackage==3.1.4 yourpackage==2017-54.0']
 
-    def test_list_versions_badpackage(self):
+    def test_list_versions_badpackage(self, build_lb_image_for_env):
         """Test list_versions command"""
         mrg = PipPackageManager()
-
+        lb = build_lb_image_for_env[0]
+        username = build_lb_image_for_env[1]
         with pytest.raises(ValueError):
-            mrg.list_versions("gigantumasdfasdfasdf")
+            mrg.list_versions("gigantumasdfasdfasdf", lb, username)
 
-    def test_is_valid(self):
+    def test_is_valid(self, build_lb_image_for_env):
         """Test list_versions command"""
         mrg = PipPackageManager()
-
-        result = mrg.is_valid("gigantumasdfasdfasdf")
+        lb = build_lb_image_for_env[0]
+        username = build_lb_image_for_env[1]
+        result = mrg.is_valid("gigantumasdfasdfasdf", lb, username)
 
         assert result.package is False
         assert result.version is False
 
-        result = mrg.is_valid("gigantum", "10.0")
+        result = mrg.is_valid("gigantum", lb, username, package_version="10.0")
 
         assert result.package is True
         assert result.version is False
 
-        result = mrg.is_valid("gigantum", "0.1")
+        result = mrg.is_valid("gigantum", lb, username, package_version="0.1")
 
         assert result.package is True
         assert result.version is True
 
-        result = mrg.is_valid("numpy")
+        result = mrg.is_valid("numpy", lb, username)
 
         assert result.package is True
         assert result.version is False
 
-        result = mrg.is_valid("numpy", "1.11.2rc1")
+        result = mrg.is_valid("numpy", lb, username, "1.11.2rc1")
 
         assert result.package is True
         assert result.version is True
 
-        result = mrg.is_valid("numpy", "1.12.1")
+        result = mrg.is_valid("numpy", lb, username, package_version="1.12.1")
 
         assert result.package is True
         assert result.version is True
 
-        result = mrg.is_valid("numpy", "10000000")
+        result = mrg.is_valid("numpy", lb, username, "10000000")
 
         assert result.package is True
         assert result.version is False

@@ -18,48 +18,60 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 import pytest
-from lmcommon.environment.apt import AptPackageManager
+import re
 import getpass
+
+from lmcommon.environment.apt import AptPackageManager
+from lmcommon.fixtures import build_lb_image_for_env, mock_config_with_repo
 
 
 class TestAptPackageManager(object):
-    def test_search(self):
+    def test_search(self, build_lb_image_for_env):
         """Test search command"""
+        lb = build_lb_image_for_env[0]
+        username = build_lb_image_for_env[1]
         mrg = AptPackageManager()
-        result = mrg.search("libtiff")
+        result = mrg.search("libtiff", lb, username)
         assert len(result) == 7
         assert 'libtiff5' in result
 
-    @pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Cannot check apt versions on CircleCI")
-    def test_list_versions(self):
+    #@pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Cannot check apt versions on CircleCI")
+    def test_list_versions(self, build_lb_image_for_env):
         """Test list_versions command"""
         mrg = AptPackageManager()
-
-        result = mrg.list_versions("libtiff5")
+        lb = build_lb_image_for_env[0]
+        username = build_lb_image_for_env[1]
+        result = mrg.list_versions("libtiff5", lb, username)
 
         assert len(result) == 2
-        assert result[0] == "4.0.6-1ubuntu0.4"
-        assert result[1] == "4.0.6-1"
+        assert re.match('\d.\d.\d-\dubuntu\d.\d', result[0])
+        #assert result[0] == "4.0.6-1ubuntu0.4"
+        assert re.match('\d.\d.\d-\d', result[1])
+        #assert result[1] == "4.0.6-1"
 
-    @pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Cannot check apt versions on CircleCI")
-    def test_latest_version(self):
+    #@pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Cannot check apt versions on CircleCI")
+    def test_latest_version(self, build_lb_image_for_env):
         """Test latest_version command"""
         mrg = AptPackageManager()
+        lb = build_lb_image_for_env[0]
+        username = build_lb_image_for_env[1]
 
-        result = mrg.latest_version("libtiff5")
+        result = mrg.latest_version("libtiff5", lb, username)
 
-        assert result == "4.0.6-1ubuntu0.4"
+        #assert result == "4.0.6-1ubuntu0.4"
+        assert re.match('\d.\d.\d-\dubuntu\d.\d', result)
 
-    @pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Cannot check apt packages on CircleCI")
-    def test_list_installed_packages(self):
+    #@pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Cannot check apt packages on CircleCI")
+    def test_list_installed_packages(self, build_lb_image_for_env):
         """Test list_installed_packages command
 
         Note, if the contents of the container change, this test will break and need to be updated. Because of this,
         only limited asserts are made to make sure things are coming back in a reasonable format
         """
         mrg = AptPackageManager()
-
-        result = mrg.list_installed_packages()
+        lb = build_lb_image_for_env[0]
+        username = build_lb_image_for_env[1]
+        result = mrg.list_installed_packages(lb, username)
 
         assert type(result) == list
         assert len(result) > 50
@@ -68,18 +80,19 @@ class TestAptPackageManager(object):
         assert type(result[0]['version']) == str
 
     @pytest.mark.skip(reason="Cannot test for updates yet.")
-    def test_list_available_updates(self):
+    def test_list_available_updates(self, build_lb_image_for_env):
         """Test list_available_updates command
 
         Note, if the contents of the container change, this test will break and need to be updated. Because of this,
         only limited asserts are made to make sure things are coming back in a reasonable format
         """
         mrg = AptPackageManager()
-
-        result = mrg.list_available_updates()
+        lb = build_lb_image_for_env[0]
+        username = build_lb_image_for_env[1]
+        result = mrg.list_available_updates(lb, username)
 
         assert type(result) == list
-        assert len(result) < len(mrg.list_installed_packages())
+        assert len(result) < len(mrg.list_installed_packages(lb, username))
         assert type(result[0]) == dict
         assert type(result[0]['name']) == str
         assert type(result[0]['version']) == str
@@ -92,7 +105,6 @@ class TestAptPackageManager(object):
         """Test generate_docker_install_snippet command
         """
         mrg = AptPackageManager()
-
         packages = [{'name': 'mypackage', 'version': '3.1.4'}]
 
         result = mrg.generate_docker_install_snippet(packages)
@@ -115,30 +127,33 @@ class TestAptPackageManager(object):
         result = mrg.generate_docker_install_snippet(packages, single_line=True)
         assert result == ['RUN apt-get -y install mypackage yourpackage']
 
-    @pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Cannot check apt versions on CircleCI")
-    def test_list_versions_badpackage(self):
+    #@pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Cannot check apt versions on CircleCI")
+    def test_list_versions_badpackage(self, build_lb_image_for_env):
         """Test list_versions command"""
         mrg = AptPackageManager()
+        lb = build_lb_image_for_env[0]
+        username = build_lb_image_for_env[1]
 
         with pytest.raises(ValueError):
-            mrg.list_versions("asdfasdfasd")
+            mrg.list_versions("asdfasdfasd", lb, username)
 
-    @pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Cannot check apt versions on CircleCI")
-    def test_is_valid(self):
+    #@pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Cannot check apt versions on CircleCI")
+    def test_is_valid(self, build_lb_image_for_env):
         """Test list_versions command"""
         mrg = AptPackageManager()
-
-        result = mrg.is_valid("asdfasfdfdghhsfd")
+        lb = build_lb_image_for_env[0]
+        username = build_lb_image_for_env[1]
+        result = mrg.is_valid("asdfasfdfdghhsfd", lb, username)
 
         assert result.package is False
         assert result.version is False
 
-        result = mrg.is_valid("zlib1g", "10.0")
+        result = mrg.is_valid("zlib1g", package_version="10.0", labbook=lb, username=username)
 
         assert result.package is True
         assert result.version is False
 
-        result = mrg.is_valid("zlib1g", "1:1.2.8.dfsg-2ubuntu4.1")
+        result = mrg.is_valid("zlib1g", package_version="1:1.2.8.dfsg-2ubuntu4.1", labbook=lb, username=username)
 
         assert result.package is True
         assert result.version is True

@@ -18,9 +18,10 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 from typing import (List, Dict, Optional)
-from subprocess import check_output
-from lmcommon.environment.packagemanager import PackageManager, PackageValidation
 
+from lmcommon.environment.packagemanager import PackageManager, PackageValidation
+from lmcommon.container import ContainerOperations
+from lmcommon.labbook import LabBook
 from lmcommon.logging import LMLogger
 
 logger = LMLogger.get_logger()
@@ -32,7 +33,7 @@ class AptPackageManager(PackageManager):
     Note: apt is somewhat limiting in the ability to access old versions of packages
     """
 
-    def search(self, search_str: str) -> List[str]:
+    def search(self, search_str: str, labbook: LabBook, username: str) -> List[str]:
         """Method to search a package manager for packages based on a string. The string can be a partial string.
 
         Args:
@@ -41,7 +42,7 @@ class AptPackageManager(PackageManager):
         Returns:
             list(str): The list of package names that match the search string
         """
-        result = check_output(["apt-cache", "search", search_str])
+        result = ContainerOperations.run_command(f"apt-cache search {search_str}", labbook, username)
 
         packages = []
         if result:
@@ -52,7 +53,7 @@ class AptPackageManager(PackageManager):
 
         return packages
 
-    def list_versions(self, package_name: str) -> List[str]:
+    def list_versions(self, package_name: str, labbook: LabBook, username: str) -> List[str]:
         """Method to list all available versions of a package based on the package name
 
         Args:
@@ -61,7 +62,7 @@ class AptPackageManager(PackageManager):
         Returns:
             list(str): Version strings
         """
-        result = check_output(["apt-cache", "madison", package_name])
+        result = ContainerOperations.run_command(f"apt-cache madison {package_name}", labbook, username)
 
         package_versions: List[str] = []
         if result:
@@ -76,7 +77,7 @@ class AptPackageManager(PackageManager):
 
         return package_versions
 
-    def latest_version(self, package_name: str) -> str:
+    def latest_version(self, package_name: str, labbook: LabBook, username: str) -> str:
         """Method to get the latest version string for a package
 
         Args:
@@ -85,13 +86,13 @@ class AptPackageManager(PackageManager):
         Returns:
             str: latest version string
         """
-        versions = self.list_versions(package_name)
+        versions = self.list_versions(package_name, labbook, username)
         if versions:
             return versions[0]
         else:
             raise ValueError("Could not retrieve version list for provided package name")
 
-    def latest_versions(self, package_names: List[str]) -> List[str]:
+    def latest_versions(self, package_names: List[str], labbook: LabBook, username: str) -> List[str]:
         """Method to get the latest version string for a list of packages
 
         Args:
@@ -100,9 +101,9 @@ class AptPackageManager(PackageManager):
         Returns:
             list: latest version strings
         """
-        return [self.latest_version(pkg) for pkg in package_names]
+        return [self.latest_version(pkg, labbook, username) for pkg in package_names]
 
-    def list_installed_packages(self) -> List[Dict[str, str]]:
+    def list_installed_packages(self, labbook: LabBook, username: str) -> List[Dict[str, str]]:
         """Method to get a list of all packages that are currently installed
 
         Note, this will return results for the computer/container in which it is executed. To get the properties of
@@ -113,7 +114,7 @@ class AptPackageManager(PackageManager):
         Returns:
             list
         """
-        result = check_output(["apt", "list", "--installed"])
+        result = ContainerOperations.run_command("apt list --installed", labbook, username)
 
         packages = []
         if result:
@@ -127,7 +128,7 @@ class AptPackageManager(PackageManager):
 
         return packages
 
-    def list_available_updates(self) -> List[Dict[str, str]]:
+    def list_available_updates(self, labbook: LabBook, username: str) -> List[Dict[str, str]]:
         """Method to get a list of all installed packages that could be updated and the new version string
 
         Note, this will return results for the computer/container in which it is executed. To get the properties of
@@ -139,21 +140,21 @@ class AptPackageManager(PackageManager):
         Returns:
             list
         """
-        result = check_output(["apt", "list", "--upgradable"])
+        result = ContainerOperations.run_command("apt list --upgradable", labbook, username)
 
         packages = []
         if result:
             lines = result.decode('utf-8').split('\n')
             for line in lines:
                 if line is not None and line != "Listing..." and "/" in line:
-                    package_name, version_info = line.split("/")
-                    version_info = version_info.split(' ')
+                    package_name, version_info_t = line.split("/")
+                    version_info = version_info_t.split(' ')
                     packages.append({'name': package_name, 'latest_version': version_info[1],
                                      'version': version_info[5][:-1]})
 
         return packages
 
-    def is_valid(self, package_name: str, package_version: Optional[str] = None) -> PackageValidation:
+    def is_valid(self, package_name: str, labbook: LabBook, username: str, package_version: Optional[str] = None) -> PackageValidation:
         """Method to validate package names and versions
 
         result should be in the format {package: bool, version: bool}
@@ -169,7 +170,7 @@ class AptPackageManager(PackageManager):
         invalid_result = PackageValidation(package=False, version=False)
 
         try:
-            version_list = self.list_versions(package_name)
+            version_list = self.list_versions(package_name, labbook, username)
         except ValueError:
             return invalid_result
 

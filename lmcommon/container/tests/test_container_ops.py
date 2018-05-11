@@ -29,7 +29,7 @@ from lmcommon.configuration import get_docker_client
 from lmcommon.container import ContainerOperations
 from lmcommon.container.utils import infer_docker_image_name
 from lmcommon.fixtures import build_lb_image_for_jupyterlab, mock_config_with_repo
-from lmcommon.container.exceptions import ContainerBuildException
+from lmcommon.container.exceptions import ContainerBuildException, ContainerException
 
 
 class TestContainerOps(object):
@@ -62,6 +62,22 @@ class TestContainerOps(object):
         l = [a for a in client.containers.get(container_id=container_id).exec_run(
             'sh -c "ps aux | grep jupyter-lab | grep -v \' grep \'"', user='giguser').decode().split('\n') if a]
         assert len(l) == 1
+
+    def test_run_command(self, build_lb_image_for_jupyterlab):
+        my_lb = build_lb_image_for_jupyterlab[0]
+        docker_image_id = build_lb_image_for_jupyterlab[3]
+
+        result = ContainerOperations.run_command("echo My sample message", my_lb, username="unittester")
+        assert result.decode().strip() == 'My sample message'
+
+        result = ContainerOperations.run_command("pip search gigantum", my_lb, username="unittester")
+        assert any(['Gigantum Platform' in l for l in result.decode().strip().split('\n')])
+
+        result = ContainerOperations.run_command("/bin/true", my_lb, username="unittester")
+        assert result.decode().strip() == ""
+
+        with pytest.raises(ContainerException):
+            ContainerOperations.run_command("/bin/false", my_lb, username="unittester")
 
     def test_start_container(self, build_lb_image_for_jupyterlab):
         # Check the resulting port mapping to confirm there are some mapped ports in there.

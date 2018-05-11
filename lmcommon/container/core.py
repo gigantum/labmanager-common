@@ -24,7 +24,6 @@ from typing import Optional, List, Tuple, Any, Dict
 
 from lmcommon.configuration import get_docker_client
 from lmcommon.portmap import PortMap
-from lmcommon.environment import ComponentManager
 from lmcommon.labbook import LabBook
 from lmcommon.container.utils import infer_docker_image_name
 from lmcommon.container.exceptions import ContainerBuildException
@@ -82,7 +81,8 @@ def build_docker_image(root_dir: str, override_image_tag: Optional[str], nocache
     return docker_image.short_id.split(':')[1]
 
 
-def start_labbook_container(labbook_root: str, config_path: str, override_image_id: Optional[str] = None,
+def start_labbook_container(labbook_root: str, config_path: str,
+                            override_image_id: Optional[str] = None,
                             username: Optional[str] = None) -> Tuple[str, Dict[str, Any]]:
     """ Start a Docker container from a given image_name.
 
@@ -107,11 +107,11 @@ def start_labbook_container(labbook_root: str, config_path: str, override_image_
     else:
         tag = override_image_id
 
-    opened_ports: List[Tuple] = []
-    env_manager = ComponentManager(lb)
-    if 'jupyterlab' in env_manager.base_fields['development_tools']:
-        # List of tuples where the first entry is the CONTAINER port and second is the desired HOST port
-        opened_ports = [(8888, 8890)]
+    # List of tuples where the first entry is the CONTAINER port and second is the desired HOST port
+    # TODO - This is the hard-coded ports for JupyterLab. This method should be parameterized
+    # with port tuples in the future. (It cannot directly query other top-level modules otherwise
+    # a circular dependency will occur)
+    opened_ports: List[Tuple] = [(8888, 8890)]
 
     portmap = PortMap(lb.labmanager_config)
     exposed_ports = {f"{port[0]}/tcp": portmap.assign(lb.key, "0.0.0.0", port[1]) for port in opened_ports}

@@ -430,7 +430,7 @@ def build_lb_image_for_jupyterlab(mock_config_with_repo):
     cm.add_component("base", ENV_UNIT_TEST_REPO, ENV_UNIT_TEST_BASE, ENV_UNIT_TEST_REV)
     n = cm.add_package("pip", "requests", "2.18.4")
 
-    ib = ImageBuilder(lb.root_dir)
+    ib = ImageBuilder(lb)
     docker_lines = ib.assemble_dockerfile(write=True)
     pprint.pprint(docker_lines)
     assert 'RUN pip install requests==2.18.4' in docker_lines
@@ -446,7 +446,7 @@ def build_lb_image_for_jupyterlab(mock_config_with_repo):
         lb, container_id, port_maps = ContainerOperations.start_container(lb, username="unittester")
 
         assert isinstance(container_id, str)
-        yield lb, ib, client, docker_image_id, container_id, port_maps
+        yield lb, ib, client, docker_image_id, container_id, port_maps, 'unittester'
 
         try:
             _, s = ContainerOperations.stop_container(labbook=lb, username="unittester")
@@ -462,10 +462,46 @@ def build_lb_image_for_jupyterlab(mock_config_with_repo):
         except:
             pass
 
-        ContainerOperations.delete_image(labbook=lb, username='unittester')
+        # Remove image if it's still there
+        try:
+            ContainerOperations.delete_image(labbook=lb, username='unittester')
+            client.images.remove(docker_image_id, force=True, noprune=False)
+        except:
+            pass
+
+        try:
+            client.images.remove(docker_image_id, force=True, noprune=False)
+        except:
+            pass
+
+
+@pytest.fixture #(scope='method')
+def build_lb_image_for_env(mock_config_with_repo):
+    # Create a labook
+    lb = LabBook(mock_config_with_repo[0])
+    labbook_dir = lb.new(name="containerunittestbookenv", description="Testing environment functions.",
+                         owner={"username": "unittester"})
+    # Create Component Manager
+    cm = ComponentManager(lb)
+    # Add a component
+    cm.add_component("base", ENV_UNIT_TEST_REPO, ENV_UNIT_TEST_BASE, ENV_UNIT_TEST_REV)
+
+    ib = ImageBuilder(lb)
+    ib.assemble_dockerfile(write=True)
+    client = get_docker_client()
+    client.containers.prune()
+
+    try:
+        lb, docker_image_id = ContainerOperations.build_image(labbook=lb, username="unittester")
+
+        yield lb, 'unittester'
+
+    finally:
+        shutil.rmtree(lb.root_dir)
 
         # Remove image if it's still there
         try:
             client.images.remove(docker_image_id, force=True, noprune=False)
         except:
             pass
+

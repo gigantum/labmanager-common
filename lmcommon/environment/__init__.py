@@ -6,6 +6,8 @@ from lmcommon.environment.pip import PipPackageManager
 from lmcommon.environment.conda import Conda2PackageManager, Conda3PackageManager
 from lmcommon.environment.apt import AptPackageManager
 
+from lmcommon.labbook import LabBook
+
 
 def get_package_manager(manager: str) -> PackageManager:
     """Helper class to instantiate a package manager based on manager string"""

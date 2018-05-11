@@ -188,7 +188,7 @@ class TestDispatcher(object):
         cm.add_component("base", lmcommon.fixtures.ENV_UNIT_TEST_REPO, 'ut-busybox',
                          0)
 
-        ib = ImageBuilder(lb.root_dir)
+        ib = ImageBuilder(lb)
         ib.assemble_dockerfile(write=True)
         assert os.path.exists(os.path.join(labbook_dir, '.gigantum', 'env', 'Dockerfile'))
         docker_kwargs = {
@@ -234,7 +234,7 @@ class TestDispatcher(object):
         cm = ComponentManager(lb)
         cm.add_component("base", lmcommon.fixtures.ENV_UNIT_TEST_REPO, 'ut-busybox', 0)
 
-        ib = ImageBuilder(lb.root_dir)
+        ib = ImageBuilder(lb)
         ib.assemble_dockerfile(write=True)
 
         docker_kwargs = {
