@@ -86,7 +86,7 @@ class LMLogger(object):
 
 
 class time_profiler(object):
-    def __init__(self, logger: LMLogger):
+    def __init__(self, logger: LMLogger) -> None:
         self.logger = logger
 
     def __call__(self, f):
