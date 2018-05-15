@@ -25,7 +25,7 @@ from typing import Optional, List
 
 from lmcommon.gitlib.gitlab import GitLabManager
 from lmcommon.labbook import LabBook, LabbookException, LabbookMergeException
-from lmcommon.logging import LMLogger
+from lmcommon.logging import LMLogger, time_profiler
 
 logger = LMLogger.get_logger()
 
@@ -71,6 +71,7 @@ def call_subprocess(cmd_tokens: List[str], cwd: str, check: bool = True) -> None
         raise
 
 
+@time_profiler(logger)
 def git_garbage_collect(labbook: LabBook) -> None:
     """Run "git gc" (garbage collect) over the repo. If run frequently enough, this only takes a short time
     even on large repos.
@@ -93,6 +94,7 @@ def git_garbage_collect(labbook: LabBook) -> None:
         logger.warning(f"Ignore `git gc` error - {str(labbook)} repo remains unpruned")
 
 
+@time_profiler(logger)
 def push(labbook: LabBook, remote: str) -> None:
     """Push commits to a remote git repository. Assume current working branch.
 
@@ -116,6 +118,7 @@ def push(labbook: LabBook, remote: str) -> None:
         raise GitLabRemoteError(e)
 
 
+@time_profiler(logger)
 def pull(labbook: LabBook, remote: str) -> None:
     """Pull and update from a remote git repository
 
@@ -139,6 +142,7 @@ def pull(labbook: LabBook, remote: str) -> None:
         raise GitLabRemoteError(e)
 
 
+@time_profiler(logger)
 def create_remote_gitlab_repo(labbook: LabBook, username: str, access_token: Optional[str] = None) -> None:
     """Create a new repository in GitLab,
 
@@ -164,6 +168,7 @@ def create_remote_gitlab_repo(labbook: LabBook, username: str, access_token: Opt
         raise GitLabRemoteError(e)
 
 
+@time_profiler(logger)
 def publish_to_remote(labbook: LabBook, username: str, remote: str) -> None:
     # Current branch must be the user's workspace.
     if f'gm.workspace-{username}' != labbook.active_branch:
@@ -202,6 +207,7 @@ def publish_to_remote(labbook: LabBook, username: str, remote: str) -> None:
     labbook.checkout_branch(branch_name=f'gm.workspace-{username}')
 
 
+@time_profiler(logger)
 def sync_with_remote(labbook: LabBook, username: str, remote: str, force: bool) -> int:
     """Sync workspace and personal workspace with the remote.
 
@@ -275,6 +281,7 @@ def sync_with_remote(labbook: LabBook, username: str, remote: str, force: bool) 
         labbook.checkout_branch(f"gm.workspace-{username}")
 
 
+@time_profiler(logger)
 def sync_locally(labbook: LabBook, username: Optional[str] = None) -> None:
     """Sync locally only to gm.workspace branch - don't do anything with remote. Creates a user's
      local workspace if necessary.

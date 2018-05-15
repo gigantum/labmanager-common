@@ -38,7 +38,7 @@ from natsort import natsorted
 
 from lmcommon.configuration import Configuration, get_docker_client
 from lmcommon.gitlib import get_git_interface, GitAuthor, GitRepoInterface
-from lmcommon.logging import LMLogger
+from lmcommon.logging import LMLogger, time_profiler
 from lmcommon.labbook.schemas import validate_labbook_schema
 from lmcommon.labbook import shims
 from lmcommon.activity import ActivityStore, ActivityType, ActivityRecord, ActivityDetailType, ActivityDetailRecord
@@ -475,6 +475,7 @@ class LabBook(object):
         """
         return ''.join(c for c in value if c not in '\<>?/;"`\'')
 
+    @time_profiler(logger)
     def _sweep_uncommitted_changes(self) -> None:
         if not self.is_repo_clean:
             logger.warning('Untracked changes detected; calling sweep;')
@@ -586,6 +587,7 @@ class LabBook(object):
             logger.error(e)
             return False
 
+    @time_profiler(logger)
     def checkout_branch(self, branch_name: str, new: bool = False) -> None:
         """
         Checkout a Git branch. Create a new branch locally.
@@ -615,6 +617,7 @@ class LabBook(object):
             logger.error(f"Cannot checkout branch {branch_name}: {e}")
             raise LabbookException(e)
 
+    @time_profiler(logger)
     def get_commits_behind_remote(self, remote_name: str = "origin") -> Tuple[str, int]:
         """Return the number of commits local branch is behind remote. Note, only works with
         currently checked-out branch.
@@ -1287,6 +1290,7 @@ class LabBook(object):
 
         return favorite_data
 
+    @time_profiler(logger)
     def new(self, owner: Dict[str, str], name: str, username: Optional[str] = None,
             description: Optional[str] = None, bypass_lfs: bool = False) -> str:
         """Method to create a new minimal LabBook instance on disk
@@ -1512,6 +1516,7 @@ class LabBook(object):
             ars = ActivityStore(self)
             ars.create_activity_record(ar)
 
+    @time_profiler(logger)
     def from_directory(self, root_dir: str) -> None:
         """Method to populate a LabBook instance from a directory
 
@@ -1536,6 +1541,7 @@ class LabBook(object):
         if self.active_branch == 'master':
             shims.to_workspace_branch(self)
 
+    @time_profiler(logger)
     def from_name(self, username: str, owner: str, labbook_name: str):
         """Method to populate a LabBook instance based on the user and name of the labbook
 
@@ -1578,6 +1584,7 @@ class LabBook(object):
         if self.name != dname:
             raise ValueError(f"Labbook name {self.name} does not match directory name {dname}")
 
+    @time_profiler(logger)
     def from_remote(self, remote_url: str, username: str, owner: str, labbook_name: str):
         """Clone a labbook from a remote Git repository.
 
@@ -1646,6 +1653,7 @@ class LabBook(object):
         # Once the git repo is cloned, the problem just becomes a regular import from file system.
         self.from_directory(est_root_dir)
 
+    @time_profiler(logger)
     def list_local_labbooks(self, username: str,
                             sort_mode: str = "az",
                             reverse: bool = False) -> List[Dict[str, str]]:

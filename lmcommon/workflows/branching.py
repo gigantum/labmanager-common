@@ -21,7 +21,7 @@ import git
 import subprocess
 from typing import Optional, List
 
-from lmcommon.logging import LMLogger
+from lmcommon.logging import LMLogger, time_profiler
 from lmcommon.labbook import LabBook
 from lmcommon.workflows.core import call_subprocess
 
@@ -77,6 +77,7 @@ class BranchManager(object):
             # If on a feature branch, can only return
             return [self.workspace_branch]
 
+    @time_profiler(logger)
     def create_branch(self, title: str, description: Optional[str] = None, revision: Optional[str] = None) -> str:
         """Create and checkout (work on) a new managed branch."""
         if not self.is_branch_name_valid(title):
@@ -108,6 +109,7 @@ class BranchManager(object):
 
         return full_branch_name
 
+    @time_profiler(logger)
     def remove_branch(self, target_branch: str) -> None:
         """Delete a local feature branch that is NOT the active branch.
 
@@ -134,6 +136,7 @@ class BranchManager(object):
         if target_branch in self.branches:
             raise BranchWorkflowViolation(f'Removal of branch `{target_branch}` in {str(self.labbook)} failed.')
 
+    @time_profiler(logger)
     def workon_branch(self, branch_name: str):
         """Checkouts a branch as the working revision. """
 
@@ -145,6 +148,7 @@ class BranchManager(object):
             self.labbook.checkout_branch(branch_name=branch_name)
             logger.info(f'Activated new branch {self.active_branch} in {str(self.labbook)}')
 
+    @time_profiler(logger)
     def merge_from(self, other_branch: str, force: bool = False):
         """Pulls/merges `other_branch` into current branch. """
 

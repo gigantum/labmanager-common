@@ -22,6 +22,7 @@ import json
 import logging
 import logging.config
 import os
+import time
 import tempfile
 
 from typing import (Any, Dict, Tuple)
@@ -82,3 +83,22 @@ class LMLogger(object):
         else:
             # Load default file out of python package
             return os.path.join(resource_filename("lmcommon", "logging"), "logging.json.default"), True
+
+
+class time_profiler(object):
+    def __init__(self, logger: LMLogger):
+        self.logger = logger
+
+    def __call__(self, f):
+        def profiler(*args, **kwargs):
+            t0 = time.time()
+            try:
+                r = f(*args, **kwargs)
+                tfinish = time.time()
+                self.logger.info(f"(method={f.__name__},time={tfinish-t0},exception=None)")
+                return r
+            except Exception as e:
+                tfail = time.time()
+                self.logger.info(f"(method={f.__name__},time={tfail-t0},exception={str(type(e))})")
+                raise
+        return profiler
