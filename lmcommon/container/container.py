@@ -114,7 +114,9 @@ class ContainerOperations(object):
                                                                    username=username)
         t0 = time.time()
         try:
-            result = get_docker_client().containers.run(image_name, cmd_text, entrypoint=[])
+            # Note, for container docs see: http://docker-py.readthedocs.io/en/stable/containers.html
+            result = get_docker_client().containers.run(image_name, cmd_text, entrypoint=[],
+                                                        remove=True)
         except docker.errors.ContainerError as e:
             tfail = time.time()
             logger.error(f'Command ({cmd_text}) failed after {tfail-t0}s - '
