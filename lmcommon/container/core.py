@@ -74,7 +74,8 @@ def build_docker_image(root_dir: str, override_image_tag: Optional[str], nocache
         pass
 
     try:
-        docker_image = get_docker_client().images.build(path=env_dir, tag=image_name, pull=True, nocache=nocache)
+        docker_image = get_docker_client().images.build(path=env_dir, tag=image_name, pull=True, nocache=nocache,
+                                                        forcerm=True)
     except docker.errors.BuildError as e:
         raise ContainerBuildException(e)
 

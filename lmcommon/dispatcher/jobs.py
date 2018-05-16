@@ -199,7 +199,6 @@ def build_labbook_image(path: str, username: Optional[str] = None,
     logger.info(f"Starting build_labbook_image({path}, {username}, {tag}, {nocache}) in pid {os.getpid()}")
 
     try:
-
         image_id = build_image(path, override_image_tag=tag, nocache=nocache, username=username)
         logger.info(f"Completed build_labbook_image in pid {os.getpid()}: {image_id}")
         return image_id
