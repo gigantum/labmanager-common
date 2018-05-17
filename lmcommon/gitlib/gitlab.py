@@ -262,6 +262,20 @@ class GitLabManager(object):
         else:
             logger.info(f"Created remote repository {namespace}/{labbook_name}")
 
+        # Add project to quota service
+        try:
+            response = requests.post(f"https://{self.admin_service}/webhook/{namespace}/{labbook_name}",
+                                     headers={"Authorization": f"Bearer {self.access_token}"}, timeout=30)
+            if response.status_code != 201:
+                logger.error(f"Failed to configure quota webhook: {response.status_code}")
+                logger.error(response.json)
+            else:
+                logger.info(f"Configured webhook for {namespace}/{labbook_name}")
+
+        except Exception as err:
+            # Don't let quota service errors stop you from continuing
+            logger.error(f"Failed to configure quota webhook: {err}")
+
     def remove_labbook(self, namespace: str, labbook_name: str) -> None:
         """Method to remove the remote repository
 
@@ -274,6 +288,20 @@ class GitLabManager(object):
         """
         if not self.labbook_exists(namespace, labbook_name):
             raise ValueError("Cannot remove remote repository that does not exist")
+
+        # Remove project from quota service
+        try:
+            response = requests.delete(f"https://{self.admin_service}/webhook/{namespace}/{labbook_name}",
+                                       headers={"Authorization": f"Bearer {self.access_token}"}, timeout=20)
+            if response.status_code != 204:
+                logger.error(f"Failed to remove quota webhook: {response.status_code}")
+                logger.error(response.json)
+            else:
+                logger.info(f"Removed webhook for {namespace}/{labbook_name}")
+
+        except Exception as err:
+            # Don't let quota service errors stop you from continuing
+            logger.error(f"Failed to remove quota webhook: {err}")
 
         # Call API to remove project
         repo_id = self.get_repository_id(namespace, labbook_name)

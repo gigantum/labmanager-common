@@ -105,6 +105,11 @@ class TestGitLabManager(object):
                               "description": "",
                             },
                       status=201)
+        responses.add(responses.POST, 'https://usersrv.gigantum.io/webhook/testuser/new-labbook',
+                      json={
+                              "success": True
+                            },
+                      status=201)
         responses.add(responses.GET, 'https://repo.gigantum.io/api/v4/projects/testuser%2Fnew-labbook',
                       json=[{
                                 "message": "404 Project Not Found"
@@ -396,6 +401,9 @@ class TestGitLabManager(object):
                                 "message": "404 Project Not Found"
                             }],
                       status=404)
+        responses.add(responses.DELETE, 'https://usersrv.gigantum.io/webhook/testuser/new-labbook',
+                      json={},
+                      status=204)
 
         assert gitlab_mngr_fixture.labbook_exists("testuser", "new-labbook") is True
 
