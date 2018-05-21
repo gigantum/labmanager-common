@@ -175,7 +175,14 @@ class ContainerOperations(object):
         pm = PortMap(labbook.labmanager_config)
         pm.release(labbook.key)
 
-        return labbook, stop_labbook_container(n)
+        try:
+            stopped = stop_labbook_container(n)
+        finally:
+            # Save state of LB when container turned off.
+            with labbook.lock_labbook():
+                labbook._sweep_uncommitted_changes()
+
+        return labbook, stopped
 
     @classmethod
     def start_dev_tool(cls, labbook: LabBook, dev_tool_name: str,
