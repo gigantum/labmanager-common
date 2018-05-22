@@ -66,8 +66,8 @@ class TestFileOps(object):
         x, y, lb = mock_labbook
 
         # 2 - Add a file to the input directory using the old-fashioned add file op.
-        with open('/tmp/unittestfile', 'w') as f:
-            f.write('xxxxxxxxxxxxxxxč')
+        with open('/tmp/unittestfile', 'wb') as f:
+            f.write("xxxxxxxxxxxxxxxč".encode('utf-8'))
         r = lb.insert_file(section="input", src_file=f.name, dst_dir='')
         assert os.path.isfile(os.path.join(lb.root_dir, 'input', 'unittestfile'))
 
@@ -114,8 +114,8 @@ class TestFileOps(object):
         hash_1 = lb.git.commit_hash
         assert hash_0 != hash_1
 
-        with open('/tmp/unittestfile', 'w') as f:
-            f.write('àbčdęfghįjkłmñöpqrštūvwxÿż0123456789')
+        with open('/tmp/unittestfile', 'wb') as f:
+            f.write('àbčdęfghįjkłmñöpqrštūvwxÿż0123456789'.encode('utf-8'))
         assert not os.path.exists(os.path.join(lb.root_dir, 'input', 'unittestfile'))
         r = lb.insert_file(section="input", src_file=f.name, dst_dir='')
         assert os.path.exists(os.path.join(lb.root_dir, 'input', 'unittestfile'))
@@ -133,8 +133,8 @@ class TestFileOps(object):
         lb.makedir('input/sample-untracked-dir/nested-dir')
         hash_4 = lb.git.commit_hash
         assert hash_3 == hash_4
-        with open('/tmp/unittestfile', 'w') as f:
-            f.write('aaaaaæ')
+        with open('/tmp/unittestfile', 'wb') as f:
+            f.write('aaaaaæ'.encode('utf-8'))
         lb.insert_file(section='input', src_file=f.name, dst_dir='sample-untracked-dir/nested-dir')
         hash_5 = lb.git.commit_hash
         assert hash_4 == hash_5
