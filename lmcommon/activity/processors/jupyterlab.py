@@ -22,7 +22,7 @@ from typing import (Any, Dict, List)
 from lmcommon.logging import LMLogger
 
 from lmcommon.activity.processors.processor import ActivityProcessor, ExecutionData
-from lmcommon.activity import ActivityRecord, ActivityDetailType, ActivityDetailRecord
+from lmcommon.activity import ActivityRecord, ActivityDetailType, ActivityDetailRecord, ActivityAction
 from lmcommon.labbook import LabBook
 
 
@@ -52,6 +52,7 @@ class JupyterLabCodeProcessor(ActivityProcessor):
                 if result_entry.get('code'):
                     # Create detail record to capture executed code
                     adr_code = ActivityDetailRecord(ActivityDetailType.CODE_EXECUTED, show=False,
+                                                    action=ActivityAction.EXECUTE,
                                                     importance=max(255-result_cnt, 0))
 
                     adr_code.add_value('text/markdown', f"```\n{result_entry.get('code')}\n```")
@@ -91,7 +92,8 @@ class JupyterLabFileChangeProcessor(ActivityProcessor):
 
             activity_type, activity_detail_type, section = LabBook.infer_section_from_relative_path(filename)
 
-            adr = ActivityDetailRecord(activity_detail_type, show=False, importance=max(255-cnt, 0))
+            adr = ActivityDetailRecord(activity_detail_type, show=False, importance=max(255-cnt, 0),
+                                       action=ActivityAction.CREATE)
             if section == "LabBook Root":
                 msg = f"Created new file `{filename}` in the LabBook Root."
                 msg = f"{msg}Note, it is best practice to use the Code, Input, and Output sections exclusively."
@@ -108,7 +110,18 @@ class JupyterLabFileChangeProcessor(ActivityProcessor):
 
             activity_type, activity_detail_type, section = LabBook.infer_section_from_relative_path(filename)
 
-            adr = ActivityDetailRecord(activity_detail_type, show=False, importance=max(255-cnt, 0))
+            if change == "deleted":
+                action = ActivityAction.DELETE
+            elif change == "added":
+                action = ActivityAction.CREATE
+            elif change == "modified":
+                action = ActivityAction.EDIT
+            elif change == "renamed":
+                action = ActivityAction.EDIT
+            else:
+                action = ActivityAction.NOACTION
+
+            adr = ActivityDetailRecord(activity_detail_type, show=False, importance=max(255-cnt, 0), action=action)
             adr.add_value('text/markdown', f"{change[0].upper() + change[1:]} {section} file `{filename}`")
             result_obj.add_detail_object(adr)
             cnt += 1
@@ -132,8 +145,9 @@ class JupyterLabPlaintextProcessor(ActivityProcessor):
         Returns:
             ActivityNote
         """
-        # Only store up to 1MB of plain text result data (if the user printed a TON don't save it all)
-        truncate_at = 1000 * 1000
+        # Only store up to 64kB of plain text result data (if the user printed a TON don't save it all)
+        truncate_at = 64 * 1000
+        max_show_len = 280
 
         result_cnt = 0
         for cell in data:
@@ -149,7 +163,9 @@ class JupyterLabPlaintextProcessor(ActivityProcessor):
                         text_data = result_entry['data']['text/plain']
 
                         if len(text_data) > 0:
-                            adr = ActivityDetailRecord(ActivityDetailType.RESULT, show=True,
+                            adr = ActivityDetailRecord(ActivityDetailType.RESULT,
+                                                       show=True if len(text_data) < max_show_len else False,
+                                                       action=ActivityAction.CREATE,
                                                        importance=max(255-result_cnt-100, 0))
 
                             if len(text_data) <= truncate_at:
@@ -193,9 +209,9 @@ class JupyterLabImageExtractorProcessor(ActivityProcessor):
                         if mime_type in supported_image_types:
                             # You got an image
                             adr_img = ActivityDetailRecord(ActivityDetailType.RESULT, show=True,
+                                                           action=ActivityAction.CREATE,
                                                            importance=max(255-result_cnt, 0))
 
-                            # TODO: Re-encode and re-size images here before saving
                             adr_img.add_value(mime_type, result_entry['data'][mime_type])
 
                             adr_img.tags = cell.tags
@@ -206,7 +222,5 @@ class JupyterLabImageExtractorProcessor(ActivityProcessor):
                                 metadata['path'])
 
                             result_cnt += 1
-
-                            result_obj.message = f"{result_obj.message} and generated results"
 
         return result_obj

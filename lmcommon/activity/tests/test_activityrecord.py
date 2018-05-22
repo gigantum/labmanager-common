@@ -19,7 +19,9 @@
 # SOFTWARE.
 import pytest
 import json
-from lmcommon.activity.records import ActivityDetailRecord, ActivityDetailType, ActivityRecord, ActivityType
+import datetime
+from lmcommon.activity.records import ActivityDetailRecord, ActivityDetailType, ActivityRecord, ActivityType, \
+    ActivityAction
 
 
 class TestActivityRecord(object):
@@ -173,20 +175,48 @@ class TestActivityRecord(object):
 msg:added some code**
 metadata:{"show":true,"importance":50,"type":2,"linked_commit":"aaaaaaaa","tags":null}**
 details:**
-4,1,0,my_fake_detail_key**
+4,1,0,my_fake_detail_key,0**
 _GTM_ACTIVITY_END_"""
 
     def test_from_log_str(self):
         """Test the creating from a log string"""
-        ar = ActivityDetailRecord.from_log_str("5,1,25,my_key")
 
-        assert type(ar) == ActivityDetailRecord
-        assert ar.type == ActivityDetailType.INPUT_DATA
-        assert ar.key == "my_key"
+        test_str = """_GTM_ACTIVITY_START_**
+msg:added some code**
+metadata:{"show":true,"importance":50,"type":2,"linked_commit":"aaaaaaaa","tags":["test"]}**
+details:**
+4,1,255,my_fake_detail_key,0**
+2,0,0,my_fake_detail_key2,3**
+_GTM_ACTIVITY_END_"""
+
+        ar = ActivityRecord.from_log_str(test_str, "bbbbbb", datetime.datetime.utcnow())
+
+        assert type(ar) == ActivityRecord
+        assert ar.type == ActivityType.CODE
         assert ar.show is True
-        assert ar.importance == 25
-        assert ar.tags == []
-        assert ar.data == {}
+        assert ar.importance == 50
+        assert ar.linked_commit == "aaaaaaaa"
+        assert ar.commit == "bbbbbb"
+        assert ar.tags == ['test']
+        
+        assert len(ar.detail_objects) == 2
+        assert type(ar.detail_objects[0][3]) == ActivityDetailRecord
+        assert ar.detail_objects[0][3].type == ActivityDetailType.CODE
+        assert ar.detail_objects[0][3].action == ActivityAction.NOACTION
+        assert ar.detail_objects[0][3].key == "my_fake_detail_key"
+        assert ar.detail_objects[0][3].show is True
+        assert ar.detail_objects[0][3].importance == 255
+        assert ar.detail_objects[0][3].tags == []
+        assert ar.detail_objects[0][3].is_loaded is False
+
+        assert type(ar.detail_objects[1][3]) == ActivityDetailRecord
+        assert ar.detail_objects[1][3].type == ActivityDetailType.RESULT
+        assert ar.detail_objects[1][3].action == ActivityAction.DELETE
+        assert ar.detail_objects[1][3].key == "my_fake_detail_key2"
+        assert ar.detail_objects[1][3].show is False
+        assert ar.detail_objects[1][3].importance == 0
+        assert ar.detail_objects[1][3].tags == []
+        assert ar.detail_objects[1][3].is_loaded is False
 
     def test_update_detail_object(self):
         """Test converting to a dictionary"""

@@ -29,7 +29,8 @@ from typing import Optional
 from lmcommon.labbook import LabBook, LabbookException
 from lmcommon.environment import ComponentRepository  # type: ignore
 from lmcommon.logging import LMLogger
-from lmcommon.activity import ActivityStore, ActivityType, ActivityRecord, ActivityDetailType, ActivityDetailRecord
+from lmcommon.activity import ActivityStore, ActivityType, ActivityRecord, ActivityDetailType, ActivityDetailRecord, \
+    ActivityAction
 from lmcommon.labbook.schemas import CURRENT_SCHEMA
 
 logger = LMLogger.get_logger()
@@ -170,7 +171,7 @@ exec gosu giguser "$@"
             short_message = f"Wrote custom Docker snippet `{name}`"
             self.labbook.git.add(docker_file)
             commit = self.labbook.git.commit(short_message)
-            adr = ActivityDetailRecord(ActivityDetailType.ENVIRONMENT, show=True)
+            adr = ActivityDetailRecord(ActivityDetailType.ENVIRONMENT, show=True, action=ActivityAction.CREATE)
             adr.add_value('text/plain', '\n'.join(docker_content))
             ar = ActivityRecord(ActivityType.ENVIRONMENT,
                                 message=short_message,
@@ -201,7 +202,7 @@ exec gosu giguser "$@"
             short_message = f"Removed custom Docker snippet `{name}`"
             logger.info(short_message)
             commit = self.labbook.git.commit(short_message)
-            adr = ActivityDetailRecord(ActivityDetailType.ENVIRONMENT, show=False)
+            adr = ActivityDetailRecord(ActivityDetailType.ENVIRONMENT, show=False, action=ActivityAction.DELETE)
             adr.add_value('text/plain', short_message)
             ar = ActivityRecord(ActivityType.ENVIRONMENT,
                                 message=short_message,
@@ -275,11 +276,12 @@ exec gosu giguser "$@"
         commit = self.labbook.git.commit(short_message)
 
         # Create detail record
-        adr = ActivityDetailRecord(ActivityDetailType.ENVIRONMENT, show=False)
+        adr = ActivityDetailRecord(ActivityDetailType.ENVIRONMENT, show=False, action=ActivityAction.CREATE)
         adr.add_value('text/plain', short_message)
 
         # Create activity record
         ar = ActivityRecord(ActivityType.ENVIRONMENT,
+                            show=True,
                             message=short_message,
                             linked_commit=commit.hexsha,
                             tags=["environment", 'package_manager', package_manager])
@@ -329,12 +331,13 @@ exec gosu giguser "$@"
         commit = self.labbook.git.commit(short_message)
 
         # Create detail record
-        adr = ActivityDetailRecord(ActivityDetailType.ENVIRONMENT, show=False)
+        adr = ActivityDetailRecord(ActivityDetailType.ENVIRONMENT, show=False, action=ActivityAction.DELETE)
         adr.add_value('text/plain', short_message)
 
         # Create activity record
         ar = ActivityRecord(ActivityType.ENVIRONMENT,
                             message=short_message,
+                            show=True,
                             linked_commit=commit.hexsha,
                             tags=["environment", 'package_manager', package_manager])
         ar.add_detail_object(adr)
@@ -412,7 +415,7 @@ exec gosu giguser "$@"
         long_message = "{}  - revision: {}\n".format(long_message, revision)
 
         # Create detail record
-        adr = ActivityDetailRecord(ActivityDetailType.ENVIRONMENT, show=False)
+        adr = ActivityDetailRecord(ActivityDetailType.ENVIRONMENT, show=False, action=ActivityAction.CREATE)
         adr.add_value('text/plain', long_message)
 
         # Create activity record
@@ -466,11 +469,12 @@ exec gosu giguser "$@"
         commit = self.labbook.git.commit(short_message)
 
         # Create detail record
-        adr = ActivityDetailRecord(ActivityDetailType.ENVIRONMENT, show=False)
+        adr = ActivityDetailRecord(ActivityDetailType.ENVIRONMENT, show=False, action=ActivityAction.DELETE)
         adr.add_value('text/plain', short_message)
 
         # Create activity record
         ar = ActivityRecord(ActivityType.ENVIRONMENT,
+                            show=True,
                             message=short_message,
                             linked_commit=commit.hexsha,
                             tags=["environment", component_class])

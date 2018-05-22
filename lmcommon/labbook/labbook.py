@@ -41,7 +41,8 @@ from lmcommon.gitlib import get_git_interface, GitAuthor, GitRepoInterface
 from lmcommon.logging import LMLogger
 from lmcommon.labbook.schemas import validate_labbook_schema
 from lmcommon.labbook import shims
-from lmcommon.activity import ActivityStore, ActivityType, ActivityRecord, ActivityDetailType, ActivityDetailRecord
+from lmcommon.activity import ActivityStore, ActivityType, ActivityRecord, ActivityDetailType, ActivityDetailRecord, \
+    ActivityAction
 from lmcommon.labbook.schemas import CURRENT_SCHEMA
 
 from redis import StrictRedis
@@ -723,7 +724,7 @@ class LabBook(object):
                 raise ValueError(f"Target dir `{os.path.join(self.root_dir, dst_dir.replace('..', ''))}` does not exist")
 
             # Copy file to destination
-            rel_path = os.path.relpath(dst_path, self.root_dir) #dst_path.replace(os.path.join(self.root_dir, section), '')
+            rel_path = os.path.relpath(dst_path, self.root_dir)
             logger.info(f"Inserting new file for {str(self)} from `{src_file}` to `{rel_path}` ({dst_path})")
             shutil.copyfile(src_file, dst_path)
             assert os.path.exists(dst_path)
@@ -754,7 +755,7 @@ class LabBook(object):
                 _, ext = os.path.splitext(rel_path) or 'file'
 
                 # Create detail record
-                adr = ActivityDetailRecord(activity_detail_type, show=False, importance=0)
+                adr = ActivityDetailRecord(activity_detail_type, show=False, importance=0, action=ActivityAction.CREATE)
                 adr.add_value('text/plain', commit_msg)
 
                 # Create activity record
@@ -822,7 +823,8 @@ class LabBook(object):
                 activity_type, activity_detail_type, section_str = self.get_activity_type_from_section(section)
 
                 # Create detail record
-                adr = ActivityDetailRecord(activity_detail_type, show=False, importance=0)
+                adr = ActivityDetailRecord(activity_detail_type, show=False, importance=0,
+                                           action=ActivityAction.DELETE)
                 adr.add_value('text/plain', commit_msg)
 
                 # Create activity record
@@ -897,7 +899,8 @@ class LabBook(object):
                     activity_type, activity_detail_type, section_str = self.get_activity_type_from_section(section)
 
                     # Create detail record
-                    adr = ActivityDetailRecord(activity_detail_type, show=False, importance=0)
+                    adr = ActivityDetailRecord(activity_detail_type, show=False, importance=0,
+                                               action=ActivityAction.EDIT)
                     adr.add_value('text/markdown', commit_msg)
 
                     # Create activity record
@@ -963,7 +966,8 @@ class LabBook(object):
                 if create_activity_record:
                     # Create detail record
                     activity_type, activity_detail_type, section_str = self.infer_section_from_relative_path(relative_path)
-                    adr = ActivityDetailRecord(activity_detail_type, show=False, importance=0)
+                    adr = ActivityDetailRecord(activity_detail_type, show=False, importance=0,
+                                               action=ActivityAction.CREATE)
 
                     msg = f"Created new {section_str} directory `{relative_path}`"
                     commit = self.git.commit(msg)
@@ -1497,7 +1501,7 @@ class LabBook(object):
             commit = self.git.commit(commit_msg)
 
             # Create detail record
-            adr = ActivityDetailRecord(ActivityDetailType.LABBOOK, show=False, importance=0)
+            adr = ActivityDetailRecord(ActivityDetailType.LABBOOK, show=False, importance=0, action=ActivityAction.EDIT)
             adr.add_value('text/plain', commit_msg)
 
             # Create activity record
@@ -1782,14 +1786,16 @@ class LabBook(object):
         # Create commit
         if readme_exists:
             commit_msg = f"Updated LabBook README"
+            action = ActivityAction.EDIT
         else:
             commit_msg = f"Added README to LabBook"
+            action = ActivityAction.CREATE
 
         self.git.add(readme_file)
         commit = self.git.commit(commit_msg)
 
         # Create detail record
-        adr = ActivityDetailRecord(ActivityDetailType.LABBOOK, show=False, importance=0)
+        adr = ActivityDetailRecord(ActivityDetailType.LABBOOK, show=False, importance=0, action=action)
         adr.add_value('text/plain', commit_msg)
 
         # Create activity record
