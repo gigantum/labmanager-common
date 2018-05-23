@@ -21,7 +21,7 @@ import glob
 import os
 import re
 import shutil
-from typing import (Any, Dict, List, Optional, Set, Tuple)
+from typing import (Any, Dict, List, Optional, Tuple)
 import uuid
 import yaml
 import json
@@ -36,7 +36,7 @@ from collections import OrderedDict
 from git.exc import GitCommandError
 from natsort import natsorted
 
-from lmcommon.configuration import Configuration, get_docker_client
+from lmcommon.configuration import Configuration
 from lmcommon.gitlib import get_git_interface, GitAuthor, GitRepoInterface
 from lmcommon.logging import LMLogger
 from lmcommon.labbook.schemas import validate_labbook_schema
@@ -47,7 +47,6 @@ from lmcommon.labbook.schemas import CURRENT_SCHEMA
 
 from redis import StrictRedis
 import redis_lock
-
 
 logger = LMLogger.get_logger()
 
@@ -477,17 +476,26 @@ class LabBook(object):
         return ''.join(c for c in value if c not in '\<>?/;"`\'')
 
     def _sweep_uncommitted_changes(self) -> None:
-        if not self.is_repo_clean:
-            logger.warning('Untracked changes detected; calling sweep;')
-            r = subprocess.check_output(f'git add -A && git commit -m "_sweep_uncommitted_changes"',
-                                        cwd=self.root_dir, shell=True)
-            #self.git.add_all()
-            #self.git.commit("Sweeping up lingering changes.")
+        """ Sweep all changes into a commit, and create activity record for it.
+            NOTE: This method MUST be called inside a lock. """
+        result_status = self.git.status()
+        self.git.add_all()
+        self.git.commit("Sweep of uncommitted changes")
+        if any([result_status[k] for k in result_status.keys()]):
+            ar = ActivityRecord(ActivityType.LABBOOK,
+                                message="--overwritten--",
+                                show=True,
+                                importance=255,
+                                linked_commit=self.git.commit_hash,
+                                tags=['save'])
+            ar, newcnt, modcnt = shims.process_sweep_status(ar, result_status, LabBook.infer_section_from_relative_path)
+            nmsg = f"{newcnt} new file(s). " if newcnt > 0 else ""
+            mmsg = f"{modcnt} modified file(s). " if modcnt > 0 else ""
+            ar.message = f"{nmsg}{mmsg}"
+            ars = ActivityStore(self)
+            ars.create_activity_record(ar)
         else:
             logger.info(f"{str(self)} no changes to sweep.")
-
-        if not self.is_repo_clean:
-            raise LabbookException("_sweep_uncommitted_changes failed")
 
     @staticmethod
     def get_activity_type_from_section(section_name: str) -> Tuple[ActivityType, ActivityDetailType, str]:
@@ -1824,4 +1832,3 @@ class LabBook(object):
                 contents = rf.read()
         
         return contents
-

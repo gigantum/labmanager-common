@@ -600,6 +600,8 @@ class TestLabBook(object):
         s = lb.git.status()
         assert all([len(s[key]) == 0 for key in s.keys()])
 
+        assert any(['1 new file(s)' in l['message'] for l in lb.git.log()])
+
     def test_walkdir_with_favorites(self, mock_config_file, sample_src_file):
         lb = LabBook(mock_config_file[0])
         lb.new(owner={"username": "test"}, name="test-insert-files-1", description="validate tests.")
