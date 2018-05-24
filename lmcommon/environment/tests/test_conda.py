@@ -100,8 +100,8 @@ class TestConda3PackageManager(object):
         pkgs = ["numpy", "requests"]
         result = mrg.latest_versions(pkgs, lb, username)
 
-        assert result[0] == '1.14.3' #Numpy
-        assert result[1] == '2.18.4' # Requests
+        assert result[0] == '1.14.3'  # Numpy
+        assert result[1] == '2.18.4'  # Requests
 
     def test_latest_versions_bad_pkg(self, build_lb_image_for_env):
         """Test latest_version command"""
