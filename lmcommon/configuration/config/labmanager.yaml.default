@@ -17,6 +17,7 @@ auth:
   identity_manager: local
 
 # Environment Management Configuration
+# URLs can specify a non-default branch using the format <url>@<branch>
 environment:
   repo_url:
     - "https://github.com/gigantum/environment-components.git"

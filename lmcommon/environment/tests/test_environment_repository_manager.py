@@ -17,7 +17,6 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-
 import pytest
 import tempfile
 import os
@@ -26,12 +25,33 @@ import shutil
 import pprint
 import pickle
 import yaml
+from git import Repo
 
 from lmcommon.environment import RepositoryManager
 from lmcommon.fixtures import mock_config_file, setup_index, ENV_UNIT_TEST_BASE, ENV_UNIT_TEST_REPO, ENV_UNIT_TEST_REV
+from lmcommon.fixtures.fixtures import _create_temp_work_dir
 
 
 class TestEnvironmentRepositoryManager(object):
+    def test_clone_repositories_branch(self):
+        """Test cloning a branch"""
+        conf_file, working_dir = _create_temp_work_dir(override_dict={'environment':
+                                 {'repo_url': ["https://github.com/gig-dev/components2.git@test-branch-DONOTDELETE"]}})
+
+        # Run clone and index operation
+        erm = RepositoryManager(conf_file)
+        erm.update_repositories()
+
+        assert os.path.exists(os.path.join(working_dir, ".labmanager")) is True
+        assert os.path.exists(os.path.join(working_dir, ".labmanager", "environment_repositories")) is True
+        assert os.path.exists(os.path.join(working_dir, ".labmanager", "environment_repositories",
+                                           ENV_UNIT_TEST_REPO)) is True
+        assert os.path.exists(os.path.join(working_dir, ".labmanager", "environment_repositories",
+                                           ENV_UNIT_TEST_REPO, "README.md")) is True
+
+        r = Repo(os.path.join(working_dir, ".labmanager", "environment_repositories", ENV_UNIT_TEST_REPO))
+        assert r.active_branch.name == "test-branch-DONOTDELETE"
+
     def test_update_repositories(self, setup_index):
         """Test building the index"""
         assert os.path.exists(os.path.join(setup_index[1], ".labmanager")) is True

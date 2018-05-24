@@ -29,7 +29,7 @@ from lmcommon.logging import LMLogger
 import os
 import yaml
 
-from typing import (Any, List, Dict)
+from typing import (Any, List, Dict, Optional)
 
 from lmcommon.configuration import Configuration
 
@@ -65,7 +65,7 @@ class RepositoryManager(object):
                                                        ".labmanager", "environment_repositories"))
         self.git = get_git_interface(self.config.config['git'])
 
-    def _clone_repo(self, url: str, location: str) -> None:
+    def _clone_repo(self, url: str, location: str, branch: Optional[str]) -> None:
         """Private method to clone a repository
 
         Args:
@@ -84,6 +84,10 @@ class RepositoryManager(object):
         # Clone the repo
         self.git.clone(url)
 
+        if branch is not None:
+            self.git.fetch()
+            self.git.checkout(branch)
+
     @staticmethod
     def _internet_is_available() -> bool:
         """Private method to check if the user can get to GitHub, since that is where the component repos are
@@ -99,7 +103,7 @@ class RepositoryManager(object):
 
         return True
 
-    def _update_repo(self, location: str) -> None:
+    def _update_repo(self, location: str, branch: Optional[str]) -> None:
         """Private method to update a repository
 
         Args:
@@ -113,6 +117,10 @@ class RepositoryManager(object):
 
         # Clone the repo
         self.git.fetch()
+
+        if branch is not None:
+            self.git.checkout(branch)
+
         self.git.pull()
 
     def update_repositories(self) -> bool:
@@ -131,13 +139,18 @@ class RepositoryManager(object):
                 repo_dir_name = repo_url_to_name(repo_url)
                 repo_dir = os.path.join(self.local_repo_directory, repo_dir_name)
 
+                # Get branch if encoded in URL
+                branch = None
+                if "@" in repo_url:
+                    repo_url, branch = repo_url.split("@")
+
                 # Check if repo exists locally
                 if not os.path.exists(repo_dir):
                     # Need to clone
-                    self._clone_repo(repo_url, repo_dir)
+                    self._clone_repo(repo_url, repo_dir, branch)
                 else:
                     # Need to update
-                    self._update_repo(repo_dir)
+                    self._update_repo(repo_dir, branch)
 
             for existing_dir in [n for n in os.listdir(self.local_repo_directory)
                                  if os.path.isdir(os.path.join(self.local_repo_directory, n))]:
