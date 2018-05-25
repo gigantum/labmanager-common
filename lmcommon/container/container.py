@@ -233,19 +233,28 @@ class ContainerOperations(object):
             # If jupyterlab is not already running.
             # Use a random hexadecimal string as token.
             token = str(uuid.uuid4()).replace('-', '')
-            cmd = f"cd /mnt/labbook && " \
-                  f"jupyter lab --port={supported_dev_tools[dev_tool_name]} --ip=0.0.0.0 " \
-                  f"--NotebookApp.token='{token}' --no-browser " \
-                  f"--ConnectionFileMixin.ip=0.0.0.0"
+            un = labbook.owner['username']
+            cmd = (f"export PYTHONPATH=/mnt/share:$PYTHONPATH && "
+                  f'echo "{username},{un},{labbook.name},{token}" > /home/giguser/jupyter_token && '
+                  f"cd /mnt/labbook && "
+                  f"jupyter lab --port={supported_dev_tools[dev_tool_name]} --ip=0.0.0.0 "
+                  f"--NotebookApp.token='{token}' --no-browser "
+                  f'--ConnectionFileMixin.ip=0.0.0.0 ' +
+                  (f'--FileContentsManager.post_save_hook="jupyterhooks.post_save_hook"'
+                    if os.path.exists('/mnt/share/jupyterhooks') else ""))
             bash = f'sh -c "{cmd}"'
+            logger.info(cmd)
             lb_container.exec_run(bash, detach=True, user='giguser')
             # Pause briefly to avoid race conditions
-            time.sleep(1)
-            new_ps_list = lb_container.exec_run(
-                f'sh -c "ps aux | grep jupyter | grep -v \' grep \'"').decode().split('\n')
-
-            if not any(['jupyter lab' in l or 'jupyter-lab' in l for l in new_ps_list]):
-                raise ValueError('Jupyter Lab failed to start')
+            for timeout in range(10):
+                time.sleep(1)
+                new_ps_list = lb_container.exec_run(
+                    f'sh -c "ps aux | grep jupyter | grep -v \' grep \'"').decode().split('\n')
+                if any(['jupyter lab' in l or 'jupyter-lab' in l for l in new_ps_list]):
+                    logger.info(f"JupyterLab started within {timeout + 1} seconds")
+                    break
+            else:
+                raise ValueError('Jupyter Lab failed to start after 10 seconds')
 
             pmap = PortMap(labbook.labmanager_config)
             host, port = pmap.lookup(labbook.key)

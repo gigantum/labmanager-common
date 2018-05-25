@@ -18,15 +18,33 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 import os
+import docker
 import docker.errors
 import time
 from typing import Optional, List, Tuple, Any, Dict
 
 from lmcommon.configuration import get_docker_client
+from lmcommon.logging import LMLogger
 from lmcommon.portmap import PortMap
 from lmcommon.labbook import LabBook
 from lmcommon.container.utils import infer_docker_image_name
 from lmcommon.container.exceptions import ContainerBuildException
+
+logger = LMLogger.get_logger()
+
+
+def get_labmanager_ip() -> Optional[str]:
+    """Method to get the monitored lab book container's IP address on the Docker bridge network
+
+    Returns:
+        str
+    """
+    client = get_docker_client()
+    container = [c for c in client.containers.list()
+                 if 'labmanager' in c.name and 'gigantum' in c.name and 'gmlb-' not in c.name][0]
+    ip = container.attrs['NetworkSettings']['Networks']['bridge']['IPAddress']
+    logger.info("container {} IP: {}".format(container.name, ip))
+    return ip
 
 
 def build_docker_image(root_dir: str, override_image_tag: Optional[str], nocache: bool = False,
@@ -133,8 +151,23 @@ def start_labbook_container(labbook_root: str, config_path: str,
     container_id = docker_client.containers.run(tag, detach=True, init=True, name=tag, ports=exposed_ports,
                                                 environment=env_var, volumes=volumes_dict).id
 
-    # Brief pause to prevent certain race conditions.
-    time.sleep(1)
+    labmanager_ip = ""
+    try:
+        labmanager_ip = get_labmanager_ip() or ""
+    except IndexError:
+        logger.warning("Cannot find labmanager IP")
+
+    labmanager_ip = labmanager_ip.strip()
+    cmd = f"echo {labmanager_ip} > /home/giguser/labmanager_ip"
+    for timeout in range(20):
+        time.sleep(0.5)
+        if docker_client.containers.get(container_id).status == 'running':
+            r = docker_client.containers.get(container_id).exec_run(f'sh -c "{cmd}"')
+            logger.info(f"Response to write labmanager_ip in {tag}: {r}")
+            break
+    else:
+        logger.error("After 10 seconds could not write IP to labmanager container."
+                     f" Container status = {docker_client.containers.get(container_id).status}")
     return container_id, exposed_ports
 
 

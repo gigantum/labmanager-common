@@ -164,7 +164,6 @@ class CondaPackageManagerBase(PackageManager):
                             return p.get("version")
                 except:
                     for p in [x.get('LINK') for x in data.get('actions') if x]:
-
                         if p.get('name') == package_name:
                             return p.get("version")
 
@@ -194,9 +193,21 @@ class CondaPackageManagerBase(PackageManager):
             data = json.loads(result)
             versions = {pn: "" for pn in package_names}
             for package_name in package_names:
-                for p in [x for x in data.get('actions')[0]['LINK'] if x]:
-                    if p.get('name') == package_name:
-                        versions[package_name] = p.get("version")
+                if isinstance(data.get('actions'), dict) is True:
+                    # New method - added when bases updated to conda 4.5.1
+                    for p in data.get('actions').get('LINK'):
+                        if p.get('name') == package_name:
+                            versions[package_name] = p.get("version")
+                else:
+                    # legacy methods to handle older bases built on conda 4.3.31
+                    try:
+                        for p in [x.get('LINK')[0] for x in data.get('actions') if x]:
+                            if p.get('name') == package_name:
+                                versions[package_name] = p.get("version")
+                    except:
+                        for p in [x.get('LINK') for x in data.get('actions') if x]:
+                            if p.get('name') == package_name:
+                                versions[package_name] = p.get("version")
 
         # Now, for any packages whose versions could not be found (because they are installed)...
         # ... just look them up manually. This will add some time, but there's no way around it.

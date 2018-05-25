@@ -42,7 +42,7 @@ from lmcommon.gitlib.git import GitAuthor
 
 ENV_UNIT_TEST_REPO = 'gig-dev_components2'
 ENV_UNIT_TEST_BASE = 'quickstart-jupyterlab'
-ENV_UNIT_TEST_REV = 1
+ENV_UNIT_TEST_REV = 2
 
 
 def _create_temp_work_dir(override_dict: dict = None, lfs_enabled: bool = True):

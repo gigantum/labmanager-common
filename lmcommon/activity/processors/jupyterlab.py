@@ -20,11 +20,9 @@
 from typing import (Any, Dict, List)
 
 from lmcommon.logging import LMLogger
-
 from lmcommon.activity.processors.processor import ActivityProcessor, ExecutionData
 from lmcommon.activity import ActivityRecord, ActivityDetailType, ActivityDetailRecord, ActivityAction
 from lmcommon.labbook import LabBook
-
 
 logger = LMLogger.get_logger()
 
