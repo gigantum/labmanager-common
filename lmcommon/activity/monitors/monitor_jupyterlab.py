@@ -20,19 +20,20 @@
 import os
 import queue
 import json
-import traceback
 from typing import (Any, Dict, List, Optional)
+import time
 
 import jupyter_client
 import redis
 import requests
 
+from lmcommon.activity.processors.processor import ExecutionData
 from lmcommon.configuration import get_docker_client
 from lmcommon.container.utils import infer_docker_image_name
 from lmcommon.activity.monitors.devenv import DevEnvMonitor
 from lmcommon.activity.monitors.activity import ActivityMonitor
-from lmcommon.activity.processors.processor import StopProcessingException
-from lmcommon.activity.processors.jupyterlab import BasicJupyterLabProcessor, JupyterLabImageExtractorProcessor
+from lmcommon.activity.processors.jupyterlab import JupyterLabCodeProcessor, JupyterLabFileChangeProcessor, \
+    JupyterLabPlaintextProcessor, JupyterLabImageExtractorProcessor
 from lmcommon.activity.processors.core import ActivityShowBasicProcessor
 from lmcommon.activity import ActivityType
 from lmcommon.dispatcher import Dispatcher, jobs
@@ -184,99 +185,116 @@ class JupyterLabNotebookMonitor(ActivityMonitor):
         ActivityMonitor.__init__(self, user, owner, labbook_name, monitor_key, config_file,
                                  author_name=author_name, author_email=author_email)
 
-        # For now, register python processors by default
-        self.register_python_processors()
+        # For now, register processors by default
+        self.register_processors()
 
         # Tracking variables during message processing
         self.kernel_status = 'idle'
-        self.code: Dict[str, Any] = {}
-        self.result: Dict[str, Any] = {}
+        self.current_cell = ExecutionData()
+        self.cell_data: List[ExecutionData] = list()
         self.execution_count = 0
 
-    def register_python_processors(self) -> None:
-        """Method to register python3 processors
+    def register_processors(self) -> None:
+        """Method to register processors
 
         Returns:
             None
         """
-        self.add_processor(BasicJupyterLabProcessor())
+        self.add_processor(JupyterLabCodeProcessor())
+        self.add_processor(JupyterLabFileChangeProcessor())
+        self.add_processor(JupyterLabPlaintextProcessor())
         self.add_processor(JupyterLabImageExtractorProcessor())
         self.add_processor(ActivityShowBasicProcessor())
 
-    def handle_message(self, msg: Dict[str, Dict], metadata: Dict[str, str]) -> None:
+    def handle_message(self, msg: Dict[str, Dict]):
         """Method to handle processing an IOPub Message from a JupyterLab kernel
 
         Args:
             msg(dict): An IOPub message
-            metadata(dict): A dictionary of data to start the activity monitor
 
 
         Returns:
             None
         """
+        # Initialize can_process to False. This variable is used to indicate if the cell data should be processed into
+        # an ActivityRecord and saved
         if msg['msg_type'] == 'status':
-            # If status -> busy get messages until status -> idle
+            # If status was busy and transitions to idle store cell since execution has completed
             if self.kernel_status == 'busy' and msg['content']['execution_state'] == 'idle':
-                try:
-                    # Process activity data to generate a note record
-                    activity_record = self.process(ActivityType.CODE,
-                                                   self.code, self.result, {"path": metadata["path"]})
+                if self.current_cell.cell_error is False:
+                    # Add current cell to collection of cells ready to process
+                    self.cell_data.append(self.current_cell)
 
-                    # Check if an error occurred
-                    if self.result:
-                        if "error" in self.result:
-                            if self.result['error']:
-                                # An error occurred. Bail out now without doing a commit
-                                logger.info("Cell error detected. Not committing.")
-                                raise StopProcessingException()
+                # Reset current_cell attribute for next execution
+                self.current_cell = ExecutionData()
 
-                    # Commit changes to the related Notebook file
-                    commit = self.commit_labbook()
+                # Indicate record COULD be processed if timeout occurs
+                self.can_store_activity_record = True
 
-                    # Create note record
-                    activity_commit = self.create_activity_record(commit, activity_record)
-
-                    # Successfully committed changes. Clear out state
-                    self.result = {}
-                    self.code = {}
-
-                    logger.info("Created auto-generated note based on kernel activity: {}".format(activity_commit))
-
-                except StopProcessingException:
-                    # Don't want to save changes. Move along.
-                    self.result = {}
-                    self.code = {}
-                    pass
+            elif self.kernel_status == 'idle' and msg['content']['execution_state'] == 'busy':
+                # Starting to process new cell execution
+                self.can_store_activity_record = False
 
             # Update status
             self.kernel_status = msg['content']['execution_state']
 
         elif msg['msg_type'] == 'execute_input':
-            # input sent
-            self.code = {'code': msg['content']['code']}
+            # A message containing the input to kernel has been received
+            self.current_cell.code.append({'code': msg['content']['code']})
             self.execution_count = msg['content']['execution_count']
+            self.current_cell.tags.append(f"ex:{msg['content']['execution_count']}")
 
         elif msg['msg_type'] == 'execute_result':
-            # result received
+            # A message containing the output of a cell execution has been received
             if self.execution_count != msg['content']['execution_count']:
                 logger.error("Execution count mismatch detected {},{}".format(self.execution_count,
                                                                               msg['content']['execution_count']))
-            self.result = {'data': msg['content']['data'], 'metadata': msg['content']['metadata']}
+
+            self.current_cell.result.append({'data': msg['content']['data'], 'metadata': msg['content']['metadata']})
 
         elif msg['msg_type'] == 'stream':
-            # result received
-            self.result = {'data': {"text/plain": msg['content']['text']}, 'metadata': {}}
+            # A message containing plaintext output of a cell execution has been received
+            self.current_cell.result.append({'data': {"text/plain": msg['content']['text']},
+                                             'metadata': {'source': 'stream'}})
 
         elif msg['msg_type'] == 'display_data':
-            # result received
-            self.result = msg['content']
+            # A message containing rich output of a cell execution has been received
+            self.current_cell.result.append({'data': msg['content']['data'], 'metadata': {'source': 'display_data'}})
 
         elif msg['msg_type'] == 'error':
-            # An error occured, so don't save this record, but do a commit so repo stays clean
-            self.result = {'error': True}
+            # An error occurred, so don't save this cell by resetting the current cell attribute.
+            self.current_cell.cell_error = True
 
         else:
             logger.info("Received and ignored IOPUB Message of type {}".format(msg['msg_type']))
+
+    def store_record(self, metadata: Dict[str, str]) -> None:
+        """Method to create and store an activity record
+
+        Args:
+            metadata(dict): A dictionary of data to start the activity monitor
+
+        Returns:
+            None
+        """
+        if len(self.cell_data) > 0:
+            t_start = time.time()
+
+            # Process collected data and create an activity record
+            activity_record = self.process(ActivityType.CODE, list(reversed(self.cell_data)), {"path": metadata["path"]})
+
+            # Commit changes to the related Notebook file
+            commit = self.commit_labbook()
+
+            # Create note record
+            activity_commit = self.store_activity_record(commit, activity_record)
+
+            logger.info(f"Created auto-generated activity record {activity_commit} in {time.time() - t_start} seconds")
+
+        # Reset for next execution
+        self.can_store_activity_record = False
+        self.cell_data = list()
+        self.current_cell = ExecutionData()
 
     def start(self, metadata: Dict[str, str], database: int = 1) -> None:
         """Method called in a periodically scheduled async worker that should check the dev env and manage Activity
@@ -310,27 +328,24 @@ class JupyterLabNotebookMonitor(ActivityMonitor):
 
         try:
             while True:
-                # get message
-                # TODO: Restructure using timeout kwarg to pack together a bunch of cells run at once
                 try:
-                    msg = km.get_iopub_msg(timeout=4)
-                    logger.debug("Received IOPUB Message from {}:\n{}".format(metadata["kernel_id"], msg))
-                    self.handle_message(msg, metadata)
+                    # Check for messages, waiting up to 1 second. This is the rate that records will be merged
+                    msg = km.get_iopub_msg(timeout=1)
+                    self.handle_message(msg)
+
                 except queue.Empty:
-                    # if queue is empty, continue
-                    pass
+                    # if queue is empty and the record is ready to store, save it!
+                    if self.can_store_activity_record is True:
+                        self.store_record(metadata)
 
                 # Check if you should exit
                 if redis_conn.hget(self.monitor_key, "run").decode() == "False":
                     logger.info("Received Activity Monitor Shutdown Message for {}".format(metadata["kernel_id"]))
                     break
 
-        except Exception:
-            tb = traceback.format_exc()
-            logger.error("Error in JupyterLab Activity Monitor: {}".format(tb))
+        except Exception as err:
+            logger.error("Error in JupyterLab Activity Monitor: {}".format(err))
         finally:
-            # Cleanup after activity manager by removing key from redis
+            # Delete the kernel monitor key so the dev env monitor will spin up a new process
+            # You may lose some activity if this happens, but the next action will sweep up changes
             redis_conn.delete(self.monitor_key)
-
-
-

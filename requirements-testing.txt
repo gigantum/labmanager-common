@@ -1,0 +1,6 @@
+# Testing support
+pytest==3.5.0
+mock==2.0.0
+mockredispy==2.9.3
+mypy==0.521
+responses==0.8.1

@@ -199,7 +199,6 @@ def build_labbook_image(path: str, username: Optional[str] = None,
     logger.info(f"Starting build_labbook_image({path}, {username}, {tag}, {nocache}) in pid {os.getpid()}")
 
     try:
-
         image_id = build_image(path, override_image_tag=tag, nocache=nocache, username=username)
         logger.info(f"Completed build_labbook_image in pid {os.getpid()}: {image_id}")
         return image_id
@@ -339,6 +338,10 @@ def test_sleep(n):
     logger.info("Starting test_sleep({}) in pid {}".format(n, os.getpid()))
 
     try:
+        job = get_current_job()
+        job.meta['sample'] = 'test_sleep metadata'
+        job.save_meta()
+
         time.sleep(n)
         logger.info("Completed test_sleep in pid {}".format(os.getpid()))
         return 0

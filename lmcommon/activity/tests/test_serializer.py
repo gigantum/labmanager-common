@@ -67,11 +67,25 @@ class TestSerializer(object):
         assert type(test_bytes) == bytes
 
         test_str = s.deserialize('image/png', test_bytes)
-
-        assert example_png == test_str
         assert type(test_str) == str
 
+    def test_image_jsonify_legacy(self):
+        s = Serializer()
+
+        example_png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5/hPwAIAgL/4d1j8wAAAABJRU5ErkJggg=="
         test_str_2 = s.jsonify('image/png', example_png)
 
-        assert type(test_str_2) == str
         assert test_str_2 == f"data:image/png;base64,{example_png}"
+
+    def test_image_jsonify_not_legacy(self):
+        s = Serializer()
+
+        example_png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5/hPwAIAgL/4d1j8wAAAABJRU5ErkJggg=="
+
+        test_bytes = s.serialize('image/png', example_png)
+        assert type(test_bytes) == bytes
+
+        test_str = s.deserialize('image/png', test_bytes)
+
+        test_str_2 = s.jsonify('image/png', test_str)
+        assert test_str_2 == f"data:image/jpeg;base64,{test_str}"

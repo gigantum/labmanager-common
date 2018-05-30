@@ -191,6 +191,8 @@ class GitFilesystem(GitRepoInterface):
                 staged.append((f.b_path, "modified"))
             elif f.change_type == "R":
                 staged.append((f.b_path, "renamed"))
+            elif f.change_type == "U":
+                staged.append((f.b_path, "unmerged"))
             else:
                 raise ValueError("Unsupported change type: {}".format(f.change_type))
 
@@ -206,6 +208,8 @@ class GitFilesystem(GitRepoInterface):
                 unstaged.append((f.b_path, "modified"))
             elif f.change_type == "R":
                 unstaged.append((f.b_path, "renamed"))
+            elif f.change_type == "U":
+                staged.append((f.b_path, "unmerged"))
             else:
                 raise ValueError("Unsupported change type: {}".format(f.change_type))
 
@@ -224,7 +228,7 @@ class GitFilesystem(GitRepoInterface):
             None
         """
         logger.info("Adding file {} to Git repository in {}".format(filename, self.working_directory))
-        self.repo.index.add([filename])
+        x = self.repo.index.add([filename])
 
     def add_all(self, relative_directory=None):
         """Add all changes/files using the `git add -A` command

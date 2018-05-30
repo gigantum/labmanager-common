@@ -1,4 +1,0 @@
-input/.gitkeep diff merge text
-input/** filter=lfs diff=lfs merge=lfs -text
-output/.gitkeep diff merge text
-output/** filter=lfs diff=lfs merge=lfs -text

@@ -47,7 +47,7 @@ class TestJobs(object):
         cm.add_component("base", lmcommon.fixtures.ENV_UNIT_TEST_REPO, lmcommon.fixtures.ENV_UNIT_TEST_BASE,
                          lmcommon.fixtures.ENV_UNIT_TEST_REV)
 
-        ib = ImageBuilder(lb.root_dir)
+        ib = ImageBuilder(lb)
         ib.assemble_dockerfile()
 
         lb_root = lb.root_dir
@@ -74,7 +74,7 @@ class TestJobs(object):
             import_lb = LabBook(mock_config_with_repo[0])
             import_lb.from_directory(imported_lb_path)
 
-            ib = ImageBuilder(import_lb.root_dir)
+            ib = ImageBuilder(import_lb)
             ib.assemble_dockerfile(write=True)
             assert os.path.exists(os.path.join(imported_lb_path, '.gigantum', 'env', 'Dockerfile'))
 

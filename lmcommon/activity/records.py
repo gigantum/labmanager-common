@@ -69,6 +69,15 @@ class ActivityDetailType(Enum):
     ENVIRONMENT = 0
 
 
+class ActivityAction(Enum):
+    """Enumeration representing the modifiers on Activity Detail Records"""
+    NOACTION = 0
+    CREATE = 1
+    EDIT = 2
+    DELETE = 3
+    EXECUTE = 4
+
+
 class ActivityDetailRecordEncoder(json.JSONEncoder):
     """Custom JSON encoder to encoded binary data as base64 when serializing to json"""
     def default(self, obj):
@@ -82,7 +91,7 @@ class ActivityDetailRecord(object):
     """A class to represent an activity detail entry that can be stored in an activity entry"""
 
     def __init__(self, detail_type: ActivityDetailType, key: Optional[str] = None, show: bool = True,
-                 importance: int = 0) -> None:
+                 importance: int = 0, action: ActivityAction = ActivityAction.NOACTION) -> None:
         """Constructor
 
         Args:
@@ -99,6 +108,9 @@ class ActivityDetailRecord(object):
 
         # Type indicating the category of detail
         self.type = detail_type
+
+        # Action for this detail record
+        self.action = action
 
         # Boolean indicating if this item should be "shown" or "hidden"
         self.show = show
@@ -119,7 +131,7 @@ class ActivityDetailRecord(object):
         if not self.key:
             raise ValueError("Detail Object key must be set before accessing the log str.")
 
-        return "{},{},{},{}".format(self.type.value, int(self.show), self.importance, self.key)
+        return "{},{},{},{},{}".format(self.type.value, int(self.show), self.importance, self.key, self.action.value)
 
     @staticmethod
     def from_log_str(log_str: str) -> 'ActivityDetailRecord':
@@ -131,10 +143,15 @@ class ActivityDetailRecord(object):
         Returns:
             ActivityDetailRecord
         """
-        type_int, show_int, importance, key = log_str.split(',')
+        try:
+            type_int, show_int, importance, key, action_int = log_str.split(',')
+        except ValueError:
+            # Legacy record with no Action modifier available
+            type_int, show_int, importance, key = log_str.split(',')
+            action_int = "0"  # No action
 
         return ActivityDetailRecord(ActivityDetailType(int(type_int)), show=bool(int(show_int)),
-                                    importance=int(importance), key=key)
+                                    importance=int(importance), key=key, action=ActivityAction(int(action_int)))
 
     def add_value(self, mime_type: str, value: Any) -> None:
         """Method to add data to this record by MIME type
@@ -177,19 +194,22 @@ class ActivityDetailRecord(object):
         Returns:
             dict
         """
-        # TODO: Should we duplicate type, importance, and show if they are in the git log record?
         if compact:
             # Compact representation and do deep copy so binary conversions don't stick around in the object
             return {"t": self.type.value,
                     "i": self.importance,
                     "s": int(self.show),
-                    "d": copy.deepcopy(self.data)
+                    "d": copy.deepcopy(self.data),
+                    "a": self.tags,
+                    "n": self.action.value
                     }
         else:
             return {"type": self.type.value,
                     "importance": self.importance,
                     "show": self.show,
-                    "data": self.data
+                    "data": self.data,
+                    "tags": self.tags,
+                    "action": self.action.value
                     }
 
     def to_bytes(self, compress: bool=True) -> bytes:
@@ -242,8 +262,16 @@ class ActivityDetailRecord(object):
         # Return new instance
         new_instance = ActivityDetailRecord(detail_type=ActivityDetailType(obj_dict['t']),
                                             show=bool(obj_dict["s"]),
-                                            importance=obj_dict["i"]
-                                            )
+                                            importance=obj_dict["i"])
+
+        # add tags if present (missing in "old" labbooks)
+        if "a" in obj_dict:
+            new_instance.tags = obj_dict['a']
+
+        # add action if present (missing in "old" labbooks)
+        if "n" in obj_dict:
+            new_instance.action = ActivityAction(int(obj_dict['n']))
+
         new_instance.data = obj_dict['d']
         new_instance.is_loaded = True
         return new_instance

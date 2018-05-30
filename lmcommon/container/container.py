@@ -26,6 +26,7 @@ from typing import Any, List, Optional, Tuple, Dict
 import redis
 import requests
 import docker
+import docker.errors
 
 
 from lmcommon.configuration import get_docker_client, Configuration
@@ -34,6 +35,7 @@ from lmcommon.labbook import LabBook, LabbookException
 from lmcommon.portmap import PortMap
 
 from lmcommon.container.utils import infer_docker_image_name
+from lmcommon.container.exceptions import ContainerException
 from lmcommon.container.core import (build_docker_image, stop_labbook_container,
                                      start_labbook_container)
 
@@ -95,6 +97,39 @@ class ContainerOperations(object):
         return labbook, True
 
     @classmethod
+    def run_command(cls, cmd_text: str, labbook: LabBook, username: Optional[str] = None,
+                    override_image_tag: Optional[str] = None) -> bytes:
+        """Run a command executed in the context of the LabBook's docker image.
+
+        Args:
+            labbook: Subject labbook
+            username: Optional active username
+            override_image_tag: If set, does not automatically infer container name.
+
+        Returns:
+            A tuple containing the labbook, Docker container id, and port mapping.
+        """
+        image_name = override_image_tag or infer_docker_image_name(labbook_name=labbook.name,
+                                                                   owner=labbook.owner['username'],
+                                                                   username=username)
+        t0 = time.time()
+        try:
+            # Note, for container docs see: http://docker-py.readthedocs.io/en/stable/containers.html
+            result = get_docker_client().containers.run(image_name, cmd_text, entrypoint=[],
+                                                        remove=True)
+        except docker.errors.ContainerError as e:
+            tfail = time.time()
+            logger.error(f'Command ({cmd_text}) failed after {tfail-t0}s - '
+                         f'output: {e.exit_status}, {e.stderr}')
+            raise ContainerException(e)
+
+        ts = time.time()
+        if ts - t0 > 3.0:
+            logger.warning(f'Command ({cmd_text}) in {str(labbook)} took {ts-t0} sec')
+
+        return result
+
+    @classmethod
     def start_container(cls, labbook: LabBook, username: Optional[str] = None,
                         override_image_tag: Optional[str] = None) -> Tuple[LabBook, str, Dict[Any, Any]]:
         """ Start a Docker container for a given labbook LabBook. Return the new labbook instances
@@ -140,7 +175,14 @@ class ContainerOperations(object):
         pm = PortMap(labbook.labmanager_config)
         pm.release(labbook.key)
 
-        return labbook, stop_labbook_container(n)
+        try:
+            stopped = stop_labbook_container(n)
+        finally:
+            # Save state of LB when container turned off.
+            with labbook.lock_labbook():
+                labbook._sweep_uncommitted_changes()
+
+        return labbook, stopped
 
     @classmethod
     def start_dev_tool(cls, labbook: LabBook, dev_tool_name: str,
@@ -191,19 +233,28 @@ class ContainerOperations(object):
             # If jupyterlab is not already running.
             # Use a random hexadecimal string as token.
             token = str(uuid.uuid4()).replace('-', '')
-            cmd = f"cd /mnt/labbook && " \
-                  f"jupyter lab --port={supported_dev_tools[dev_tool_name]} --ip=0.0.0.0 " \
-                  f"--NotebookApp.token='{token}' --no-browser " \
-                  f"--ConnectionFileMixin.ip=0.0.0.0"
+            un = labbook.owner['username']
+            cmd = (f"export PYTHONPATH=/mnt/share:$PYTHONPATH && "
+                  f'echo "{username},{un},{labbook.name},{token}" > /home/giguser/jupyter_token && '
+                  f"cd /mnt/labbook && "
+                  f"jupyter lab --port={supported_dev_tools[dev_tool_name]} --ip=0.0.0.0 "
+                  f"--NotebookApp.token='{token}' --no-browser "
+                  f'--ConnectionFileMixin.ip=0.0.0.0 ' +
+                  (f'--FileContentsManager.post_save_hook="jupyterhooks.post_save_hook"'
+                    if os.path.exists('/mnt/share/jupyterhooks') else ""))
             bash = f'sh -c "{cmd}"'
+            logger.info(cmd)
             lb_container.exec_run(bash, detach=True, user='giguser')
             # Pause briefly to avoid race conditions
-            time.sleep(1)
-            new_ps_list = lb_container.exec_run(
-                f'sh -c "ps aux | grep jupyter | grep -v \' grep \'"').decode().split('\n')
-
-            if not any(['jupyter lab' in l or 'jupyter-lab' in l for l in new_ps_list]):
-                raise ValueError('Jupyter Lab failed to start')
+            for timeout in range(10):
+                time.sleep(1)
+                new_ps_list = lb_container.exec_run(
+                    f'sh -c "ps aux | grep jupyter | grep -v \' grep \'"').decode().split('\n')
+                if any(['jupyter lab' in l or 'jupyter-lab' in l for l in new_ps_list]):
+                    logger.info(f"JupyterLab started within {timeout + 1} seconds")
+                    break
+            else:
+                raise ValueError('Jupyter Lab failed to start after 10 seconds')
 
             pmap = PortMap(labbook.labmanager_config)
             host, port = pmap.lookup(labbook.key)

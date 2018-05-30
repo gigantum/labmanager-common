@@ -38,15 +38,15 @@ logger = LMLogger.get_logger()
 class ImageBuilder(object):
     """Class to ingest indexes describing base images, environments, and dependencies into Dockerfiles. """
 
-    def __init__(self, labbook_directory: str) -> None:
+    def __init__(self, labbook: LabBook) -> None:
         """Create a new image builder given the path to labbook.
 
         Args:
             labbook_directory(str): Directory path to labook
         """
-        self.labbook_directory = labbook_directory
-        if not os.path.exists(self.labbook_directory):
-            raise IOError("Labbook directory {} does not exist.".format(self.labbook_directory))
+        self.labbook = labbook
+        if not os.path.exists(self.labbook.root_dir):
+            raise IOError("Labbook directory {} does not exist.".format(self.labbook.root_dir))
         self._validate_labbook_tree()
 
     def _get_yaml_files(self, directory: str) -> List[str]:
@@ -69,18 +69,19 @@ class ImageBuilder(object):
                    ['.gigantum', 'env', 'package_manager']]
 
         for subdir in subdirs:
-            if not os.path.exists(os.path.join(self.labbook_directory, *subdir)):
+            if not os.path.exists(os.path.join(self.labbook.root_dir, *subdir)):
                 raise ValueError("Labbook directory missing subdir `{}'".format(subdir))
 
     def _import_baseimage_fields(self) -> Dict[str, Any]:
         """Load fields from base_image yaml file into a convenient dict. """
-        root_dir = os.path.join(self.labbook_directory, '.gigantum', 'env', 'base')
+        root_dir = os.path.join(self.labbook.root_dir, '.gigantum', 'env', 'base')
         base_images = self._get_yaml_files(root_dir)
 
         logger.debug("Searching {} for base image file".format(root_dir))
-        assert len(base_images) == 1, "There should only be one base image in {}".format(root_dir)
+        if len(base_images) != 1:
+            raise ValueError(f"There should only be one base image in {root_dir}, found {len(base_images)}")
 
-        logger.info("Using {} as base image file for labbook at {}.".format(base_images[0], self.labbook_directory))
+        logger.info("Using {} as base image file for labbook at {}.".format(base_images[0], self.labbook.root_dir))
         with open(base_images[0]) as base_image_file:
             fields = yaml.load(base_image_file)
 
@@ -110,7 +111,7 @@ class ImageBuilder(object):
     def _load_custom(self) -> List[str]:
         """Load custom dependencies, specifically the docker snippet"""
 
-        root_dir = os.path.join(self.labbook_directory, '.gigantum', 'env', 'custom')
+        root_dir = os.path.join(self.labbook.root_dir, '.gigantum', 'env', 'custom')
         custom_dep_files = self._get_yaml_files(root_dir)
 
 
@@ -126,8 +127,7 @@ class ImageBuilder(object):
 
     def _load_packages(self) -> List[str]:
         """Load packages from yaml files in expected location in directory tree. """
-        """ Contents of docker setup that must be at end of Dockerfile. """
-        root_dir = os.path.join(self.labbook_directory, '.gigantum', 'env', 'package_manager')
+        root_dir = os.path.join(self.labbook.root_dir, '.gigantum', 'env', 'package_manager')
         package_files = [os.path.join(root_dir, n) for n in os.listdir(root_dir) if 'yaml' in n]
         docker_lines = ['## Adding individual packages']
         apt_updated = False
@@ -149,6 +149,20 @@ class ImageBuilder(object):
                 docker_lines.extend(
                     get_package_manager(pkg_fields['manager']).generate_docker_install_snippet([pkg_info]))
 
+        return docker_lines
+
+    def _load_docker_snippets(self) -> List[str]:
+        docker_lines = ['# Custom docker snippets']
+        root_dir = os.path.join(self.labbook.root_dir, '.gigantum', 'env', 'docker')
+        if not os.path.exists(root_dir):
+            logger.warning(f"No `docker` subdirectory for environment in labbook")
+            return []
+
+        for snippet_file in [f for f in os.listdir(root_dir) if '.yaml' in f]:
+            docker_data = yaml.load(open(os.path.join(root_dir, snippet_file)))
+            docker_lines.append(f'# Custom Docker: {docker_data["name"]} - {len(docker_data["content"])}'
+                                f'line(s) - (Created {docker_data["timestamp_utc"]})')
+            docker_lines.extend(docker_data['content'])
         return docker_lines
 
     def _post_image_hook(self) -> List[str]:
@@ -189,6 +203,7 @@ class ImageBuilder(object):
                              self._post_image_hook,
                              self._load_custom,
                              self._load_packages,
+                             self._load_docker_snippets,
                              self._entrypoint_hooks]
 
         # flat map the results of executing the pipeline.
@@ -201,46 +216,18 @@ class ImageBuilder(object):
             logger.error(e)
             raise
 
-        dockerfile_name = os.path.join(self.labbook_directory, ".gigantum", "env", "Dockerfile")
+        dockerfile_name = os.path.join(self.labbook.root_dir, ".gigantum", "env", "Dockerfile")
         if write:
             logger.info("Writing Dockerfile to {}".format(dockerfile_name))
 
             # Get a LabBook instance
             lb = LabBook()
-            lb.from_directory(self.labbook_directory)
+            lb.from_directory(self.labbook.root_dir)
 
             with lb.lock_labbook():
                 with open(dockerfile_name, "w") as dockerfile:
                     dockerfile.write(os.linesep.join(docker_lines))
-
-                # TODO: Remove sleep after GitPython is removed from stack
-                time.sleep(2)
-                short_message = "Re-Generated Dockerfile"
-                lb.git.add(dockerfile_name)
-                commit = lb.git.commit(short_message)
-
-                # Create detail record
-                adr = ActivityDetailRecord(ActivityDetailType.ENVIRONMENT, show=False)
-                adr.add_value('text/plain', short_message)
-
-                # Create activity record
-                ar = ActivityRecord(ActivityType.ENVIRONMENT,
-                                    message=short_message,
-                                    show=False,
-                                    linked_commit=commit.hexsha,
-                                    tags=['dockerfile'])
-                ar.add_detail_object(adr)
-
-                # Store
-                ars = ActivityStore(lb)
-                ars.create_activity_record(ar)
         else:
             logger.info("Dockerfile NOT being written; write=False; {}".format(dockerfile_name))
 
         return os.linesep.join(docker_lines)
-
-
-if __name__ == '__main__':
-    """Helper utility to run imagebuilder from the command line. """
-    ib = ImageBuilder(os.getcwd())
-    ib.assemble_dockerfile(write=True)

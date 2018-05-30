@@ -17,13 +17,88 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-
 import os
-from typing import Optional
+from typing import Any, Callable, Dict, Optional, Tuple
 
 from lmcommon.logging import LMLogger
+from lmcommon.activity import ActivityAction, ActivityRecord, ActivityDetailRecord, ActivityType
 
 logger = LMLogger.get_logger()
+
+
+def process_sweep_status(result_obj: ActivityRecord, status: Dict[str, Any],
+                         section_infer_method: Callable) -> Tuple[ActivityRecord, int, int]:
+    sections = []
+    ncnt = 0
+    for filename in status['untracked']:
+        # skip any file in .git or .gigantum dirs
+        if ".git" in filename or ".gigantum" in filename:
+            continue
+        activity_type, activity_detail_type, section = section_infer_method(filename)
+        adr = ActivityDetailRecord(activity_detail_type, show=False, importance=max(255 - ncnt, 0),
+                                   action=ActivityAction.CREATE)
+        sections.append(section)
+        if section == "LabBook Root":
+            msg = f"Created new file `{filename}` in the LabBook Root."
+            msg = f"{msg}Note, it is best practice to use the Code, Input, and Output sections exclusively."
+        else:
+            msg = f"Created new {section} file `{filename}`"
+        adr.add_value('text/markdown', msg)
+        result_obj.add_detail_object(adr)
+        ncnt += 1
+
+    # If all modifications were of same section
+    if ncnt > 0 and len(set(sections)) == 1:
+        if sections[0] == 'code':
+            result_obj.type = ActivityType.CODE
+        elif sections[0] == 'input':
+            result_obj.type = ActivityType.INPUT_DATA
+        elif sections[0] == 'output':
+            result_obj.type = ActivityType.OUTPUT_DATA
+
+    mcnt = 0
+    msections = []
+    for filename, change in status['unstaged']:
+        # skip any file in .git or .gigantum dirs
+        if ".git" in filename or ".gigantum" in filename:
+            continue
+
+        activity_type, activity_detail_type, section = section_infer_method(filename)
+        msections.append(section)
+
+        if change == "deleted":
+            action = ActivityAction.DELETE
+        elif change == "added":
+            action = ActivityAction.CREATE
+        elif change == "modified":
+            action = ActivityAction.EDIT
+        elif change == "renamed":
+            action = ActivityAction.EDIT
+        else:
+            action = ActivityAction.NOACTION
+
+        adr = ActivityDetailRecord(activity_detail_type, show=False, importance=max(255 - mcnt, 0), action=action)
+        adr.add_value('text/markdown', f"{change[0].upper() + change[1:]} {section} file `{filename}`")
+        result_obj.add_detail_object(adr)
+        mcnt += 1
+
+    # If modifications were of different type than before, just make type as LABBOOK catchall.
+
+    if result_obj.type == ActivityType.LABBOOK:
+        if mcnt > 0 and len(set(msections)) == 1:
+            if msections[0] == 'code':
+                result_obj.type = ActivityType.CODE
+            elif msections[0] == 'input':
+                result_obj.type = ActivityType.INPUT_DATA
+            elif msections[0] == 'output':
+                result_obj.type = ActivityType.OUTPUT_DATA
+    elif not(mcnt > 0 and len(set(msections)) == 1 and msections[0] == sections[0]):
+        # Mismatch, just use catchall LABBOOK
+        result_obj.type = ActivityType.LABBOOK
+
+
+    # Return additionally new file cnt (ncnt) and modifified (mcnt)
+    return result_obj, ncnt, mcnt
 
 
 def to_workspace_branch(labbook, username: Optional[str] = None) -> str:

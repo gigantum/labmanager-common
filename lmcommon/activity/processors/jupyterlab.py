@@ -17,120 +17,179 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-from typing import (Any, Dict)
+from typing import (Any, Dict, List)
 
 from lmcommon.logging import LMLogger
-
-from lmcommon.activity.processors.processor import ActivityProcessor, StopProcessingException
-from lmcommon.activity import ActivityRecord, ActivityType, ActivityDetailType, ActivityDetailRecord
+from lmcommon.activity.processors.processor import ActivityProcessor, ExecutionData
+from lmcommon.activity import ActivityRecord, ActivityDetailType, ActivityDetailRecord, ActivityAction
 from lmcommon.labbook import LabBook
-
 
 logger = LMLogger.get_logger()
 
 
-class BasicJupyterLabProcessor(ActivityProcessor):
-    """Class to perform baseline processing for JupyterLab activity"""
+class JupyterLabCodeProcessor(ActivityProcessor):
+    """Class to process code records into activity detail records"""
 
-    def process(self, result_obj: ActivityRecord, code: Dict[str, Any], result: Dict[str, Any], status: Dict[str, Any],
-                metadata: Dict[str, Any]) -> ActivityRecord:
+    def process(self, result_obj: ActivityRecord, data: List[ExecutionData],
+                status: Dict[str, Any], metadata: Dict[str, Any]) -> ActivityRecord:
         """Method to update a result object based on code and result data
 
         Args:
             result_obj(ActivityNote): An object containing the note
-            code(dict): A dict containing data specific to the dev env containing code that was executed
-            result(dict): A dict containing data specific to the dev env containing the result of code execution
+            data(list): A list of ExecutionData instances containing the data for this record
+            status(dict): A dict containing the result of git status from gitlib
+            metadata(str): A dictionary containing Dev Env specific or other developer defined data
+
+        Returns:
+            ActivityRecord
+        """
+        # If there was some code, assume a cell was executed
+        result_cnt = 0
+        for cell_cnt, cell in enumerate(data):
+            for result_entry in reversed(cell.code):
+                if result_entry.get('code'):
+                    # Create detail record to capture executed code
+                    adr_code = ActivityDetailRecord(ActivityDetailType.CODE_EXECUTED, show=False,
+                                                    action=ActivityAction.EXECUTE,
+                                                    importance=max(255-result_cnt, 0))
+
+                    adr_code.add_value('text/markdown', f"```\n{result_entry.get('code')}\n```")
+                    adr_code.tags = cell.tags
+
+                    result_obj.add_detail_object(adr_code)
+
+                    result_cnt += 1
+
+        # Set Activity Record Message
+        cell_str = f"{cell_cnt} cells" if cell_cnt > 1 else "cell"
+        result_obj.message = f"Executed {cell_str} in notebook {metadata['path']}"
+
+        return result_obj
+
+
+class JupyterLabFileChangeProcessor(ActivityProcessor):
+    """Class to process file changes based on git-status into activity detail records"""
+
+    def process(self, result_obj: ActivityRecord, data: List[ExecutionData],
+                status: Dict[str, Any], metadata: Dict[str, Any]) -> ActivityRecord:
+        """Method to update a result object based on code and result data
+
+        Args:
+            result_obj(ActivityNote): An object containing the note
+            data(list): A list of ExecutionData instances containing the data for this record
+            status(dict): A dict containing the result of git status from gitlib
+            metadata(str): A dictionary containing Dev Env specific or other developer defined data
+
+        Returns:
+            ActivityRecord
+        """
+        for cnt, filename in enumerate(status['untracked']):
+            # skip any file in .git or .gigantum dirs
+            if ".git" in filename or ".gigantum" in filename:
+                continue
+
+            activity_type, activity_detail_type, section = LabBook.infer_section_from_relative_path(filename)
+
+            adr = ActivityDetailRecord(activity_detail_type, show=False, importance=max(255-cnt, 0),
+                                       action=ActivityAction.CREATE)
+            if section == "LabBook Root":
+                msg = f"Created new file `{filename}` in the LabBook Root."
+                msg = f"{msg}Note, it is best practice to use the Code, Input, and Output sections exclusively."
+            else:
+                msg = f"Created new {section} file `{filename}`"
+            adr.add_value('text/markdown', msg)
+            result_obj.add_detail_object(adr)
+
+        cnt = 0
+        for filename, change in status['unstaged']:
+            # skip any file in .git or .gigantum dirs
+            if ".git" in filename or ".gigantum" in filename:
+                continue
+
+            activity_type, activity_detail_type, section = LabBook.infer_section_from_relative_path(filename)
+
+            if change == "deleted":
+                action = ActivityAction.DELETE
+            elif change == "added":
+                action = ActivityAction.CREATE
+            elif change == "modified":
+                action = ActivityAction.EDIT
+            elif change == "renamed":
+                action = ActivityAction.EDIT
+            else:
+                action = ActivityAction.NOACTION
+
+            adr = ActivityDetailRecord(activity_detail_type, show=False, importance=max(255-cnt, 0), action=action)
+            adr.add_value('text/markdown', f"{change[0].upper() + change[1:]} {section} file `{filename}`")
+            result_obj.add_detail_object(adr)
+            cnt += 1
+
+        return result_obj
+
+
+class JupyterLabPlaintextProcessor(ActivityProcessor):
+    """Class to process plaintext result entries into activity detail records"""
+
+    def process(self, result_obj: ActivityRecord, data: List[ExecutionData],
+                status: Dict[str, Any], metadata: Dict[str, Any]) -> ActivityRecord:
+        """Method to update a result object based on code and result data
+
+        Args:
+            result_obj(ActivityNote): An object containing the note
+            data(list): A list of ExecutionData instances containing the data for this record
             status(dict): A dict containing the result of git status from gitlib
             metadata(str): A dictionary containing Dev Env specific or other developer defined data
 
         Returns:
             ActivityNote
         """
-        # If there was some code, assume a cell was executed
-        if code:
-            if code.get("code"):
-                # Create detail record to capture executed code
-                adr_code = ActivityDetailRecord(ActivityDetailType.CODE_EXECUTED, show=False, importance=128)
+        # Only store up to 64kB of plain text result data (if the user printed a TON don't save it all)
+        truncate_at = 64 * 1000
+        max_show_len = 280
 
-                # TODO: Use kernel info to get the language and provide a text/html type that is styled
-                adr_code.add_value('text/markdown', f"```{code['code']}```")
-                result_obj.add_detail_object(adr_code)
+        result_cnt = 0
+        for cell in data:
+            for result_entry in reversed(cell.result):
+                if 'metadata' in result_entry:
+                    if 'source' in result_entry['metadata']:
+                        if result_entry['metadata']['source'] == "display_data":
+                            # Don't save plain-text representations of displayed data by default.
+                            continue
 
-                # There shouldn't be anything staged yet so log a warning if that happens
-                if len(status['staged']) > 0:
-                    logger.warning("{} staged items found while processing activity. Nothing should be staged yet!")
+                if 'data' in result_entry:
+                    if 'text/plain' in result_entry['data']:
+                        text_data = result_entry['data']['text/plain']
 
-                # Create detail records for file changes
-                cnt = 0
-                for filename in status['untracked']:
-                    # skip any file in .git or .gigantum dirs
-                    if ".git" in filename or ".gigantum" in filename:
-                        continue
+                        if len(text_data) > 0:
+                            adr = ActivityDetailRecord(ActivityDetailType.RESULT,
+                                                       show=True if len(text_data) < max_show_len else False,
+                                                       action=ActivityAction.CREATE,
+                                                       importance=max(255-result_cnt-100, 0))
 
-                    activity_type, activity_detail_type, section = LabBook.infer_section_from_relative_path(filename)
+                            if len(text_data) <= truncate_at:
+                                adr.add_value("text/plain", text_data)
+                            else:
+                                adr.add_value("text/plain", text_data[:truncate_at] + " ...\n\n <result truncated>")
 
-                    adr = ActivityDetailRecord(activity_detail_type, show=False, importance=min(100+cnt, 255))
-                    if section == "LabBook Root":
-                        msg = f"Created new file `{filename}` in the LabBook Root. "
-                        msg = f"{msg}Note, it's best practice to use the Code, Input, and Output sections exclusively."
-                    else:
-                        msg = f"Created new {section} file `{filename}`"
-                    adr.add_value('text/markdown', msg)
-                    result_obj.add_detail_object(adr)
-                    cnt += 1
+                            # Set cell data to tag
+                            adr.tags = cell.tags
+                            result_obj.add_detail_object(adr)
 
-                cnt = 0
-                for filename, change in status['unstaged']:
-                    # skip any file in .git or .gigantum dirs
-                    if ".git" in filename or ".gigantum" in filename:
-                        continue
+                            result_cnt += 1
 
-                    activity_type, activity_detail_type, section = LabBook.infer_section_from_relative_path(filename)
-
-                    adr = ActivityDetailRecord(activity_detail_type, show=False, importance=min(cnt, 255))
-                    adr.add_value('text/markdown', f"{change[0].upper() + change[1:]} {section} file `{filename}`")
-                    result_obj.add_detail_object(adr)
-                    cnt += 1
-
-                if result:
-                    # Only store up to 2MB of plain text result data (if the user printed a TON don't save it all)
-                    truncate_at = 1000 * 2000
-                    if 'data' in result:
-                        if 'text/plain' in result['data']:
-                            if len(result['data']["text/plain"]) > 0:
-                                adr = ActivityDetailRecord(ActivityDetailType.RESULT, show=True, importance=200)
-
-                                if len(result['data']["text/plain"]) <= truncate_at:
-                                    adr.add_value("text/plain", result['data']["text/plain"])
-                                else:
-                                    adr.add_value("text/plain",
-                                                  result['data']["text/plain"][:truncate_at] + " ...\n\n <result truncated>")
-
-                                result_obj.add_detail_object(adr)
-
-                # Set Activity Record Message
-                result_obj.message = "Executed cell in notebook {}".format(metadata['path'])
-
-                return result_obj
-            else:
-                logger.info("Processed activity with no code executed")
-                raise StopProcessingException("No code executed. Nothing to process")
-        else:
-            logger.info("Processed activity with no code executed")
-            raise StopProcessingException("No code executed. Nothing to process")
+        return result_obj
 
 
 class JupyterLabImageExtractorProcessor(ActivityProcessor):
     """Class to perform image extraction for JupyterLab activity"""
 
-    def process(self, result_obj: ActivityRecord, code: Dict[str, Any], result: Dict[str, Any], status: Dict[str, Any],
-                metadata: Dict[str, Any]) -> ActivityRecord:
+    def process(self, result_obj: ActivityRecord, data: List[ExecutionData],
+                status: Dict[str, Any], metadata: Dict[str, Any]) -> ActivityRecord:
         """Method to update a result object based on code and result data
 
         Args:
             result_obj(ActivityNote): An object containing the note
-            code(dict): A dict containing data specific to the dev env containing code that was executed
-            result(dict): A dict containing data specific to the dev env containing the result of code execution
+            data(list): A list of ExecutionData instances containing the data for this record
             status(dict): A dict containing the result of git status from gitlib
             metadata(str): A dictionary containing Dev Env specific or other developer defined data
 
@@ -138,20 +197,28 @@ class JupyterLabImageExtractorProcessor(ActivityProcessor):
             ActivityNote
         """
         supported_image_types = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/bmp']
+
         # If a supported image exists in the result, grab it and create a detail record
+        result_cnt = 0
+        for cell in data:
+            for result_entry in reversed(cell.result):
+                if 'data' in result_entry:
+                    for mime_type in result_entry['data']:
+                        if mime_type in supported_image_types:
+                            # You got an image
+                            adr_img = ActivityDetailRecord(ActivityDetailType.RESULT, show=True,
+                                                           action=ActivityAction.CREATE,
+                                                           importance=max(255-result_cnt, 0))
 
-        if result:
-            if 'data' in result:
-                for mime_type in result['data']:
-                    if mime_type in supported_image_types:
-                        # You got an image!
-                        adr_img = ActivityDetailRecord(ActivityDetailType.RESULT, show=True,
-                                                       importance=255)
-                        adr_img.add_value(mime_type, result['data'][mime_type])
+                            adr_img.add_value(mime_type, result_entry['data'][mime_type])
 
-                        result_obj.add_detail_object(adr_img)
+                            adr_img.tags = cell.tags
+                            result_obj.add_detail_object(adr_img)
 
-                        # Set Activity Record Message
-                        result_obj.message = "Executed cell in notebook {} and generated a result".format(metadata['path'])
+                            # Set Activity Record Message
+                            result_obj.message = "Executed cell in notebook {} and generated a result".format(
+                                metadata['path'])
+
+                            result_cnt += 1
 
         return result_obj

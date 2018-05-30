@@ -19,7 +19,7 @@
 # SOFTWARE.
 from typing import (Any, List, Dict, Optional)
 from collections import OrderedDict
-import subprocess
+
 
 from io import StringIO
 import requests
@@ -31,14 +31,12 @@ from distutils.version import LooseVersion
 
 from contextlib import redirect_stdout
 from lmcommon.environment.packagemanager import PackageManager, PackageValidation
+from lmcommon.container import ContainerOperations
+from lmcommon.container.exceptions import ContainerException
+from lmcommon.labbook import LabBook
+from lmcommon.logging import LMLogger
 
-try:
-    import conda.cli
-except ModuleNotFoundError:
-    from lmcommon.logging import LMLogger
-    logger = LMLogger.get_logger()
-    logger.warning("Conda not installed in current environment. Anaconda-based package managers will fail if used.")
-    pass
+logger = LMLogger.get_logger()
 
 
 class CondaPackageManagerBase(PackageManager):
@@ -52,7 +50,7 @@ class CondaPackageManagerBase(PackageManager):
         # String of the name of the conda environment (e.g. py36 or py27, as created via container build)
         self.python_env = None
 
-    def search(self, search_str: str) -> List[str]:
+    def search(self, search_str: str, labbook: LabBook, username: str) -> List[str]:
         """Method to search a package manager for packages based on a string. The string can be a partial string.
 
         Args:
@@ -61,23 +59,31 @@ class CondaPackageManagerBase(PackageManager):
         Returns:
             list(str): The list of package names that match the search string
         """
-        buffer = StringIO()
-        with redirect_stdout(buffer):
-            conda.cli.main('conda', 'search', search_str, '--json')
+        # Add wildcard for search
+        if search_str[-1] != '*':
+            search_str = search_str + '*'
 
-        data = json.loads(buffer.getvalue())
+        try:
+            result = ContainerOperations.run_command(f'conda search  --json "{search_str}"',
+                                                     labbook=labbook, username=username)
+        except ContainerException as e:
+            logger.error(e)
+            return list()
 
-        if 'error' in data:
-            if data['error'] == 'PackageNotFoundError':
+        data = json.loads(result.decode())
+        if 'exception_name' in data:
+            if data.get('exception_name') in ['PackagesNotFoundError', 'PackageNotFoundError']:
                 # This means you entered an invalid package name that didn't resolve to anything
                 return list()
+            else:
+                raise Exception(f"An error occurred while searching for packages: {data.get('exception_name')}")
 
         if data:
             return list(data.keys())
         else:
             return list()
 
-    def list_versions(self, package_name: str) -> List[str]:
+    def list_versions(self, package_name: str, labbook: LabBook, username: str) -> List[str]:
         """Method to list all available versions of a package based on the package name
 
         Args:
@@ -86,18 +92,19 @@ class CondaPackageManagerBase(PackageManager):
         Returns:
             list(str): Version strings
         """
-        buffer = StringIO()
-        with redirect_stdout(buffer):
-            try:
-                conda.cli.main('conda', 'info', '--json', package_name)
-            except TypeError:
-                raise ValueError("Package not found")
+        try:
+            result = ContainerOperations.run_command(f"conda info --json {package_name}", labbook, username)
+            data = json.loads(result.decode())
+        except ContainerException as e:
+            logger.error(e)
+            data = {}
 
-        data = json.loads(buffer.getvalue())
+        # TODO: Conda does not seem to throw this anymore. Remove once confirmed
+        if 'exception_name' in data:
+            raise ValueError(f"An error occurred while getting package versions: {data.get('exception_name')}")
 
-        if 'error' in data:
-            if data['error'] == 'PackageNotFoundError':
-                raise ValueError("Package not found")
+        if len(data.keys()) == 0 or len(data.get(package_name)) == 0:
+            raise ValueError(f"Package {package_name} not found")
 
         # Check to see if this is a python package. If so, filter based on the current version of python (set in child)
         if any([True for x in data.get(package_name) if self.python_depends_str in x.get('depends')]):
@@ -122,7 +129,7 @@ class CondaPackageManagerBase(PackageManager):
 
         return versions
 
-    def latest_version(self, package_name: str) -> str:
+    def latest_version(self, package_name: str, labbook: LabBook, username: str) -> str:
         """Method to get the latest version string for a package
 
         Args:
@@ -131,28 +138,39 @@ class CondaPackageManagerBase(PackageManager):
         Returns:
             str: latest version string
         """
-        buffer = StringIO()
-        with redirect_stdout(buffer):
-            try:
-                # Use the install function to solve for the correct package version based on the python env
-                conda.cli.main('conda', 'install', '--dry-run', '--no-deps', '-n', self.python_env, '--json',
-                               package_name)
-            except TypeError:
-                raise ValueError("Package not found")
-        result = buffer.getvalue()
+        result = ContainerOperations.run_command(f"conda install --dry-run --no-deps --json {package_name}",
+                                                 labbook, username)
+        data = json.loads(result.decode().strip())
 
-        if result:
-            # Parse json
-            data = json.loads(result)
-
-            for p in data.get('actions')[0].get('LINK'):
-                if p.get('name') == package_name:
-                    return p.get("version")
+        if data.get('message') == 'All requested packages already installed.':
+            # We enter this block if the given package_name is already installed to the latest version.
+            # Then we have to retrieve the latest version using conda list
+            result = ContainerOperations.run_command("conda list --json", labbook, username)
+            data = json.loads(result.decode().strip())
+            for pkg in data:
+                if pkg.get('name') == package_name:
+                    return pkg.get('version')
+        else:
+            if isinstance(data.get('actions'), dict) is True:
+                # New method - added when bases updated to conda 4.5.1
+                for p in data.get('actions').get('LINK'):
+                    if p.get('name') == package_name:
+                        return p.get("version")
+            else:
+                # legacy methods to handle older bases built on conda 4.3.31
+                try:
+                    for p in [x.get('LINK')[0] for x in data.get('actions') if x]:
+                        if p.get('name') == package_name:
+                            return p.get("version")
+                except:
+                    for p in [x.get('LINK') for x in data.get('actions') if x]:
+                        if p.get('name') == package_name:
+                            return p.get("version")
 
         # if you get here, failed to find the package in the result from conda
         raise ValueError(f"Could not retrieve version list for provided package name: {package_name}")
 
-    def latest_versions(self, package_names: List[str]) -> List[str]:
+    def latest_versions(self, package_names: List[str], labbook: LabBook, username: str) -> List[str]:
         """Method to get the latest version string for a list of packages
 
         Args:
@@ -161,27 +179,45 @@ class CondaPackageManagerBase(PackageManager):
         Returns:
             list: latest version strings
         """
-        cmd = ['conda', 'install', '--dry-run', '--no-deps', '-n', self.python_env, '--json', *package_names]
+        cmd = ['conda', 'install', '--dry-run', '--no-deps', '--json', *package_names]
+
         try:
-            result = subprocess.run(cmd, stdout=subprocess.PIPE, check=True).stdout.decode('utf-8').strip()
-        except subprocess.CalledProcessError:
+            result = ContainerOperations.run_command(' '.join(cmd), labbook, username).decode().strip()
+        except Exception as e:
+            logger.error(e)
             pkgs = ", ".join(package_names)
             raise ValueError(f"Could not retrieve latest versions due to invalid package name in list: {pkgs}")
 
         output_versions: List[str] = list()
         if result:
-            # Parse json
             data = json.loads(result)
+            versions = {pn: "" for pn in package_names}
+            for package_name in package_names:
+                if isinstance(data.get('actions'), dict) is True:
+                    # New method - added when bases updated to conda 4.5.1
+                    for p in data.get('actions').get('LINK'):
+                        if p.get('name') == package_name:
+                            versions[package_name] = p.get("version")
+                else:
+                    # legacy methods to handle older bases built on conda 4.3.31
+                    try:
+                        for p in [x.get('LINK')[0] for x in data.get('actions') if x]:
+                            if p.get('name') == package_name:
+                                versions[package_name] = p.get("version")
+                    except:
+                        for p in [x.get('LINK') for x in data.get('actions') if x]:
+                            if p.get('name') == package_name:
+                                versions[package_name] = p.get("version")
 
-            versions = dict()
-            for p in data.get('actions')[0].get('LINK'):
-                versions[p.get('name')] = p.get("version")
-
-            output_versions = [versions[p] for p in package_names]
-
+        # Now, for any packages whose versions could not be found (because they are installed)...
+        # ... just look them up manually. This will add some time, but there's no way around it.
+        missing_keys = [k for k in versions.keys() if versions[k] == ""]
+        for pn in missing_keys:
+            versions[pn] = self.latest_version(pn, labbook, username)
+        output_versions = [versions[p] for p in package_names]
         return output_versions
 
-    def list_installed_packages(self) -> List[Dict[str, str]]:
+    def list_installed_packages(self, labbook: LabBook, username: str) -> List[Dict[str, str]]:
         """Method to get a list of all packages that are currently installed
 
         Note, this will return results for the computer/container in which it is executed. To get the properties of
@@ -192,18 +228,14 @@ class CondaPackageManagerBase(PackageManager):
         Returns:
             list
         """
-        buffer = StringIO()
-        with redirect_stdout(buffer):
-            conda.cli.main('conda', 'list', '-n', self.python_env, '--no-pip', '--json')
-
-        data = json.loads(buffer.getvalue())
-
+        result = ContainerOperations.run_command(f"conda list --no-pip --json", labbook, username)
+        data = json.loads(result.decode().strip())
         if data:
             return [{"name": x['name'], 'version': x['version']} for x in data]
         else:
             return []
 
-    def list_available_updates(self) -> List[Dict[str, str]]:
+    def list_available_updates(self, labbook: LabBook, username: str) -> List[Dict[str, str]]:
         """Method to get a list of all installed packages that could be updated and the new version string
 
         Note, this will return results for the computer/container in which it is executed. To get the properties of
@@ -215,17 +247,14 @@ class CondaPackageManagerBase(PackageManager):
         Returns:
             list
         """
-        buffer = StringIO()
-        with redirect_stdout(buffer):
-            conda.cli.main('conda', 'search', '-n', self.python_env, '--json', '--outdated')
+        # This may never need to be used and is not currently used by the API.
+        return []
+        # res = ContainerOperations.run_command("conda search --json --outdated", labbook, username)
+        # data = json.loads(res.decode().strip())
+        # packages = [x for x in data if data.get(x)]
+        # return packages
 
-        data = json.loads(buffer.getvalue())
-
-        packages = [x for x in data if data.get(x)]
-
-        return packages
-
-    def is_valid(self, package_name: str, package_version: Optional[str] = None) -> PackageValidation:
+    def is_valid(self, package_name: str, labbook: LabBook, username: str, package_version: Optional[str] = None) -> PackageValidation:
         """Method to validate package names and versions
 
         result should be in the format {package: bool, version: bool}
@@ -240,8 +269,8 @@ class CondaPackageManagerBase(PackageManager):
         invalid_result = PackageValidation(package=False, version=False)
 
         try:
-            version_list = self.list_versions(package_name)
-        except ValueError:
+            version_list = self.list_versions(package_name, labbook, username)
+        except (ValueError, ContainerException):
             return invalid_result
 
         if not version_list:

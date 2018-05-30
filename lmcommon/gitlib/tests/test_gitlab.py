@@ -20,14 +20,13 @@
 import pytest
 import responses
 
-from lmcommon.gitlib.gitlab import GitLabRepositoryManager
+from lmcommon.gitlib.gitlab import GitLabManager
 
 
 @pytest.fixture()
 def gitlab_mngr_fixture():
     """A pytest fixture that returns a GitLabRepositoryManager instance"""
-    yield GitLabRepositoryManager("repo.gigantum.io", "usersrv.gigantum.io", "fakeaccesstoken",
-                                  "testuser", "testuser", "test-labbook")
+    yield GitLabManager("repo.gigantum.io", "usersrv.gigantum.io", "fakeaccesstoken")
 
 
 @pytest.fixture()
@@ -35,16 +34,16 @@ def property_mocks_fixture():
     """A pytest fixture that returns a GitLabRepositoryManager instance"""
     responses.add(responses.GET, 'https://usersrv.gigantum.io/key',
                   json={'key': 'afaketoken'}, status=200)
-    responses.add(responses.GET, 'https://repo.gigantum.io/api/v4/projects?search=test-labbook',
+    responses.add(responses.GET, 'https://repo.gigantum.io/api/v4/projects/testuser%2Ftest-labbook',
                   json=[{
                           "id": 26,
                           "description": "",
                         }],
-                  status=200, match_querystring=True)
+                  status=200)
     yield
 
 
-class TestGitLabRepositoryManager(object):
+class TestGitLabManager(object):
     @responses.activate
     def test_user_token(self, gitlab_mngr_fixture):
         """test the user_token property"""
@@ -52,12 +51,12 @@ class TestGitLabRepositoryManager(object):
         responses.add(responses.GET, 'https://usersrv.gigantum.io/key',
                       json={'key': 'afaketoken'}, status=200)
 
-        assert gitlab_mngr_fixture._user_token is None
+        assert gitlab_mngr_fixture._gitlab_token is None
 
         # Get token
         token = gitlab_mngr_fixture.user_token
         assert token == 'afaketoken'
-        assert gitlab_mngr_fixture._user_token == 'afaketoken'
+        assert gitlab_mngr_fixture._gitlab_token == 'afaketoken'
 
         # Assert token is returned and set on second call and does not make a request
         responses.add(responses.GET, 'https://usersrv.gigantum.io/key', status=400)
@@ -74,78 +73,30 @@ class TestGitLabRepositoryManager(object):
         with pytest.raises(ValueError):
             _ = gitlab_mngr_fixture.user_token
 
-    @responses.activate
-    def test_repository_id_does_not_exist(self, gitlab_mngr_fixture):
-        """test the repository_id property when the repo doesn't exist"""
-        # Setup responses mock for this test
-        responses.add(responses.GET, 'https://usersrv.gigantum.io/key',
-                      json={'key': 'afaketoken'}, status=200)
-        responses.add(responses.GET, 'https://repo.gigantum.io/api/v4/projects?search=test-labbook',
-                      json=[], status=200)
-
-        # Make sure error is raised when no ids come back from the server
-        with pytest.raises(ValueError):
-            _ = gitlab_mngr_fixture.repository_id()
-
-    @responses.activate
-    def test_repository_id_error(self, gitlab_mngr_fixture):
-        """test the repository_id property error"""
-        # Setup responses mock for this test
-        responses.add(responses.GET, 'https://usersrv.gigantum.io/key',
-                      json={'key': 'afaketoken'}, status=200)
-        responses.add(responses.GET, 'https://repo.gigantum.io/api/v4/projects?search=test-labbook',
-                      json={'message': 'it failed'}, status=400)
-
-        # Make sure error is raised when getting the key fails and returns !=200
-        with pytest.raises(ValueError):
-            _ = gitlab_mngr_fixture.repository_id()
-
-    @responses.activate
-    def test_repository_id(self, gitlab_mngr_fixture):
+    def test_repository_id(self):
         """test the repository_id property"""
-        # Setup responses mock for this test
-        responses.add(responses.GET, 'https://usersrv.gigantum.io/key',
-                      json={'key': 'afaketoken'}, status=200)
-        responses.add(responses.GET, 'https://repo.gigantum.io/api/v4/projects?search=test-labbook',
-                      json=[{
-                              "id": 26,
-                              "description": "",
-                            }],
-                      status=200)
-
-        assert gitlab_mngr_fixture._repository_id is None
-
-        # Get token
-        repo_id = gitlab_mngr_fixture.repository_id()
-        assert repo_id == 26
-        assert gitlab_mngr_fixture._repository_id == 26
-
-        # Assert token is returned and set on second call and does not make a request
-        responses.add(responses.GET, 'https://repo.gigantum.io/api/v4/projects?search=test-labbook', status=400)
-        assert repo_id == gitlab_mngr_fixture.repository_id()
+        assert GitLabManager.get_repository_id("tester", "test-lb-1") == "tester%2Ftest-lb-1"
 
     @responses.activate
-    def test_exists_true(self, property_mocks_fixture):
+    def test_exists_true(self, property_mocks_fixture, gitlab_mngr_fixture):
         """test the exists method for a repo that should exist"""
-
-        glrm1 = GitLabRepositoryManager("repo.gigantum.io", "usersrv.gigantum.io", "fakeaccesstoken",
-                                        "testuser", "testuser", "test-labbook")
-        assert glrm1.exists() is True
+        assert gitlab_mngr_fixture.labbook_exists("testuser", "test-labbook") is True
 
     @responses.activate
-    def test_exists_false(self):
+    def test_exists_false(self, gitlab_mngr_fixture):
         """test the exists method for a repo that should not exist"""
         responses.add(responses.GET, 'https://usersrv.gigantum.io/key',
                       json={'key': 'afaketoken'}, status=200)
-        responses.add(responses.GET, 'https://repo.gigantum.io/api/v4/projects?search=test-labbook-not-mocked',
-                      json=[], status=200)
+        responses.add(responses.GET, 'https://repo.gigantum.io/api/v4/projects/testuser%2Fderp',
+                      json=[{
+                                "message": "404 Project Not Found"
+                            }],
+                      status=404)
 
-        glrm2 = GitLabRepositoryManager("repo.gigantum.io", "usersrv.gigantum.io", "fakeaccesstoken",
-                                        "testuser", "testuser", "test-labbook-not-mocked")
-        assert glrm2.exists() is False
+        assert gitlab_mngr_fixture.labbook_exists("testuser", "derp") is False
 
     @responses.activate
-    def test_create(self, property_mocks_fixture):
+    def test_create(self, gitlab_mngr_fixture, property_mocks_fixture):
         """test the create method"""
         # Setup responses mock for this test
         responses.add(responses.POST, 'https://repo.gigantum.io/api/v4/projects',
@@ -154,27 +105,34 @@ class TestGitLabRepositoryManager(object):
                               "description": "",
                             },
                       status=201)
+        responses.add(responses.POST, 'https://usersrv.gigantum.io/webhook/testuser/new-labbook',
+                      json={
+                              "success": True
+                            },
+                      status=201)
+        responses.add(responses.GET, 'https://repo.gigantum.io/api/v4/projects/testuser%2Fnew-labbook',
+                      json=[{
+                                "message": "404 Project Not Found"
+                            }],
+                      status=404)
+        responses.add(responses.GET, 'https://repo.gigantum.io/api/v4/projects/testuser%2Fnew-labbook',
+                      json=[{
+                              "id": 27,
+                              "description": "",
+                            }],
+                      status=200)
 
-        responses.add(responses.GET, 'https://repo.gigantum.io/api/v4/projects?search=new-labbook',
-                      json=[],
-                      status=200, match_querystring=True)
+        gitlab_mngr_fixture.create_labbook("testuser", "new-labbook")
 
-        glrm = GitLabRepositoryManager("repo.gigantum.io", "usersrv.gigantum.io", "fakeaccesstoken",
-                                       "testuser", "testuser", "new-labbook")
-
-        glrm.create()
-
-        assert glrm.repository_id() == 27
+        assert gitlab_mngr_fixture.labbook_exists("testuser", "new-labbook") is True
 
     @responses.activate
-    def test_create_errors(self, property_mocks_fixture):
+    def test_create_errors(self, gitlab_mngr_fixture, property_mocks_fixture):
         """test the create method"""
-        glrm = GitLabRepositoryManager("repo.gigantum.io", "usersrv.gigantum.io", "fakeaccesstoken",
-                                       "testuser", "testuser", "test-labbook")
 
         # Should fail because the repo "already exists"
         with pytest.raises(ValueError):
-            glrm.create()
+            gitlab_mngr_fixture.create_labbook("testuser", "test-labbook")
 
         # Should fail because the call to gitlab failed
         responses.add(responses.POST, 'https://repo.gigantum.io/api/v4/projects',
@@ -184,12 +142,12 @@ class TestGitLabRepositoryManager(object):
                             },
                       status=400)
         with pytest.raises(ValueError):
-            glrm.create()
+            gitlab_mngr_fixture.create_labbook("testuser", "test-labbook")
 
     @responses.activate
     def test_get_collaborators(self, gitlab_mngr_fixture, property_mocks_fixture):
         """Test the get_collaborators method"""
-        responses.add(responses.GET, 'https://repo.gigantum.io/api/v4/projects/26/members',
+        responses.add(responses.GET, 'https://repo.gigantum.io/api/v4/projects/testuser%2Ftest-labbook/members',
                       json=[
                                 {
                                     "id": 29,
@@ -207,10 +165,10 @@ class TestGitLabRepositoryManager(object):
                                 }
                             ],
                       status=200)
-        responses.add(responses.GET, 'https://repo.gigantum.io/api/v4/projects/26/members',
+        responses.add(responses.GET, 'https://repo.gigantum.io/api/v4/projects/testuser%2Ftest-labbook/members',
                       status=400)
 
-        collaborators = gitlab_mngr_fixture.get_collaborators()
+        collaborators = gitlab_mngr_fixture.get_collaborators("testuser", "test-labbook")
 
         assert len(collaborators) == 2
         assert collaborators[0] == (29, 'janed', True)
@@ -218,7 +176,7 @@ class TestGitLabRepositoryManager(object):
 
         # Verify it fails on error to gitlab (should get second mock on second call)
         with pytest.raises(ValueError):
-            gitlab_mngr_fixture.get_collaborators()
+            gitlab_mngr_fixture.get_collaborators("testuser", "test-labbook")
 
     @responses.activate
     def test_add_collaborator(self, gitlab_mngr_fixture, property_mocks_fixture):
@@ -233,7 +191,7 @@ class TestGitLabRepositoryManager(object):
                                 }
                             ],
                       status=200)
-        responses.add(responses.POST, 'https://repo.gigantum.io/api/v4/projects/26/members',
+        responses.add(responses.POST, 'https://repo.gigantum.io/api/v4/projects/testuser%2Ftest-labbook/members',
                       json={
                                 "id": 100,
                                 "name": "New Person",
@@ -241,7 +199,7 @@ class TestGitLabRepositoryManager(object):
                                 "state": "active",
                             },
                       status=201)
-        responses.add(responses.GET, 'https://repo.gigantum.io/api/v4/projects/26/members',
+        responses.add(responses.GET, 'https://repo.gigantum.io/api/v4/projects/testuser%2Ftest-labbook/members',
                       json=[
                                 {
                                     "id": 29,
@@ -260,7 +218,7 @@ class TestGitLabRepositoryManager(object):
                             ],
                       status=200)
 
-        collaborators = gitlab_mngr_fixture.add_collaborator("person100")
+        collaborators = gitlab_mngr_fixture.add_collaborator("testuser", "test-labbook", "person100")
 
         assert len(collaborators) == 2
         assert collaborators[0] == (29, 'janed', True)
@@ -289,7 +247,7 @@ class TestGitLabRepositoryManager(object):
                                 }
                             ],
                       status=200)
-        responses.add(responses.POST, 'https://repo.gigantum.io/api/v4/projects/26/members',
+        responses.add(responses.POST, 'https://repo.gigantum.io/api/v4/projects/testuser%2Ftest-labbook/members',
                       json={
                                 "id": 100,
                                 "name": "New Person",
@@ -299,10 +257,10 @@ class TestGitLabRepositoryManager(object):
                       status=400)
 
         with pytest.raises(ValueError):
-            _ = gitlab_mngr_fixture.add_collaborator("person100")
+            _ = gitlab_mngr_fixture.add_collaborator("testuser", "test-labbook", "person100")
 
         with pytest.raises(ValueError):
-            _ = gitlab_mngr_fixture.add_collaborator("person100")
+            _ = gitlab_mngr_fixture.add_collaborator("testuser", "test-labbook", "person100")
 
     @responses.activate
     def test_delete_collaborator(self, gitlab_mngr_fixture, property_mocks_fixture):
@@ -317,8 +275,9 @@ class TestGitLabRepositoryManager(object):
                                 }
                             ],
                       status=200)
-        responses.add(responses.DELETE, 'https://repo.gigantum.io/api/v4/projects/26/members/100', status=204)
-        responses.add(responses.GET, 'https://repo.gigantum.io/api/v4/projects/26/members',
+        responses.add(responses.DELETE, 'https://repo.gigantum.io/api/v4/projects/testuser%2Ftest-labbook/members/100',
+                      status=204)
+        responses.add(responses.GET, 'https://repo.gigantum.io/api/v4/projects/testuser%2Ftest-labbook/members',
                       json=[
                                 {
                                     "id": 29,
@@ -330,7 +289,7 @@ class TestGitLabRepositoryManager(object):
                             ],
                       status=200)
 
-        collaborators = gitlab_mngr_fixture.delete_collaborator(100)
+        collaborators = gitlab_mngr_fixture.delete_collaborator("testuser", "test-labbook", 'person100')
 
         assert len(collaborators) == 1
         assert collaborators[0] == (29, 'janed', True)
@@ -348,8 +307,9 @@ class TestGitLabRepositoryManager(object):
                                 }
                             ],
                       status=200)
-        responses.add(responses.DELETE, 'https://repo.gigantum.io/api/v4/projects/26/members/100', status=204)
-        responses.add(responses.GET, 'https://repo.gigantum.io/api/v4/projects/26/members',
+        responses.add(responses.DELETE, 'https://repo.gigantum.io/api/v4/projects/testuser%2Ftest-labbook/members/100',
+                      status=204)
+        responses.add(responses.GET, 'https://repo.gigantum.io/api/v4/projects/testuser%2Ftest-labbook/members',
                       json=[
                                 {
                                     "id": 29,
@@ -362,23 +322,25 @@ class TestGitLabRepositoryManager(object):
                       status=400)
 
         with pytest.raises(ValueError):
-            gitlab_mngr_fixture.delete_collaborator(100)
+            gitlab_mngr_fixture.delete_collaborator("testuser", "test-labbook", 'person100')
 
     @responses.activate
     def test_error_on_missing_repo(self, gitlab_mngr_fixture):
         """Test the exception handling on a repo when it doesn't exist"""
         responses.add(responses.GET, 'https://usersrv.gigantum.io/key',
                       json={'key': 'afaketoken'}, status=200)
-        responses.add(responses.GET, 'https://repo.gigantum.io/api/v4/projects?search=test-labbook',
-                      json=[],
-                      status=200, match_querystring=True)
+        responses.add(responses.GET, 'https://repo.gigantum.io/api/v4/projects/testuser%2Ftest-labbook',
+                      json=[{
+                                "message": "404 Project Not Found"
+                            }],
+                      status=404)
 
         with pytest.raises(ValueError):
-            gitlab_mngr_fixture.get_collaborators()
+            gitlab_mngr_fixture.get_collaborators("testuser", "test-labbook")
         with pytest.raises(ValueError):
-            gitlab_mngr_fixture.add_collaborator("test")
+            gitlab_mngr_fixture.add_collaborator("testuser", "test-labbook", "test")
         with pytest.raises(ValueError):
-            gitlab_mngr_fixture.delete_collaborator(100)
+            gitlab_mngr_fixture.delete_collaborator("testuser", "test-labbook", 100)
 
     @responses.activate
     def test_configure_git_credentials(self, gitlab_mngr_fixture):
@@ -408,3 +370,250 @@ class TestGitLabRepositoryManager(object):
         token = gitlab_mngr_fixture._check_if_git_credentials_configured(host, username)
         assert token is None
 
+    @responses.activate
+    def test_delete(self, gitlab_mngr_fixture, property_mocks_fixture):
+        """test the create method"""
+        # Setup responses mock for this test
+        responses.add(responses.GET, 'https://repo.gigantum.io/api/v4/projects/testuser%2Fnew-labbook',
+                      json=[{
+                              "id": 27,
+                              "description": "",
+                            }],
+                      status=200)
+        responses.add(responses.GET, 'https://repo.gigantum.io/api/v4/projects/testuser%2Fnew-labbook',
+                      json=[{
+                              "id": 27,
+                              "description": "",
+                            }],
+                      status=200)
+        responses.add(responses.DELETE, 'https://repo.gigantum.io/api/v4/projects/testuser%2Fnew-labbook',
+                      json={
+                                "message": "202 Accepted"
+                            },
+                      status=202)
+        responses.add(responses.GET, 'https://repo.gigantum.io/api/v4/projects/testuser%2Fnew-labbook',
+                      json=[{
+                                "message": "404 Project Not Found"
+                            }],
+                      status=404)
+        responses.add(responses.GET, 'https://repo.gigantum.io/api/v4/projects/testuser%2Fnew-labbook',
+                      json=[{
+                                "message": "404 Project Not Found"
+                            }],
+                      status=404)
+        responses.add(responses.DELETE, 'https://usersrv.gigantum.io/webhook/testuser/new-labbook',
+                      json={},
+                      status=204)
+
+        assert gitlab_mngr_fixture.labbook_exists("testuser", "new-labbook") is True
+
+        gitlab_mngr_fixture.remove_labbook("testuser", "new-labbook")
+
+        assert gitlab_mngr_fixture.labbook_exists("testuser", "new-labbook") is False
+
+        with pytest.raises(ValueError):
+            gitlab_mngr_fixture.remove_labbook("testuser", "new-labbook")
+
+    @responses.activate
+    def test_list_labbooks_az(self, gitlab_mngr_fixture):
+        """test list labbooks"""
+        responses.add(responses.GET, 'https://usersrv.gigantum.io/key',
+                      json={'key': 'afaketoken'}, status=200)
+        dummy_data = [
+                        {
+                            "id": 118,
+                            "name": "test11",
+                            "name_with_namespace": "testuser / test11",
+                            "path_with_namespace": "testuser/test11",
+                            "created_at": "2018-04-19T19:06:11.009Z",
+                            "last_activity_at": "2018-04-19T22:08:05.974Z",
+                            "visibility": "private",
+                            "owner": {
+                                "id": 14,
+                                "name": "testuser",
+                                "username": "testuser",
+                                "state": "active",
+                            },
+                            "creator_id": 14,
+                            "namespace": {
+                                "id": 14,
+                                "name": "testuser",
+                                "path": "testuser",
+                                "kind": "user",
+                                "full_path": "testuser"
+                            },
+                            "import_status": "none",
+                            "permissions": {
+                                "project_access": {
+                                    "access_level": 30,
+                                    "notification_level": 3
+                                },
+                            }
+                        },
+                        {
+                            "id": 138,
+                            "name": "test2",
+                            "name_with_namespace": "testuser / test2",
+                            "path_with_namespace": "testuser/test2",
+                            "created_at": "2018-04-19T19:36:11.009Z",
+                            "last_activity_at": "2018-04-19T20:58:05.974Z",
+                            "visibility": "private",
+                            "owner": {
+                                "id": 14,
+                                "name": "testuser",
+                                "username": "testuser",
+                                "state": "active",
+                            },
+                            "creator_id": 14,
+                            "namespace": {
+                                "id": 14,
+                                "name": "testuser",
+                                "path": "testuser",
+                                "kind": "user",
+                                "full_path": "testuser"
+                            },
+                            "import_status": "none",
+                            "permissions": {
+                                "project_access": {
+                                    "access_level": 30,
+                                    "notification_level": 3
+                                },
+                            }
+                        }]
+
+        responses.add(responses.GET, 'https://repo.gigantum.io/api/v4/projects/',
+                      json=dummy_data, status=200)
+
+        labbooks = gitlab_mngr_fixture.list_labbooks()
+
+        assert len(labbooks) == 2
+        assert labbooks[0]['id'] == 138
+        assert labbooks[0]['namespace'] == "testuser"
+        assert labbooks[0]['labbook_name'] == "test2"
+        assert labbooks[0]['description'] == ""
+        assert labbooks[0]['created_on'] == "2018-04-19T19:36:11.009Z"
+        assert labbooks[0]['modified_on'] == "2018-04-19T20:58:05.974Z"
+        assert labbooks[1]['id'] == 118
+        assert labbooks[1]['namespace'] == "testuser"
+        assert labbooks[1]['labbook_name'] == "test11"
+        assert labbooks[1]['description'] == ""
+        assert labbooks[1]['created_on'] == "2018-04-19T19:06:11.009Z"
+        assert labbooks[1]['modified_on'] == "2018-04-19T22:08:05.974Z"
+
+        labbooks = gitlab_mngr_fixture.list_labbooks(reverse=True)
+
+        assert len(labbooks) == 2
+        assert labbooks[0]['id'] == 118
+        assert labbooks[0]['namespace'] == "testuser"
+        assert labbooks[0]['labbook_name'] == "test11"
+        assert labbooks[0]['description'] == ""
+        assert labbooks[0]['created_on'] == "2018-04-19T19:06:11.009Z"
+        assert labbooks[0]['modified_on'] == "2018-04-19T22:08:05.974Z"
+        assert labbooks[1]['id'] == 138
+        assert labbooks[1]['namespace'] == "testuser"
+        assert labbooks[1]['labbook_name'] == "test2"
+        assert labbooks[1]['description'] == ""
+        assert labbooks[1]['created_on'] == "2018-04-19T19:36:11.009Z"
+        assert labbooks[1]['modified_on'] == "2018-04-19T20:58:05.974Z"
+
+    @responses.activate
+    def test_list_labbooks_create_modify(self, gitlab_mngr_fixture):
+        """test list labbooks"""
+        responses.add(responses.GET, 'https://usersrv.gigantum.io/key',
+                      json={'key': 'afaketoken'}, status=200)
+        dummy_data = [
+                        {
+                            "id": 118,
+                            "name": "test11",
+                            "name_with_namespace": "testuser / test11",
+                            "path_with_namespace": "testuser/test11",
+                            "created_at": "2018-04-19T19:06:11.009Z",
+                            "last_activity_at": "2018-04-20T22:08:05.974Z",
+                            "visibility": "private",
+                            "owner": {
+                                "id": 14,
+                                "name": "testuser",
+                                "username": "testuser",
+                                "state": "active",
+                            },
+                            "creator_id": 14,
+                            "namespace": {
+                                "id": 14,
+                                "name": "testuser",
+                                "path": "testuser",
+                                "kind": "user",
+                                "full_path": "testuser"
+                            },
+                            "import_status": "none",
+                            "permissions": {
+                                "project_access": {
+                                    "access_level": 30,
+                                    "notification_level": 3
+                                },
+                            }
+                        },
+                        {
+                            "id": 138,
+                            "name": "test2",
+                            "name_with_namespace": "testuser / test2",
+                            "path_with_namespace": "testuser/test2",
+                            "created_at": "2018-04-19T19:36:11.009Z",
+                            "last_activity_at": "2018-04-19T20:58:05.974Z",
+                            "visibility": "private",
+                            "owner": {
+                                "id": 14,
+                                "name": "testuser",
+                                "username": "testuser",
+                                "state": "active",
+                            },
+                            "creator_id": 14,
+                            "namespace": {
+                                "id": 14,
+                                "name": "testuser",
+                                "path": "testuser",
+                                "kind": "user",
+                                "full_path": "testuser"
+                            },
+                            "import_status": "none",
+                            "permissions": {
+                                "project_access": {
+                                    "access_level": 30,
+                                    "notification_level": 3
+                                },
+                            }
+                        }]
+
+        responses.add(responses.GET, 'https://repo.gigantum.io/api/v4/projects/',
+                      json=dummy_data, status=200)
+
+        labbooks = gitlab_mngr_fixture.list_labbooks(sort_mode="created_on")
+
+        assert len(labbooks) == 2
+        assert labbooks[0]['id'] == 138
+        assert labbooks[0]['namespace'] == "testuser"
+        assert labbooks[0]['labbook_name'] == "test2"
+        assert labbooks[0]['description'] == ""
+        assert labbooks[0]['created_on'] == "2018-04-19T19:36:11.009Z"
+        assert labbooks[0]['modified_on'] == "2018-04-19T20:58:05.974Z"
+        assert labbooks[1]['id'] == 118
+        assert labbooks[1]['namespace'] == "testuser"
+        assert labbooks[1]['labbook_name'] == "test11"
+        assert labbooks[1]['description'] == ""
+        assert labbooks[1]['created_on'] == "2018-04-19T19:06:11.009Z"
+        assert labbooks[1]['modified_on'] == "2018-04-20T22:08:05.974Z"
+
+        labbooks = gitlab_mngr_fixture.list_labbooks(sort_mode="modified_on")
+
+        assert len(labbooks) == 2
+        assert labbooks[0]['id'] == 118
+        assert labbooks[0]['namespace'] == "testuser"
+        assert labbooks[0]['labbook_name'] == "test11"
+        assert labbooks[0]['description'] == ""
+        assert labbooks[0]['created_on'] == "2018-04-19T19:06:11.009Z"
+        assert labbooks[0]['modified_on'] == "2018-04-20T22:08:05.974Z"
+        assert labbooks[1]['id'] == 138
+        assert labbooks[1]['namespace'] == "testuser"
+        assert labbooks[1]['labbook_name'] == "test2"
+        assert labbooks[1]['description'] == ""
+        assert labbooks[1]['created_on'] == "2018-04-19T19:36:11.009Z"
+        assert labbooks[1]['modified_on'] == "2018-04-19T20:58:05.974Z"

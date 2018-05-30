@@ -21,6 +21,7 @@
 import pytest
 import tempfile
 import os
+import pprint
 
 from lmcommon.labbook import LabBook
 from lmcommon.fixtures import mock_config_file, mock_labbook, remote_labbook_repo, sample_src_file
@@ -68,6 +69,30 @@ class TestLabbookFileOperations(object):
         with pytest.raises(ValueError):
             lb.insert_file("code", sample_src_file, "/totally/invalid/dir")
 
+    def test_insert_file_fail_due_to_gitignore(self, mock_config_file):
+        lb = LabBook(mock_config_file[0])
+        lb.new(owner={"username": "test"}, name="test-insert-gitignored-file", description="validate tests.")
+
+        git_hash_1 = lb.git.commit_hash
+        lines = [l.strip() for l in open(os.path.join(lb.root_dir, '.gitignore')).readlines()]
+        pprint.pprint(lines)
+        assert any(['.DS_Store' in l for l in lines])
+
+        # Note: .DS_Store is in the gitignore directory.
+        test_file = os.path.join(tempfile.gettempdir(), ".DS_Store")
+        with open(test_file, 'wt') as sample_f:
+            # Fill sample file with some deterministic crap
+            sample_f.write("This file should not be allowed to be inserted into labbook. " * 40)
+
+        git_hash_2 = lb.git.commit_hash
+        with pytest.raises(Exception):
+            r = lb.insert_file('input', src_file=sample_f.name, dst_dir='')
+
+        # Make sure no commits were made
+        assert git_hash_1 == git_hash_2
+        # Make sure the inserted file that doesn't match wasn't added.
+        assert '.DS_Store' not in os.listdir(os.path.join(lb.root_dir, 'input'))
+
     def test_remove_file_success(self, mock_config_file, sample_src_file):
         lb = LabBook(mock_config_file[0])
         lb.new(owner={"username": "test"}, name="test-insert-files-1", description="validate tests.")
@@ -95,10 +120,7 @@ class TestLabbookFileOperations(object):
         base_name = os.path.basename(sample_src_file)
 
         assert os.path.exists(os.path.join(lb.root_dir, 'output', 'testdir', base_name))
-
-        with pytest.raises(ValueError):
-            lb.delete_file("output", "testdir", directory=False)
-
+        # Note! Now that remove() uses force=True, no special action is needed for directories.
         # Delete the directory
         lb.delete_file("output", "testdir", directory=True)
         assert not os.path.exists(os.path.join(lb.root_dir, 'output', 'testdir', base_name))

@@ -20,8 +20,8 @@
 from typing import (Any, List, Dict, Optional)
 import requests
 import json
-import subprocess
-import sys
+from lmcommon.container import ContainerOperations
+from lmcommon.labbook import LabBook
 
 from natsort import natsorted
 
@@ -35,7 +35,7 @@ class PipPackageManager(PackageManager):
     """Class to implement the pip package manager
     """
 
-    def search(self, search_str: str) -> List[str]:
+    def search(self, search_str: str, labbook: LabBook, username: str) -> List[str]:
         """Method to search a package manager for packages based on a string. The string can be a partial string.
 
         Args:
@@ -44,12 +44,11 @@ class PipPackageManager(PackageManager):
         Returns:
             list(str): The list of package names that match the search string
         """
-        search_result = subprocess.check_output([sys.executable, '-m', 'pip', 'search', search_str])
-
+        search_result = ContainerOperations.run_command(f'pip search {search_str}', labbook, username)
         lines = search_result.decode().splitlines()
         return [x.split(' ')[0] for x in lines]
 
-    def list_versions(self, package_name: str) -> List[str]:
+    def list_versions(self, package_name: str, labbook: LabBook, username: str) -> List[str]:
         """Method to list all available versions of a package based on the package name
 
         Args:
@@ -84,7 +83,7 @@ class PipPackageManager(PackageManager):
         versions.reverse()
         return versions
 
-    def latest_version(self, package_name: str) -> str:
+    def latest_version(self, package_name: str, labbook: LabBook, username: str) -> str:
         """Method to get the latest version string for a package
 
         Args:
@@ -93,13 +92,13 @@ class PipPackageManager(PackageManager):
         Returns:
             str: latest version string
         """
-        versions = self.list_versions(package_name)
+        versions = self.list_versions(package_name, labbook, username)
         if versions:
             return versions[0]
         else:
             raise ValueError("Could not retrieve version list for provided package name")
 
-    def latest_versions(self, package_names: List[str]) -> List[str]:
+    def latest_versions(self, package_names: List[str], labbook: LabBook, username: str) -> List[str]:
         """Method to get the latest version string for a list of packages
 
         Args:
@@ -108,9 +107,9 @@ class PipPackageManager(PackageManager):
         Returns:
             list: latest version strings
         """
-        return [self.latest_version(pkg) for pkg in package_names]
+        return [self.latest_version(pkg, labbook, username) for pkg in package_names]
 
-    def list_installed_packages(self) -> List[Dict[str, str]]:
+    def list_installed_packages(self, labbook: LabBook, username: str) -> List[Dict[str, str]]:
         """Method to get a list of all packages that are currently installed
 
         Note, this will return results for the computer/container in which it is executed. To get the properties of
@@ -121,10 +120,10 @@ class PipPackageManager(PackageManager):
         Returns:
             list
         """
-        packages = subprocess.check_output([sys.executable, '-m', 'pip', 'list', '--format=json'])
+        packages = ContainerOperations.run_command('pip list --format=json', labbook, username)
         return json.loads(packages.decode())
 
-    def list_available_updates(self) -> List[Dict[str, str]]:
+    def list_available_updates(self, labbook: LabBook, username: str) -> List[Dict[str, str]]:
         """Method to get a list of all installed packages that could be updated and the new version string
 
         Note, this will return results for the computer/container in which it is executed. To get the properties of
@@ -136,10 +135,10 @@ class PipPackageManager(PackageManager):
         Returns:
             list
         """
-        packages = subprocess.check_output([sys.executable, '-m', 'pip', 'list', '--format=json', '-o'])
+        packages = ContainerOperations.run_command('pip list --format=json -o', labbook, username)
         return json.loads(packages.decode())
 
-    def is_valid(self, package_name: str, package_version: Optional[str] = None) -> PackageValidation:
+    def is_valid(self, package_name: str, labbook: LabBook, username: str, package_version: Optional[str] = None) -> PackageValidation:
         """Method to validate package names and versions
 
         result should be in the format {package: bool, version: bool}
@@ -154,7 +153,7 @@ class PipPackageManager(PackageManager):
         invalid_result = PackageValidation(package=False, version=False)
 
         try:
-            version_list = self.list_versions(package_name)
+            version_list = self.list_versions(package_name, labbook, username)
         except ValueError:
             return invalid_result
 
@@ -174,7 +173,7 @@ class PipPackageManager(PackageManager):
         """Method to generate a docker snippet to install 1 or more packages
 
         Args:
-            packages(list(dict)): A list of package names and versions to install
+             packages(list(dict)): A list of package names and versions to install
             single_line(bool): If true, collapse
 
         Returns:

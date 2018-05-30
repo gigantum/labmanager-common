@@ -23,7 +23,8 @@ import random
 from datetime import datetime, timedelta, timezone
 
 from lmcommon.labbook import LabBook
-from lmcommon.activity.records import ActivityType, ActivityRecord, ActivityDetailRecord, ActivityDetailType
+from lmcommon.activity.records import ActivityType, ActivityRecord, ActivityDetailRecord, ActivityDetailType,\
+    ActivityAction
 from lmcommon.activity import ActivityStore
 from lmcommon.fixtures import mock_config_with_activitystore
 
@@ -131,14 +132,57 @@ class TestActivityStore:
         assert adr1.key == adr1_loaded.key
         assert adr1.importance == adr1_loaded.importance
         assert adr1.type == adr1_loaded.type
-        assert adr1.is_loaded == adr1_loaded.is_loaded == True
+        assert adr1.is_loaded == adr1_loaded.is_loaded is True
         assert adr1.data == adr1_loaded.data
 
         assert adr2.key == adr2_loaded.key
         assert adr2.importance == adr2_loaded.importance
         assert adr2.type == adr2_loaded.type
-        assert adr2.is_loaded == adr2_loaded.is_loaded == True
+        assert adr2.is_loaded == adr2_loaded.is_loaded is True
         assert adr2.data == adr2_loaded.data
+
+    def test_put_get_detail_record_with_tags(self, mock_config_with_activitystore):
+        """Test to test storing and retrieving data from the activity detail db"""
+        # Create test values
+        adr1 = ActivityDetailRecord(ActivityDetailType.CODE, action=ActivityAction.CREATE)
+        adr1.show = True
+        adr1.importance = 100
+        adr1.add_value("text/plain", "first")
+        adr1.tags = ['test1']
+
+        adr2 = ActivityDetailRecord(ActivityDetailType.CODE_EXECUTED, action=ActivityAction.EXECUTE)
+        adr2.show = True
+        adr2.importance = 0
+        adr2.add_value("text/plain", "second")
+        adr2.tags = ['test2', 'test:3']
+
+        adr1 = mock_config_with_activitystore[0].put_detail_record(adr1)
+        adr2 = mock_config_with_activitystore[0].put_detail_record(adr2)
+
+        assert adr1.key is not None
+        assert adr2.key is not None
+        assert type(adr1.key) == str
+        assert type(adr2.key) == str
+
+        # Load
+        adr1_loaded = mock_config_with_activitystore[0].get_detail_record(adr1.key)
+        adr2_loaded = mock_config_with_activitystore[0].get_detail_record(adr2.key)
+
+        assert adr1.key == adr1_loaded.key
+        assert adr1.importance == adr1_loaded.importance
+        assert adr1.type == adr1_loaded.type
+        assert adr1.is_loaded == adr1_loaded.is_loaded is True
+        assert adr1.data == adr1_loaded.data
+        assert adr1.tags == adr1_loaded.tags
+        assert adr1.action == adr1_loaded.action == ActivityAction.CREATE
+
+        assert adr2.key == adr2_loaded.key
+        assert adr2.importance == adr2_loaded.importance
+        assert adr2.type == adr2_loaded.type
+        assert adr2.is_loaded == adr2_loaded.is_loaded is True
+        assert adr2.data == adr2_loaded.data
+        assert adr2.tags == adr2_loaded.tags
+        assert adr2.action == adr2_loaded.action == ActivityAction.EXECUTE
 
     def test_put_get_detail_record_with_compression(self, mock_config_with_activitystore):
         """Test to test storing and retrieving data from the activity detail db w/ compression"""

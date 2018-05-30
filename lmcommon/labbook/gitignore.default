@@ -1,7 +1,12 @@
 .DS_Store
+**/.DS_Store
+/**/.DS_Store
+
+
 # Ignore the checkout context file, because it should always get recreated when a repo moves or is checked out
 .gigantum/.checkout
 .gigantum/activity/log/.detaildb
+.gigantum/env/Dockerfile
 
 # Python ignores from https://github.com/github/gitignore/blob/master/Python.gitignore
 # Byte-compiled / optimized / DLL files

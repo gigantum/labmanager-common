@@ -42,7 +42,7 @@ from lmcommon.gitlib.git import GitAuthor
 
 ENV_UNIT_TEST_REPO = 'gig-dev_components2'
 ENV_UNIT_TEST_BASE = 'quickstart-jupyterlab'
-ENV_UNIT_TEST_REV = 1
+ENV_UNIT_TEST_REV = 2
 
 
 def _create_temp_work_dir(override_dict: dict = None, lfs_enabled: bool = True):
@@ -76,7 +76,7 @@ def _create_temp_work_dir(override_dict: dict = None, lfs_enabled: bool = True):
         },
         'git': {
             'working_directory': unit_test_working_dir,
-            'backend': 'filesystem',
+            'backend': 'filesystem-shim',
             'lfs_enabled': lfs_enabled
         },
         'auth': {
@@ -122,13 +122,18 @@ def _MOCK_create_remote_repo2(labbook, username: str, access_token = None) -> No
     assert r.bare is True
     labbook.add_remote(remote_name="origin", url=working_dir)
 
+
 @pytest.fixture()
 def sample_src_file():
-    with tempfile.NamedTemporaryFile(mode="w") as sample_f:
+    with tempfile.NamedTemporaryFile(mode="w", delete=False) as sample_f:
         # Fill sample file with some deterministic crap
         sample_f.write("n4%nm4%M435A EF87kn*C" * 40)
         sample_f.seek(0)
-        yield sample_f.name
+    yield sample_f.name
+    try:
+        os.remove(sample_f.name)
+    except:
+        pass
 
 
 @pytest.fixture()
@@ -320,6 +325,12 @@ def mock_labbook_lfs_disabled():
 
 
 @pytest.fixture()
+def mock_config_lfs_disabled():
+    conf_file, working_dir = _create_temp_work_dir(lfs_enabled=False)
+    yield conf_file, working_dir
+
+
+@pytest.fixture()
 def mock_labbook_with_populated_env():
     """A pytest fixture that creates a temporary directory and a config file to match. Deletes directory after test"""
 
@@ -355,17 +366,22 @@ def remote_labbook_repo():
     labbook_dir = lb.new(username="test", name="sample-repo-lb", description="my first labbook",
                              owner={"username": "test"})
     lb.checkout_branch("testing-branch", new=True)
-    with tempfile.TemporaryDirectory() as tmpdirname:
-        with open(os.path.join(tmpdirname, 'codefile.c'), 'wb') as codef:
-            codef.write(b'// Cody McCodeface ...')
+    #with tempfile.TemporaryDirectory() as tmpdirname:
+    with open(os.path.join('/tmp', 'codefile.c'), 'wb') as codef:
+        codef.write(b'// Cody McCodeface ...')
 
-        lb.insert_file("code", codef.name, "")
+    lb.insert_file("code", "/tmp/codefile.c", "")
 
+    assert lb.is_repo_clean
     lb.checkout_branch("gm.workspace")
 
     # Location of the repo to push/pull from
     yield lb.root_dir
     shutil.rmtree(working_dir)
+    try:
+        os.remove('/tmp/codefile.c')
+    except:
+        pass
 
 
 @pytest.fixture()
@@ -414,7 +430,7 @@ def build_lb_image_for_jupyterlab(mock_config_with_repo):
     cm.add_component("base", ENV_UNIT_TEST_REPO, ENV_UNIT_TEST_BASE, ENV_UNIT_TEST_REV)
     n = cm.add_package("pip", "requests", "2.18.4")
 
-    ib = ImageBuilder(lb.root_dir)
+    ib = ImageBuilder(lb)
     docker_lines = ib.assemble_dockerfile(write=True)
     pprint.pprint(docker_lines)
     assert 'RUN pip install requests==2.18.4' in docker_lines
@@ -430,7 +446,7 @@ def build_lb_image_for_jupyterlab(mock_config_with_repo):
         lb, container_id, port_maps = ContainerOperations.start_container(lb, username="unittester")
 
         assert isinstance(container_id, str)
-        yield lb, ib, client, docker_image_id, container_id, port_maps
+        yield lb, ib, client, docker_image_id, container_id, port_maps, 'unittester'
 
         try:
             _, s = ContainerOperations.stop_container(labbook=lb, username="unittester")
@@ -446,10 +462,46 @@ def build_lb_image_for_jupyterlab(mock_config_with_repo):
         except:
             pass
 
-        ContainerOperations.delete_image(labbook=lb, username='unittester')
+        # Remove image if it's still there
+        try:
+            ContainerOperations.delete_image(labbook=lb, username='unittester')
+            client.images.remove(docker_image_id, force=True, noprune=False)
+        except:
+            pass
+
+        try:
+            client.images.remove(docker_image_id, force=True, noprune=False)
+        except:
+            pass
+
+
+@pytest.fixture #(scope='method')
+def build_lb_image_for_env(mock_config_with_repo):
+    # Create a labook
+    lb = LabBook(mock_config_with_repo[0])
+    labbook_dir = lb.new(name="containerunittestbookenv", description="Testing environment functions.",
+                         owner={"username": "unittester"})
+    # Create Component Manager
+    cm = ComponentManager(lb)
+    # Add a component
+    cm.add_component("base", ENV_UNIT_TEST_REPO, ENV_UNIT_TEST_BASE, ENV_UNIT_TEST_REV)
+
+    ib = ImageBuilder(lb)
+    ib.assemble_dockerfile(write=True)
+    client = get_docker_client()
+    client.containers.prune()
+
+    try:
+        lb, docker_image_id = ContainerOperations.build_image(labbook=lb, username="unittester")
+
+        yield lb, 'unittester'
+
+    finally:
+        shutil.rmtree(lb.root_dir)
 
         # Remove image if it's still there
         try:
             client.images.remove(docker_image_id, force=True, noprune=False)
         except:
             pass
+

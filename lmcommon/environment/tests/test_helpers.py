@@ -19,6 +19,7 @@
 # SOFTWARE.
 import pytest
 from lmcommon.environment import get_package_manager
+from lmcommon.labbook import LabBook
 
 from lmcommon.environment.pip import PipPackageManager
 from lmcommon.environment.conda import Conda2PackageManager, Conda3PackageManager

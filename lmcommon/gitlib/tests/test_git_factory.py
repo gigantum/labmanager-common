@@ -37,5 +37,5 @@ class TestGitFactory(object):
     def test_filesystem(self, mock_config_filesystem):
         """Test trying to get the filesystem interface"""
         git = get_git_interface(mock_config_filesystem)
-        assert type(git) is GitFilesystem
+        assert isinstance(git, GitFilesystem)
         assert git.repo is None

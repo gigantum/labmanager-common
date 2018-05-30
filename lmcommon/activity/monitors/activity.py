@@ -22,7 +22,7 @@ from lmcommon.logging import LMLogger
 from typing import (Any, Dict, List, Optional)
 
 from lmcommon.activity import ActivityRecord, ActivityStore, ActivityType
-from lmcommon.activity.processors.processor import ActivityProcessor
+from lmcommon.activity.processors.processor import ActivityProcessor, ExecutionData
 from lmcommon.configuration import get_docker_client
 from lmcommon.labbook import LabBook
 from lmcommon.gitlib.git import GitAuthor
@@ -68,6 +68,9 @@ class ActivityMonitor(metaclass=abc.ABCMeta):
         # Create ActivityStore instance
         self.activity_store = ActivityStore(self.labbook)
 
+        # A flag indicating if the activity record is OK to store
+        self.can_store_activity_record = False
+
     def add_processor(self, processor_instance: ActivityProcessor) -> None:
         """
 
@@ -102,7 +105,7 @@ class ActivityMonitor(metaclass=abc.ABCMeta):
         commit = self.labbook.git.commit("Auto-commit from activity monitoring")
         return commit.hexsha
 
-    def create_activity_record(self, linked_commit: str, activity_record: ActivityRecord) -> Optional[str]:
+    def store_activity_record(self, linked_commit: str, activity_record: ActivityRecord) -> Optional[str]:
         """Method to commit changes to a file
 
         Args:
@@ -119,23 +122,27 @@ class ActivityMonitor(metaclass=abc.ABCMeta):
 
         return record.commit
 
-    def process(self, activity_type: ActivityType, code: Dict[str, Any],
-                result: Dict[str, Any], metadata: Dict[str, Any]) -> ActivityRecord:
-        """Method to update a result object based on code and result data
+    def process(self, activity_type: ActivityType, data: List[ExecutionData],
+                metadata: Dict[str, Any]) -> ActivityRecord:
+        """Method to update the result ActivityRecord object based on code and result data
 
         Args:
             activity_type(ActivityType): A ActivityType object indicating the activity type
-            code(dict): A dict containing data specific to the dev env containing code that was executed
-            result(dict): A dict containing data specific to the dev env containing the result of code execution
+            data(list): A list of ExecutionData instances containing the data for this record
             metadata(str): A dictionary containing Dev Env specific or other developer defined data
 
         Returns:
-            ActivityNote
+            ActivityRecord
         """
-        activity_record = ActivityRecord(activity_type)
+        # Initialize empty record
+        activity_record = ActivityRecord(activity_type=activity_type)
+
+        # Get git status for tracking file changes
         status = self.labbook.git.status()
+
+        # Run processors to populate the record
         for p in self.processors:
-            activity_record = p.process(activity_record, code, result, status, metadata)
+            activity_record = p.process(activity_record, data, status, metadata)
 
         return activity_record
 
@@ -164,4 +171,3 @@ class ActivityMonitor(metaclass=abc.ABCMeta):
             None
         """
         raise NotImplemented
-

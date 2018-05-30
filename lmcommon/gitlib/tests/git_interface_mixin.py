@@ -24,10 +24,21 @@ import os
 import shutil
 import uuid
 import datetime
-from lmcommon.gitlib import GitFilesystem, GitAuthor
+from lmcommon.gitlib import GitFilesystem, GitFilesystemShimmed, GitAuthor
 from git import Repo
 from git.exc import GitCommandError
 
+
+def get_backend():
+    return os.environ['GITLIB_FS_BACKEND']
+
+def get_fs_class():
+    if get_backend() == 'filesystem':
+        return GitFilesystem
+    elif get_backend() == 'filesystem-shim':
+        return GitFilesystemShimmed
+    else:
+        raise NotImplementedError('Invalid FS class')
 
 # Required Fixtures:
 #   - mock_config: a standard config with an empty working dir
@@ -41,7 +52,7 @@ def mock_config_filesystem():
     working_dir = os.path.join(tempfile.gettempdir(), uuid.uuid4().hex)
     os.makedirs(working_dir)
 
-    config = {"backend": "filesystem", "working_directory": working_dir}
+    config = {"backend": get_backend(), "working_directory": working_dir}
 
     yield config  # provide the fixture value
 
@@ -60,11 +71,11 @@ def mock_initialized_filesystem():
     working_dir = os.path.join(tempfile.gettempdir(), uuid.uuid4().hex)
     os.makedirs(working_dir)
 
-    config = {"backend": "filesystem", "working_directory": working_dir}
+    config = {"backend": get_backend(), "working_directory": working_dir}
 
     # Init the empty repo
     create_dummy_repo(working_dir)
-    git = GitFilesystem(config)
+    git = get_fs_class()(config)
 
     yield git, working_dir  # provide the fixture value
 
@@ -91,10 +102,10 @@ def mock_initialized_filesystem_with_remote():
     working_dir = os.path.join(tempfile.gettempdir(), uuid.uuid4().hex)
     os.makedirs(working_dir)
 
-    config = {"backend": "filesystem", "working_directory": working_dir}
+    config = {"backend": get_backend(), "working_directory": working_dir}
 
     # Init the empty repo
-    git = GitFilesystem(config)
+    git = get_fs_class()(config)
     git.clone(bare_working_dir)
 
     yield git, working_dir, bare_repo, bare_working_dir  # provide the fixture value
@@ -109,10 +120,10 @@ def populate_bare_repo(working_dir):
     # Create a local repo so we can manipulate the remote
     scratch_working_dir = os.path.join(tempfile.gettempdir(), uuid.uuid4().hex)
     os.makedirs(scratch_working_dir)
-    config = {"backend": "filesystem", "working_directory": scratch_working_dir}
+    config = {"backend": get_backend(), "working_directory": scratch_working_dir}
 
     # Init the empty repo
-    git = GitFilesystem(config)
+    git = get_fs_class()(config)
     git.clone(working_dir)
 
     # Add a file to master and commit
@@ -220,9 +231,9 @@ class GitInterfaceMixin(object):
         """Test trying to clone an existing repo dir"""
         scratch_working_dir = os.path.join(tempfile.gettempdir(), uuid.uuid4().hex)
         os.makedirs(scratch_working_dir)
-        config = {"backend": "filesystem", "working_directory": scratch_working_dir}
+        config = {"backend": get_backend(), "working_directory": scratch_working_dir}
 
-        git = GitFilesystem(config)
+        git = self.get_git_obj(config)
         git.clone(mock_initialized_remote[3])
 
         assert len(git.repo.heads) == 1
@@ -339,6 +350,7 @@ class GitInterfaceMixin(object):
         git = mock_initialized[0]
         working_directory = mock_initialized[1]
 
+        print(f"mock_initialized={mock_initialized}")
         # Create file
         write_file(git, "add.txt", "entry 1", add=False)
 
@@ -1139,10 +1151,10 @@ class GitInterfaceMixin(object):
         """Method to test creating and listing tags"""
         scratch_working_dir = os.path.join(tempfile.gettempdir(), uuid.uuid4().hex)
         os.makedirs(scratch_working_dir)
-        config = {"backend": "filesystem", "working_directory": scratch_working_dir}
+        config = {"backend": get_backend(), "working_directory": scratch_working_dir}
 
         # Init the empty repo
-        git = GitFilesystem(config)
+        git = get_fs_class()(config)
         git.initialize()
         remote_dir = mock_initialized_remote[3]
 
@@ -1211,10 +1223,10 @@ class GitInterfaceMixin(object):
         # Add a file
         scratch_working_dir = os.path.join(tempfile.gettempdir(), uuid.uuid4().hex)
         os.makedirs(scratch_working_dir)
-        config = {"backend": "filesystem", "working_directory": scratch_working_dir}
+        config = {"backend": get_backend(), "working_directory": scratch_working_dir}
 
         # Init the empty repo
-        git_updater = GitFilesystem(config)
+        git_updater = get_fs_class()(config)
         git_updater.clone(mock_initialized_remote[3])
         git_updater.checkout("test_branch")
 
@@ -1257,10 +1269,10 @@ class GitInterfaceMixin(object):
         # Make sure it pushed by cloning again content
         scratch_working_dir = os.path.join(tempfile.gettempdir(), uuid.uuid4().hex)
         os.makedirs(scratch_working_dir)
-        config = {"backend": "filesystem", "working_directory": scratch_working_dir}
+        config = {"backend": get_backend(), "working_directory": scratch_working_dir}
 
         # Init the empty repo
-        git_updater = GitFilesystem(config)
+        git_updater = get_fs_class()(config)
         git_updater.clone(mock_initialized_remote[3])
         git_updater.checkout("master")
 
@@ -1292,10 +1304,10 @@ class GitInterfaceMixin(object):
         # Check, tag should not be pushed yet.
         scratch_working_dir = os.path.join(tempfile.gettempdir(), uuid.uuid4().hex)
         os.makedirs(scratch_working_dir)
-        config = {"backend": "filesystem", "working_directory": scratch_working_dir}
+        config = {"backend": get_backend(), "working_directory": scratch_working_dir}
 
         # Init the empty repo
-        git_updater = GitFilesystem(config)
+        git_updater = get_fs_class()(config)
         git_updater.clone(mock_initialized_remote[3])
         git_updater.checkout("master")
 
@@ -1415,8 +1427,8 @@ class GitInterfaceMixin(object):
         # Create a new repo
         scratch_working_dir = os.path.join(tempfile.gettempdir(), uuid.uuid4().hex)
         os.makedirs(scratch_working_dir)
-        config = {"backend": "filesystem", "working_directory": scratch_working_dir}
-        git = GitFilesystem(config)
+        config = {"backend": get_backend(), "working_directory": scratch_working_dir}
+        git = get_fs_class()(config)
         git.initialize()
         write_file(git, "blah.txt", "blaaah", commit_msg="First commit")
 
@@ -1450,8 +1462,8 @@ class GitInterfaceMixin(object):
         # Create a new repo
         scratch_working_dir = os.path.join(tempfile.gettempdir(), uuid.uuid4().hex)
         os.makedirs(scratch_working_dir)
-        config = {"backend": "filesystem", "working_directory": scratch_working_dir}
-        git = GitFilesystem(config)
+        config = {"backend": get_backend(), "working_directory": scratch_working_dir}
+        git = get_fs_class()(config)
         git.initialize()
         write_file(git, "blah.txt", "blaaah", commit_msg="First commit")
 

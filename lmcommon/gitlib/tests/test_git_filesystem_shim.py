@@ -18,11 +18,16 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 import pytest
+
+import os
+os.environ['GITLIB_FS_BACKEND'] = 'filesystem-shim'
+
+from lmcommon.gitlib import GitFilesystemShimmed
 from .git_interface_mixin import GitInterfaceMixin
 from .git_interface_mixin import mock_config_filesystem as mock_config
 from .git_interface_mixin import mock_initialized_filesystem as mock_initialized
 from .git_interface_mixin import mock_initialized_filesystem_with_remote as mock_initialized_remote
-from lmcommon.gitlib import GitFilesystemShimmed
+
 
 
 @pytest.mark.usefixtures("mock_config")
@@ -31,4 +36,6 @@ class TestGitFilesystem(GitInterfaceMixin):
     class_type = GitFilesystemShimmed
 
     def get_git_obj(self, config):
+        print('----------------------')
+        import pprint; pprint.pprint(config)
         return GitFilesystemShimmed(config)

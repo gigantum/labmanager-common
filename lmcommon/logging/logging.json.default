@@ -11,20 +11,23 @@
     "consoleHandler": {
       "class": "logging.StreamHandler",
       "level": "DEBUG",
-      "formatter": "labmanagerFormatter",
+      "formatter": "json",
       "stream":  "ext://sys.stdout"
     },
     "fileHandler": {
       "class": "logging.handlers.RotatingFileHandler",
-      "formatter": "labmanagerFormatter",
+      "formatter": "json",
       "filename": "/mnt/gigantum/.labmanager/logs/labmanager.log",
       "maxBytes": 8000000,
-      "backupCount": 20
+      "backupCount": 5
     }
   },
   "formatters": {
     "labmanagerFormatter": {
       "format": "%(asctime)s %(levelname)-10s %(filename)s in %(funcName)s (line %(lineno)d): %(message)s"
+    },
+    "json": {
+      "()": "lmcommon.JsonFormatter"
     }
   }
 }

@@ -1,4 +1,4 @@
-# Copyright (c) 2017 FlashX, LLC
+# Copyright (c) 2018 FlashX, LLC
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -17,28 +17,37 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-from lmcommon.gitlib.git_fs import GitFilesystem
-from lmcommon.logging import LMLogger
-import subprocess
 
-logger = LMLogger.get_logger()
+from logging import Formatter
+import json
+import traceback
 
 
-class GitFilesystemShimmed(GitFilesystem):
+class JsonFormatter(Formatter):
 
-    def add(self, filename):
-        """Add a file to a commit
+    def __init__(self):
+        super(JsonFormatter, self).__init__()
 
-        Args:
-            filename(str): Filename to add.
+    def format(self, record):
+        exc_info = None
+        if record.exc_info:
+            exc_info = ''.join(traceback.format_exception(record.exc_info[0], record.exc_info[1], record.exc_info[2]))
+        d = {
+            'message': record.getMessage(),
+            'levelname': record.levelname,
+            'filename': record.filename,
+            'funcName': record.funcName,
+            'name': record.name,
+            'created': record.created,
+            'module': record.module,
+            'process': record.process,
+            'processName': record.processName,
+            'pathname': record.pathname,
+            'exc_text': repr(record.exc_text),
+            'exc_info': exc_info,
+            'stack_info': repr(record.stack_info),
+            'lineno': record.lineno
+        }
+        return json.dumps(d)
 
-        Returns:
-            None
-        """
-        logger.info("Adding file {} to Git repository in {}".format(filename, self.working_directory))
-        try:
-            r = subprocess.run(['git', 'add', f'{filename}'], stderr=subprocess.PIPE, stdout=subprocess.PIPE,
-                            check=True, cwd=self.working_directory)
-        except subprocess.CalledProcessError as x:
-            logger.error(f'{x.stdout}, {x.stderr}')
-            raise
+

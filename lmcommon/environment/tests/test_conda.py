@@ -19,86 +19,126 @@
 # SOFTWARE.
 import pytest
 import getpass
+import pprint
 
+from lmcommon.fixtures import mock_config_with_repo, build_lb_image_for_env
 from lmcommon.environment.conda import Conda3PackageManager, Conda2PackageManager
 
 
 class TestConda3PackageManager(object):
 
-    @pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Conda not available on CircleCI")
-    def test_search(self):
+    def test_search(self, build_lb_image_for_env):
         """Test search command"""
         mrg = Conda3PackageManager()
-        result = mrg.search("requests")
+        lb = build_lb_image_for_env[0]
+        username = build_lb_image_for_env[1]
+        result = mrg.search("reque*", lb, username)
+        assert type(result) == list
+        assert type(result[0]) == str
+        assert len(result) > 6
+        assert "requests" in result
+        result = mrg.search("nump*", lb, username)
+        assert type(result) == list
+        assert type(result[0]) == str
+        assert len(result) > 2
+        assert "numpy" in result
+
+    def test_search_no_wildcard(self, build_lb_image_for_env):
+        """Test search command"""
+        mrg = Conda3PackageManager()
+        lb = build_lb_image_for_env[0]
+        username = build_lb_image_for_env[1]
+        result = mrg.search("reque", lb, username)
         assert type(result) == list
         assert type(result[0]) == str
         assert len(result) > 6
         assert "requests" in result
 
-    @pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Conda not available on CircleCI")
-    def test_list_versions(self):
+    def test_search_empty(self, build_lb_image_for_env):
+        """Test search command with no result"""
+        mrg = Conda3PackageManager()
+        lb = build_lb_image_for_env[0]
+        username = build_lb_image_for_env[1]
+        result = mrg.search("asdffdghdfghdraertasdfsadfa", lb, username)
+        assert type(result) == list
+        assert len(result) == 0
+
+    def test_list_versions(self, build_lb_image_for_env):
         """Test list_versions command"""
         mrg = Conda3PackageManager()
-
-        result = mrg.list_versions("requests")
-
+        lb = build_lb_image_for_env[0]
+        username = build_lb_image_for_env[1]
+        result = mrg.list_versions("requests", lb, username)
         assert len(result) == 9
         assert result[8] == "2.12.4"
         assert result[0] == "2.18.4"
 
-    @pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Conda not available on CircleCI")
-    def test_latest_version(self):
+        result = mrg.list_versions("numpy", lb, username)
+        assert len(result) > 5
+        assert result[0] == "1.14.2"
+        assert result[1] == "1.14.1"
+
+    def test_latest_version(self, build_lb_image_for_env):
         """Test latest_version command"""
         mrg = Conda3PackageManager()
-        result = mrg.latest_version("requests")
+        lb = build_lb_image_for_env[0]
+        username = build_lb_image_for_env[1]
 
+        # Note, "requests" is an installed package
+        result = mrg.latest_version("requests", lb, username)
         assert result == "2.18.4"
 
-    @pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Conda not available on CircleCI")
-    def test_latest_versions(self):
+        # numpy is a non-installed package
+        result = mrg.latest_version("numpy", lb, username)
+        assert result == '1.14.3'
+
+    def test_latest_versions(self, build_lb_image_for_env):
         """Test latest_version command"""
         mrg = Conda3PackageManager()
-        pkgs = ["requests", "numpy", "scipy", "matplotlib", "bokeh"]
-        result = mrg.latest_versions(pkgs)
+        lb = build_lb_image_for_env[0]
+        username = build_lb_image_for_env[1]
+        pkgs = ["numpy", "requests"]
+        result = mrg.latest_versions(pkgs, lb, username)
 
-        for res, pak in zip(result, pkgs):
-            assert res.replace('.', '').isdigit(), f"Invalid version {res} on Conda package {pak}"
-        #assert result == ["2.18.4", '1.14.1', '1.0.0', '2.1.2', '0.12.14']
+        assert result[0] == '1.14.3'  # Numpy
+        assert result[1] == '2.18.4'  # Requests
 
-    @pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Conda not available on CircleCI")
-    def test_latest_versions_bad_pkg(self):
+    def test_latest_versions_bad_pkg(self, build_lb_image_for_env):
         """Test latest_version command"""
         mrg = Conda3PackageManager()
+        lb = build_lb_image_for_env[0]
+        username = build_lb_image_for_env[1]
         with pytest.raises(ValueError):
-            mrg.latest_versions(["asdasdfdasdff", "numpy"])
+            mrg.latest_versions(["asdasdfdasdff", "numpy"], lb, username)
 
-    @pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Conda not available on CircleCI")
-    def test_list_installed_packages(self):
+    def test_list_installed_packages(self, build_lb_image_for_env):
         """Test list_installed_packages command
 
         Note, if the contents of the container change, this test will break and need to be updated. Because of this,
         only limited asserts are made to make sure things are coming back in a reasonable format
         """
         mrg = Conda3PackageManager()
-
-        result = mrg.list_installed_packages()
+        lb = build_lb_image_for_env[0]
+        username = build_lb_image_for_env[1]
+        result = mrg.list_installed_packages(lb, username)
 
         assert type(result) == list
-        assert len(result) == 14
+        assert len(result) >= 14
         assert type(result[0]) == dict
         assert type(result[0]['name']) == str
         assert type(result[0]['version']) == str
 
     @pytest.mark.skip(reason="Cannot test for updates yet.")
-    def test_list_available_updates(self):
+    def test_list_available_updates(self, build_lb_image_for_env):
         """Test list_available_updates command
 
         Note, if the contents of the container change, this test will break and need to be updated. Because of this,
         only limited asserts are made to make sure things are coming back in a reasonable format
         """
         mrg = Conda3PackageManager()
-
-        result = mrg.list_available_updates()
+        lb = build_lb_image_for_env[0]
+        username = build_lb_image_for_env[1]
+        result = mrg.list_available_updates(lb, username)
 
         # TODO: Create test where something needs to be updated. right now nothing should need to updated because the
         # container is built up to date
@@ -108,7 +148,6 @@ class TestConda3PackageManager(object):
         """Test generate_docker_install_snippet command
         """
         mrg = Conda3PackageManager()
-
         packages = [{'name': 'mypackage', 'version': '3.1.4'}]
 
         result = mrg.generate_docker_install_snippet(packages)
@@ -121,7 +160,6 @@ class TestConda3PackageManager(object):
         """Test generate_docker_install_snippet command
         """
         mrg = Conda3PackageManager()
-
         packages = [{'name': 'mypackage', 'version': '3.1.4'},
                     {'name': 'yourpackage', 'version': '2017-54.0'}]
 
@@ -131,169 +169,41 @@ class TestConda3PackageManager(object):
         result = mrg.generate_docker_install_snippet(packages, single_line=True)
         assert result == ['RUN conda install mypackage=3.1.4 yourpackage=2017-54.0']
 
-    @pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Conda not available on CircleCI")
-    def test_list_versions_badpackage(self):
+    def test_list_versions_badpackage(self, build_lb_image_for_env):
         """Test list_versions command"""
         mrg = Conda3PackageManager()
-
+        lb = build_lb_image_for_env[0]
+        username = build_lb_image_for_env[1]
         with pytest.raises(ValueError):
-            mrg.list_versions("gigantumasdfasdfasdf")
+            mrg.list_versions("gigantumasdfasdfasdf", lb, username)
 
-    @pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Conda not available on CircleCI")
-    def test_is_valid(self):
+    def test_is_valid(self, build_lb_image_for_env):
         """Test list_versions command"""
         mrg = Conda3PackageManager()
+        lb = build_lb_image_for_env[0]
+        username = build_lb_image_for_env[1]
 
-        result = mrg.is_valid("requestsasdfasdfasd")
-
-        assert result.package is False
-        assert result.version is False
-
-        result = mrg.is_valid("requests", "10.0")
-
+        result = mrg.is_valid("requests", lb, username, "10.0")
         assert result.package is True
         assert result.version is False
 
-        result = mrg.is_valid("requests", "2.18.4")
-
+        result = mrg.is_valid("requests", lb, username, "2.18.4")
         assert result.package is True
         assert result.version is True
+
+        result = mrg.is_valid("requestsasdfasdfasd", lb, username)
+        assert result.package is False
+        assert result.version is False
 
 
 class TestConda2PackageManager(object):
-
-    @pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Conda not available on CircleCI")
-    def test_search(self):
-        """Test search command"""
-        mrg = Conda2PackageManager()
-        result = mrg.search("requests")
-        assert type(result) == list
-        assert type(result[0]) == str
-        assert len(result) > 6
-        assert "requests" in result
-
-    @pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Conda not available on CircleCI")
-    def test_list_versions(self):
-        """Test list_versions command"""
-        mrg = Conda2PackageManager()
-
-        result = mrg.list_versions("requests")
-
-        assert len(result) == 38
-        assert "2.12.4" in result
-        assert "2.18.4" in result
-
-    @pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Conda not available on CircleCI")
-    def test_latest_version(self):
+    def test_latest_versions(self, build_lb_image_for_env):
         """Test latest_version command"""
         mrg = Conda2PackageManager()
-        result = mrg.latest_version("requests")
+        lb = build_lb_image_for_env[0]
+        username = build_lb_image_for_env[1]
+        pkgs = ["numpy", "requests"]
+        result = mrg.latest_versions(pkgs, lb, username)
 
-        assert result == "2.18.4"
-
-    @pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Conda not available on CircleCI")
-    def test_list_installed_packages(self):
-        """Test list_installed_packages command
-
-        Note, if the contents of the container change, this test will break and need to be updated. Because of this,
-        only limited asserts are made to make sure things are coming back in a reasonable format
-        """
-        mrg = Conda2PackageManager()
-
-        result = mrg.list_installed_packages()
-
-        assert type(result) == list
-        assert len(result) == 13
-        assert type(result[0]) == dict
-        assert type(result[0]['name']) == str
-        assert type(result[0]['version']) == str
-
-    @pytest.mark.skip(reason="Cannot test for updates yet.")
-    def test_list_available_updates(self):
-        """Test list_available_updates command
-
-        Note, if the contents of the container change, this test will break and need to be updated. Because of this,
-        only limited asserts are made to make sure things are coming back in a reasonable format
-        """
-        mrg = Conda2PackageManager()
-
-        result = mrg.list_available_updates()
-
-        # TODO: Create test where something needs to be updated. right now nothing should need to updated because the
-        # container is built up to date
-        assert result == []
-
-    def test_generate_docker_install_snippet_single(self):
-        """Test generate_docker_install_snippet command
-        """
-        mrg = Conda2PackageManager()
-
-        packages = [{'name': 'mypackage', 'version': '3.1.4'}]
-
-        result = mrg.generate_docker_install_snippet(packages)
-        assert result == ['RUN conda install mypackage=3.1.4']
-
-        result = mrg.generate_docker_install_snippet(packages, single_line=True)
-        assert result == ['RUN conda install mypackage=3.1.4']
-
-    def test_generate_docker_install_snippet_multiple(self):
-        """Test generate_docker_install_snippet command
-        """
-        mrg = Conda2PackageManager()
-
-        packages = [{'name': 'mypackage', 'version': '3.1.4'},
-                    {'name': 'yourpackage', 'version': '2017-54.0'}]
-
-        result = mrg.generate_docker_install_snippet(packages)
-        assert result == ['RUN conda install mypackage=3.1.4', 'RUN conda install yourpackage=2017-54.0']
-
-        result = mrg.generate_docker_install_snippet(packages, single_line=True)
-        assert result == ['RUN conda install mypackage=3.1.4 yourpackage=2017-54.0']
-
-    @pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Conda not available on CircleCI")
-    def test_list_versions_badpackage(self):
-        """Test list_versions command"""
-        mrg = Conda2PackageManager()
-
-        with pytest.raises(ValueError):
-            mrg.list_versions("gigantumasdfasdfasdf")
-
-    @pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Conda not available on CircleCI")
-    def test_is_valid(self):
-        """Test list_versions command"""
-        mrg = Conda2PackageManager()
-
-        result = mrg.is_valid("requestsasdfasdfasd")
-
-        assert result.package is False
-        assert result.version is False
-
-        result = mrg.is_valid("requests", "10.0")
-
-        assert result.package is True
-        assert result.version is False
-
-        result = mrg.is_valid("requests", "2.18.4")
-
-        assert result.package is True
-        assert result.version is True
-
-    @pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Conda not available on CircleCI")
-    def test_latest_versions(self):
-        """Test latest_version command"""
-        mrg = Conda2PackageManager()
-        pkgs = ["requests", "numpy", "scipy", "matplotlib", "bokeh"]
-        result = mrg.latest_versions(pkgs)
-
-        for res, pak in zip(result, pkgs):
-            assert res.replace('.', '').isdigit(), f"Version {res} for package {pak} is invalid"
-
-        #assert result == ["2.18.4", '1.14.1', '1.0.0', '2.1.2', '0.12.14']
-
-    @pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Conda not available on CircleCI")
-    def test_latest_versions_bad_pkg(self):
-        """Test latest_version command"""
-        mrg = Conda2PackageManager()
-        with pytest.raises(ValueError):
-            mrg.latest_versions(["asdasdfdasdff", "numpy"])
-
+        assert result[0] == '1.14.3' #Numpy
+        assert result[1] == '2.18.4' # Requests

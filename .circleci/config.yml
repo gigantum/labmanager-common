@@ -2,7 +2,7 @@ version: 2
 jobs:
   build:
     docker:
-      - image: gigantum/circleci-common:423e3e76-2018-03-29
+      - image: gigantum/circleci-common:a587c30a-2018-05-22
     steps:
       - checkout
       - setup_remote_docker
@@ -14,7 +14,7 @@ jobs:
       - run:
           name: Run mypy type checker
           command: |
-            python -m mypy . --ignore-missing-imports --strict-optional
+            python3 -m mypy . --ignore-missing-imports --strict-optional
 
       - run:
           name: Set authentication credentials

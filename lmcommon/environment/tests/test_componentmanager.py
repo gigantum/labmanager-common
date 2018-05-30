@@ -429,3 +429,31 @@ class TestComponentManager(object):
         assert base_data['name'] == 'Unit Test1'
         assert base_data['os_class'] == 'ubuntu'
         assert base_data['schema'] == 1
+
+    def test_add_then_remove_custom_docker_snipper_with_valid_docker(self, mock_config_with_repo):
+        lb = LabBook(mock_config_with_repo[0])
+        lb.new(owner={"username": "test"}, name="test-custom-docker-snippet", description="validate tests.")
+        snippet = ["RUN true", "RUN touch /tmp/testfile", "RUN rm /tmp/testfile", "RUN echo 'done'"]
+        c1 = lb.git.commit_hash
+        cm = ComponentManager(lb)
+        cm.add_docker_snippet("unittest-docker", docker_content=snippet,
+                              description="yada yada's, \n\n **I'm putting in lots of apostrophę's**.")
+        #print(open(os.path.join(lb.root_dir, '.gigantum', 'env', 'docker', 'unittest-docker.yaml')).read(10000))
+        c2 = lb.git.commit_hash
+        assert c1 != c2
+
+        import yaml
+        d = yaml.load(open(os.path.join(lb.root_dir, '.gigantum', 'env', 'docker', 'unittest-docker.yaml')))
+        print(d)
+        assert d['description'] == "yada yada's, \n\n **I'm putting in lots of apostrophę's**."
+        assert d['name'] == 'unittest-docker'
+        assert all([d['content'][i] == snippet[i] for i in range(len(snippet))])
+
+        with pytest.raises(ValueError):
+            cm.remove_docker_snippet('nothing')
+
+        c1 = lb.git.commit_hash
+        cm.remove_docker_snippet('unittest-docker')
+        c2 = lb.git.commit_hash
+        assert not os.path.exists(os.path.join(lb.root_dir, '.gigantum', 'env', 'docker', 'unittest-docker.yaml'))
+        assert c1 != c2
