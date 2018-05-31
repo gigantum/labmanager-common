@@ -120,6 +120,9 @@ class RepositoryManager(object):
 
         if branch is not None:
             self.git.checkout(branch)
+        else:
+            # if no branch set, fallback to master
+            self.git.checkout("master")
 
         self.git.pull()
 
