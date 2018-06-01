@@ -37,6 +37,7 @@ from git.exc import GitCommandError
 from natsort import natsorted
 
 from lmcommon.configuration import Configuration
+from lmcommon.configuration.utils import call_subprocess
 from lmcommon.gitlib import get_git_interface, GitAuthor, GitRepoInterface
 from lmcommon.logging import LMLogger
 from lmcommon.labbook.schemas import validate_labbook_schema
@@ -658,7 +659,7 @@ class LabBook(object):
             # This branch is local-only
             return self.active_branch, 0
 
-    def add_remote(self, remote_name: str, url: str):
+    def add_remote(self, remote_name: str, url: str) -> None:
         """Add a new git remote
 
         Args:
@@ -671,9 +672,45 @@ class LabBook(object):
             self.git.add_remote(remote_name, url)
             self.git.fetch(remote=remote_name)
         except Exception as e:
-            # Unsure what specific exception add_remote creates, so make a catchall.
-            logger.exception(e)
             raise LabbookException(e)
+
+    def remove_remote(self, remote_name: Optional[str] = "origin") -> None:
+        """Remove a remove from the git config
+
+        Args:
+            remote_name: Optional name of remote (default "origin")
+        """
+        try:
+            logger.info(f"Removing remote {remote_name} from {str(self)}")
+            self.git.remove_remote(remote_name)
+        except Exception as e:
+            raise LabbookException(e)
+
+    def remove_lfs_remotes(self) -> None:
+        """Remove all LFS endpoints.
+
+        Each LFS enpoint has its own entry in the git config. It takes the form of the following:
+
+        ```
+        [lfs "https://repo.location.whatever"]
+            access = basic
+        ```
+
+        In order to get the section name, which is "lfs.https://repo.location.whatever", we need to search
+        by all LFS fields and remove them (and in order to get the section need to strip the variables off the end).
+
+        Args:
+            None
+
+        Returns:
+            None
+        """
+        lfs_sections = call_subprocess(['git', 'config', '--get-regexp', 'lfs.http*'], cwd=self.root_dir).split('\n')
+        logger.info(f"LFS entries to delete are {lfs_sections}")
+        for lfs_sec in set([n for n in lfs_sections if n]):
+            var = lfs_sec.split(' ')[0]
+            section = '.'.join(var.split('.')[:-1])
+            call_subprocess(['git', 'config', '--remove-section', section], cwd=self.root_dir)
 
     def get_branches(self) -> Dict[str, List[str]]:
         """Return all branches a Dict of Lists. Dict contains two keys "local" and "remote".
@@ -1391,12 +1428,10 @@ class LabBook(object):
 
             # Setup LFS
             if self.labmanager_config.config["git"]["lfs_enabled"] and not bypass_lfs:
-                # Make sure LFS install is setup
-                subprocess.run(f"git lfs install", shell=True, check=True, cwd=new_root_dir)
-
-                # Track input and output directories
-                subprocess.run(f"git lfs track input/**", shell=True, check=True, cwd=new_root_dir)
-                subprocess.run(f"git lfs track output/**", shell=True, check=True, cwd=new_root_dir)
+                # Make sure LFS install is setup and rack input and output directories
+                call_subprocess(["git", "lfs", "install"], cwd=new_root_dir)
+                call_subprocess(["git", "lfs", "track", "input/**"], cwd=new_root_dir)
+                call_subprocess(["git", "lfs", "track", "output/**"], cwd=new_root_dir)
 
                 # Commit .gitattributes file
                 self.git.add(os.path.join(self.root_dir, ".gitattributes"))
@@ -1632,8 +1667,7 @@ class LabBook(object):
 
             t0 = time.time()
             try:
-                subprocess.run(['git', 'lfs', 'clone', remote_url], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                               check=True, cwd=lb_dir)
+                call_subprocess(['git', 'lfs', 'clone', remote_url], cwd=lb_dir)
                 self.git.set_working_directory(est_root_dir)
             except subprocess.CalledProcessError as e:
                 logger.error(e)

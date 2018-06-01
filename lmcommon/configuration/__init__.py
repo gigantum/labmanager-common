@@ -24,7 +24,7 @@ import os
 
 import docker
 
-from .configuration import Configuration
+from lmcommon.configuration.configuration import Configuration
 from lmcommon.logging import LMLogger
 
 
