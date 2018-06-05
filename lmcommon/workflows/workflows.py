@@ -19,6 +19,7 @@
 # SOFTWARE.
 
 from typing import Optional, Tuple
+from lmcommon.configuration.utils import call_subprocess
 from lmcommon.labbook import LabBook, LabbookException, LabbookMergeException
 from lmcommon.logging import LMLogger
 from lmcommon.workflows import core
@@ -30,6 +31,11 @@ class GitWorkflow(object):
 
     def __init__(self, labbook: LabBook) -> None:
         self.labbook = labbook
+
+    def garbagecollect(self):
+        """ Run a `git gc` on the labbook. """
+        with self.labbook.lock_labbook():
+            call_subprocess(['git', 'gc'], cwd=self.labbook.root_dir)
 
     def publish(self, username: str, access_token: Optional[str] = None, remote: str = "origin") -> None:
         """ Publish this labbook to the remote GitLab instance.
