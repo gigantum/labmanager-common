@@ -1754,9 +1754,7 @@ class LabBook(object):
                 elif sort_mode == 'modified_on':
                     # lookup date of last commit
                     try:
-                        lb = LabBook()
-                        lb.from_directory(dir_path)
-                        lb_item['sort_val'] = lb.git.log(max_count=1)[0]['committed_on']
+                        lb_item['sort_val'] = os.path.getmtime(dir_path)
                     except Exception as e:
                         logger.error(e)
                         continue
