@@ -311,7 +311,7 @@ class TestLabBook(object):
         assert labbooks[2]['name'] == 'labbook3'
 
         os.remove(os.path.join(lb2.root_dir, '.gigantum', 'labbook.yaml'))
-        labbooks = lb1.list_local_labbooks(username="user1", sort_mode='modified_on')
+        labbooks = lb1.list_local_labbooks(username="user1", sort_mode='created_on')
         assert len(labbooks) == 2
 
     def test_list_labbooks_create_date_reversed(self, mock_config_file):
@@ -393,6 +393,7 @@ class TestLabBook(object):
         time.sleep(2)
         lb4.new(username="user1", owner={"username": "user1"},
                 name="hhghg", description="my other labbook")
+        time.sleep(2)
 
         labbooks = lb1.list_local_labbooks(username="user1", sort_mode="modified_on", reverse=True)
 
