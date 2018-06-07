@@ -31,7 +31,7 @@ from distutils.version import LooseVersion
 
 from contextlib import redirect_stdout
 from lmcommon.environment.packagemanager import PackageManager, PackageValidation
-from lmcommon.container import ContainerOperations
+from lmcommon.container.container import ContainerOperations
 from lmcommon.container.exceptions import ContainerException
 from lmcommon.labbook import LabBook
 from lmcommon.logging import LMLogger

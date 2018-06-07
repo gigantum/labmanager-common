@@ -20,7 +20,7 @@
 from typing import (List, Dict, Optional)
 
 from lmcommon.environment.packagemanager import PackageManager, PackageValidation
-from lmcommon.container import ContainerOperations
+from lmcommon.container.container import ContainerOperations
 from lmcommon.labbook import LabBook
 from lmcommon.logging import LMLogger
 

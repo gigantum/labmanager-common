@@ -21,7 +21,7 @@ import pytest
 import getpass
 import pprint
 
-from lmcommon.fixtures import mock_config_with_repo, build_lb_image_for_env
+from lmcommon.fixtures.container import mock_config_with_repo, build_lb_image_for_env
 from lmcommon.environment.conda import Conda3PackageManager, Conda2PackageManager
 
 
@@ -90,7 +90,7 @@ class TestConda3PackageManager(object):
 
         # numpy is a non-installed package
         result = mrg.latest_version("numpy", lb, username)
-        assert result == '1.14.3'
+        assert result == '1.14.4'
 
     def test_latest_versions(self, build_lb_image_for_env):
         """Test latest_version command"""
@@ -100,7 +100,7 @@ class TestConda3PackageManager(object):
         pkgs = ["numpy", "requests"]
         result = mrg.latest_versions(pkgs, lb, username)
 
-        assert result[0] == '1.14.3'  # Numpy
+        assert result[0] == '1.14.4'  # Numpy
         assert result[1] == '2.18.4'  # Requests
 
     def test_latest_versions_bad_pkg(self, build_lb_image_for_env):
@@ -205,5 +205,5 @@ class TestConda2PackageManager(object):
         pkgs = ["numpy", "requests"]
         result = mrg.latest_versions(pkgs, lb, username)
 
-        assert result[0] == '1.14.3' #Numpy
+        assert result[0] == '1.14.4' #Numpy
         assert result[1] == '2.18.4' # Requests

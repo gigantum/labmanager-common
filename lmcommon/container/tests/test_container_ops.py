@@ -26,9 +26,9 @@ import requests
 
 from lmcommon.configuration import get_docker_client
 
-from lmcommon.container import ContainerOperations
+from lmcommon.container.container import ContainerOperations
 from lmcommon.container.utils import infer_docker_image_name
-from lmcommon.fixtures import build_lb_image_for_jupyterlab, mock_config_with_repo
+from lmcommon.fixtures.container import build_lb_image_for_jupyterlab, mock_config_with_repo
 from lmcommon.container.exceptions import ContainerBuildException, ContainerException
 
 

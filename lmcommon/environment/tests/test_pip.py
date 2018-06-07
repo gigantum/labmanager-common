@@ -20,7 +20,7 @@
 import pytest
 
 from lmcommon.environment.pip import PipPackageManager
-from lmcommon.fixtures import mock_config_with_repo, build_lb_image_for_env
+from lmcommon.fixtures.container import mock_config_with_repo, build_lb_image_for_env
 
 
 class TestPipPackageManager(object):

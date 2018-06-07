@@ -17,7 +17,6 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-
 import os
 import re
 import time
@@ -33,6 +32,7 @@ from lmcommon.configuration import get_docker_client, Configuration
 from lmcommon.logging import LMLogger
 from lmcommon.labbook import LabBook, LabbookException
 from lmcommon.portmap import PortMap
+from lmcommon.environment.componentmanager import ComponentManager
 
 from lmcommon.container.utils import infer_docker_image_name
 from lmcommon.container.exceptions import ContainerException
@@ -112,11 +112,23 @@ class ContainerOperations(object):
         image_name = override_image_tag or infer_docker_image_name(labbook_name=labbook.name,
                                                                    owner=labbook.owner['username'],
                                                                    username=username)
+        # Get a docker client instance
+        client = get_docker_client()
+
+        # Verify image name exists. If it doesn't, fallback and use the base image
+        try:
+            client.images.get(image_name)
+        except docker.errors.ImageNotFound:
+            # Image not found...assume build has failed and fallback to base
+            logger.warning("LabBook image not available for package query. Falling back to base image.")
+            cm = ComponentManager(labbook)
+            base = cm.base_fields
+            image_name = f"{base['image']['namespace']}/{base['image']['repository']}:{base['image']['tag']}"
+
         t0 = time.time()
         try:
             # Note, for container docs see: http://docker-py.readthedocs.io/en/stable/containers.html
-            result = get_docker_client().containers.run(image_name, cmd_text, entrypoint=[],
-                                                        remove=True)
+            result = client.containers.run(image_name, cmd_text, entrypoint=[], remove=True)
         except docker.errors.ContainerError as e:
             tfail = time.time()
             logger.error(f'Command ({cmd_text}) failed after {tfail-t0}s - '

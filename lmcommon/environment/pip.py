@@ -20,7 +20,7 @@
 from typing import (Any, List, Dict, Optional)
 import requests
 import json
-from lmcommon.container import ContainerOperations
+from lmcommon.container.container import ContainerOperations
 from lmcommon.labbook import LabBook
 
 from natsort import natsorted
