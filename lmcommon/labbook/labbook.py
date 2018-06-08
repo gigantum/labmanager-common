@@ -476,8 +476,9 @@ class LabBook(object):
         """
         return ''.join(c for c in value if c not in '\<>?/;"`\'')
 
-    def _sweep_uncommitted_changes(self) -> None:
-        """ Sweep all changes into a commit, and create activity record for it.
+    def _sweep_uncommitted_changes(self, upload: bool = False,
+                                   extra_msg: Optional[str] = None) -> None:
+        """ Sweep all changes into a commit, and create activity record.
             NOTE: This method MUST be called inside a lock. """
         result_status = self.git.status()
         self.git.add_all()
@@ -489,10 +490,15 @@ class LabBook(object):
                                 importance=255,
                                 linked_commit=self.git.commit_hash,
                                 tags=['save'])
-            ar, newcnt, modcnt = shims.process_sweep_status(ar, result_status, LabBook.infer_section_from_relative_path)
+            if upload:
+                ar.tags.append('upload')
+            ar, newcnt, modcnt = shims.process_sweep_status(
+                ar, result_status, LabBook.infer_section_from_relative_path)
             nmsg = f"{newcnt} new file(s). " if newcnt > 0 else ""
             mmsg = f"{modcnt} modified file(s). " if modcnt > 0 else ""
-            ar.message = f"{nmsg}{mmsg}"
+            ar.message = f"{extra_msg or ''}" \
+                         f"{'Uploaded new file(s). ' if upload else ''}" \
+                         f"{nmsg}{mmsg}"
             ars = ActivityStore(self)
             ars.create_activity_record(ar)
         else:
@@ -729,94 +735,6 @@ class LabBook(object):
             # Unsure what specific exception add_remote creates, so make a catchall.
             logger.exception(e)
             raise LabbookException(e)
-
-
-    @_validate_git
-    def insert_file(self, section: str, src_file: str, dst_dir: str,
-                    base_filename: Optional[str] = None) -> Dict[str, Any]:
-        """Copy the file at `src_file` into the `dst_dir`. Filename removes upload ID if present.
-
-        Args:
-            section(str): Section name (code, input, output)
-            src_file(str): Full path of file to insert into
-            dst_dir(str): Relative path within labbook where `src_file` should be copied to
-            base_filename(str): The desired basename for the file, without an upload ID prepended
-
-        Returns:
-            dict: The inserted file's info
-        """
-        self._validate_section(section)
-
-        if not os.path.abspath(src_file):
-            raise ValueError(f"Source file `{src_file}` is not an absolute path")
-
-        if not os.path.isfile(src_file):
-            raise ValueError(f"Source file does not exist at `{src_file}`")
-
-        with self.lock_labbook():
-            # Remove any leading "/" -- without doing so os.path.join will break.
-            dst_dir = LabBook._make_path_relative(os.path.join(section, dst_dir))
-
-            # Check if this file contains an upload_id (which means it came from a chunked upload)
-            if base_filename:
-                dst_filename = base_filename
-            else:
-                dst_filename = os.path.basename(src_file)
-
-            # Create the absolute file path for the destination
-            dst_path = os.path.join(self.root_dir, dst_dir.replace('..', ''), dst_filename)
-            if not os.path.isdir(os.path.join(self.root_dir, dst_dir.replace('..', ''))):
-                raise ValueError(f"Target dir `{os.path.join(self.root_dir, dst_dir.replace('..', ''))}` does not exist")
-
-            # Copy file to destination
-            rel_path = os.path.relpath(dst_path, self.root_dir)
-            logger.info(f"Inserting new file for {str(self)} from `{src_file}` to `{rel_path}` ({dst_path})")
-            shutil.copyfile(src_file, dst_path)
-            assert os.path.exists(dst_path)
-
-            if not shims.in_untracked(self.root_dir, section):
-                # If we are setting this section to be untracked
-                activity_type, activity_detail_type, section_str = self.get_activity_type_from_section(section)
-
-                # Create commit
-                commit_msg = f"Added new {section_str} file {rel_path}"
-                try:
-                    self.git.add(rel_path)
-                    commit = self.git.commit(commit_msg)
-                except GitCommandError as e:
-                    logger.error(f"Cannot add {rel_path} to git repo!")
-                    os.remove(dst_path)
-                    raise e
-                except subprocess.CalledProcessError as c:
-                    logger.error(c)
-                    os.remove(dst_path)
-                    raise LabbookException(f'File `{dst_filename}` matches ignored pattern and cannot be added')
-                except Exception as x:
-                    logger.error(f"({type(x)}) Cannot add {rel_path} to git repo!")
-                    os.remove(dst_path)
-                    raise x
-
-                # Create Activity record and detail
-                _, ext = os.path.splitext(rel_path) or 'file'
-
-                # Create detail record
-                adr = ActivityDetailRecord(activity_detail_type, show=False, importance=0, action=ActivityAction.CREATE)
-                adr.add_value('text/plain', commit_msg)
-
-                # Create activity record
-                ar = ActivityRecord(activity_type,
-                                    message=commit_msg,
-                                    show=True,
-                                    importance=255,
-                                    linked_commit=commit.hexsha,
-                                    tags=[ext])
-                ar.add_detail_object(adr)
-
-                # Store
-                ars = ActivityStore(self)
-                ars.create_activity_record(ar)
-
-            return self.get_file_info(section, rel_path.replace(f"{section}/", '', 1))
 
     @_validate_git
     def delete_file(self, section: str, relative_path: str, directory: bool = False) -> bool:

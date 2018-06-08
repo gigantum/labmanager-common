@@ -347,7 +347,7 @@ class ActivityRecord(object):
         self.timestamp = timestamp
 
         # A list of tags for the entire record
-        self.tags = tags
+        self.tags = tags or []
 
         # Username of the user who created the activity record
         self.username = username

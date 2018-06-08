@@ -33,6 +33,7 @@ from lmcommon.labbook import LabBook
 from lmcommon.activity.detaildb import ActivityDetailDB
 from lmcommon.activity import ActivityStore
 from lmcommon.gitlib.git import GitAuthor
+from lmcommon.files import FileOperations
 
 
 ENV_UNIT_TEST_REPO = 'gig-dev_components2'
@@ -364,7 +365,7 @@ def remote_labbook_repo():
     with open(os.path.join('/tmp', 'codefile.c'), 'wb') as codef:
         codef.write(b'// Cody McCodeface ...')
 
-    lb.insert_file("code", "/tmp/codefile.c", "")
+    FileOperations.insert_file(lb, "code", "/tmp/codefile.c")
 
     assert lb.is_repo_clean
     lb.checkout_branch("gm.workspace")

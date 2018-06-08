@@ -7,6 +7,7 @@ import os
 from lmcommon.labbook import LabBook
 from lmcommon.workflows import (GitWorkflow, MergeError, BranchManager, InvalidBranchName, BranchWorkflowViolation,
     BranchException)
+from lmcommon.files import FileOperations
 from lmcommon.fixtures import (mock_config_file, mock_labbook, mock_labbook_lfs_disabled,
                                mock_duplicate_labbook, remote_bare_repo, sample_src_file,
                                _MOCK_create_remote_repo2 as _MOCK_create_remote_repo)
@@ -128,14 +129,14 @@ class TestBranching(object):
         with open('/tmp/s1.txt', 'w') as s1:
             s1.write('original-file\ndata')
         test_user_lb = mock_labbook_lfs_disabled[2]
-        test_user_lb.insert_file(section='code', src_file=s1.name, dst_dir='')
+        FileOperations.insert_file(test_user_lb, section='code', src_file=s1.name)
 
         # Create a new branch and make a change to s1.txt
         bm = BranchManager(test_user_lb, username=TEST_USER)
         new_b = bm.create_branch("example-feature-branch")
         with open('/tmp/s1.txt', 'w') as s1:
             s1.write('new-changes-in\nfeature-branch')
-        test_user_lb.insert_file(section='code', src_file=s1.name, dst_dir='')
+        FileOperations.insert_file(test_user_lb, section='code', src_file=s1.name)
         with open(os.path.join(test_user_lb.root_dir, 'output/sample'), 'w') as f:
             f.write('sample data in a file not explicity added - this should be swept up.')
         assert not test_user_lb.is_repo_clean
@@ -146,7 +147,7 @@ class TestBranching(object):
         assert not os.path.exists(os.path.join(test_user_lb.root_dir, 'output/sample'))
         with open('/tmp/s1.txt', 'w') as s1:
             s1.write('upstream-changes-from-workspace')
-        test_user_lb.insert_file(section='code', src_file=s1.name, dst_dir='')
+        FileOperations.insert_file(test_user_lb, section='code', src_file=s1.name, dst_path='')
 
         # Switch back to feature branch -- make sure that failed merges rollback to state before merge.
         bm.workon_branch(new_b)
