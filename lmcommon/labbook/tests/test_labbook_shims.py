@@ -21,8 +21,8 @@
 import os
 
 
-LBK_ARCHIVE_PATH = '/home/circleci/project/lmcommon/labbook/tests/test-export_2017000000.lbk' \
-    if os.environ.get('CIRCLECI') else 'test-export_2017000000.lbk'
+LBK_ARCHIVE_PATH = '/home/circleci/project/lmcommon/labbook/tests/test-export_2017000000.zip' \
+    if os.environ.get('CIRCLECI') else 'test-export_2017000000.zip'
 
 LBK_FS_PATH = '/home/circleci/gigantum/test/test/labbooks/test-export' \
     if os.environ.get('CIRCLECI') else '/mnt/gigantum/test/test/labbooks/test-export'
