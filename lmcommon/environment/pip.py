@@ -28,7 +28,7 @@ from natsort import natsorted
 from distutils.version import StrictVersion
 from distutils.version import LooseVersion
 
-from lmcommon.environment.packagemanager import PackageManager, PackageValidation
+from lmcommon.environment.packagemanager import PackageManager, PackageResult
 
 
 class PipPackageManager(PackageManager):
@@ -66,6 +66,10 @@ class PipPackageManager(PackageManager):
             raise IOError("Failed to query package index for package versions. Check internet connection.")
 
         versions = list(result.json()["releases"].keys())
+
+        # Don't include release candidates that have been pushed to pip
+        versions = [x for x in versions if 'rc' not in x]
+
         try:
             # First attempt to sort by StrictVersion which enforces a standard version convention
             versions.sort(key=StrictVersion)
@@ -138,36 +142,58 @@ class PipPackageManager(PackageManager):
         packages = ContainerOperations.run_command('pip list --format=json -o', labbook, username)
         return json.loads(packages.decode())
 
-    def is_valid(self, package_name: str, labbook: LabBook, username: str, package_version: Optional[str] = None) -> PackageValidation:
-        """Method to validate package names and versions
+    def validate_packages(self, package_list: List[Dict[str, str]], labbook: LabBook, username: str) -> List[PackageResult]:
+        """Method to validate a list of packages, and if needed fill in any missing versions
 
-        result should be in the format {package: bool, version: bool}
+        Should check both the provided package name and version. If the version is omitted, it should be generated
+        from the latest version.
 
         Args:
-            package_name(str): The package name to validate
-            package_version(str): The package version to validate
+            package_list(list): A list of dictionaries of packages to validate
+            labbook(str): The labbook instance
+            username(str): The username for the logged in user
 
         Returns:
             namedtuple: namedtuple indicating if the package and version are valid
         """
-        invalid_result = PackageValidation(package=False, version=False)
+        result = list()
+        for package in package_list:
+            pkg_result = PackageResult(package=package['package'], version=package['version'], error=True)
 
-        try:
-            version_list = self.list_versions(package_name, labbook, username)
-        except ValueError:
-            return invalid_result
+            try:
+                version_list = self.list_versions(package['package'], labbook, username)
+            except ValueError:
+                result.append(pkg_result)
+                continue
 
-        if not version_list:
-            # If here, no versions found for the package...so invalid
-            return invalid_result
-        else:
-            if package_version:
-                if package_version in version_list:
-                    # Both package name and version are valid
-                    return PackageValidation(package=True, version=True)
+            if not version_list:
+                # If here, no versions found for the package...so invalid
+                result.append(pkg_result)
+            else:
+                if package['version']:
+                    if package['version'] in version_list:
+                        # Both package name and version are valid
+                        pkg_result = pkg_result._replace(error=False)
+                        result.append(pkg_result)
 
-            # Since versions were returned, package name is valid, but version was either omitted or not valid
-            return PackageValidation(package=True, version=False)
+                    else:
+                        # The package version is not in the list, so invalid
+                        result.append(pkg_result)
+
+                else:
+                    # You need to look up the version and then add
+                    try:
+                        pkg_result = pkg_result._replace(version=self.latest_version(package['package'],
+                                                                                     labbook,
+                                                                                     username))
+                        pkg_result = pkg_result._replace(error=False)
+                    except ValueError:
+                        # Can't set the version so just continue
+                        pass
+                    finally:
+                        result.append(pkg_result)
+
+        return result
 
     def generate_docker_install_snippet(self, packages: List[Dict[str, str]], single_line: bool = False) -> List[str]:
         """Method to generate a docker snippet to install 1 or more packages

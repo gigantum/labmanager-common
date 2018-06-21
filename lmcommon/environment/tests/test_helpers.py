@@ -18,7 +18,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 import pytest
-from lmcommon.environment import get_package_manager
+from lmcommon.environment.utils import get_package_manager
 from lmcommon.labbook import LabBook
 
 from lmcommon.environment.pip import PipPackageManager

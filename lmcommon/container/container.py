@@ -128,7 +128,14 @@ class ContainerOperations(object):
         t0 = time.time()
         try:
             # Note, for container docs see: http://docker-py.readthedocs.io/en/stable/containers.html
-            result = client.containers.run(image_name, cmd_text, entrypoint=[], remove=True)
+            container = client.containers.run(image_name, cmd_text, entrypoint=[], remove=False, detach=True,
+                                              stdout=True)
+            while container.status != "exited":
+                time.sleep(.25)
+                container.reload()
+            result = container.logs(stdout=True, stderr=False)
+            container.remove(v=True)
+
         except docker.errors.ContainerError as e:
             tfail = time.time()
             logger.error(f'Command ({cmd_text}) failed after {tfail-t0}s - '
@@ -136,7 +143,7 @@ class ContainerOperations(object):
             raise ContainerException(e)
 
         ts = time.time()
-        if ts - t0 > 3.0:
+        if ts - t0 > 5.0:
             logger.warning(f'Command ({cmd_text}) in {str(labbook)} took {ts-t0} sec')
 
         return result
