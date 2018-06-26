@@ -134,21 +134,19 @@ class TestAptPackageManager(object):
 
     def test_is_valid(self, build_lb_image_for_env):
         """Test list_versions command"""
+        pkgs = [{"manager": "pip", "package": "libjpeg-dev", "version": ""},
+                {"manager": "pip", "package": "afdgfdgshfdg", "version": ""}]
+
         mrg = AptPackageManager()
         lb = build_lb_image_for_env[0]
         username = build_lb_image_for_env[1]
-        result = mrg.is_valid("asdfasfdfdghhsfd", lb, username)
+        result = mrg.validate_packages(pkgs, lb, username)
 
-        assert result.package is False
-        assert result.version is False
+        assert result[0].package == "libjpeg-dev"
+        assert result[0].version != ""
+        assert result[0].error is False
 
-        result = mrg.is_valid("zlib1g", package_version="10.0", labbook=lb, username=username)
-
-        assert result.package is True
-        assert result.version is False
-
-        result = mrg.is_valid("zlib1g", package_version="1:1.2.11.dfsg-0ubuntu2", labbook=lb, username=username)
-
-        assert result.package is True
-        assert result.version is True
+        assert result[1].package == "afdgfdgshfdg"
+        assert result[1].version == ""
+        assert result[1].error is True
 

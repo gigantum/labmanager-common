@@ -141,10 +141,10 @@ class LabBook(object):
                     n = method_ref(self, *args, **kwargs) #type: ignore
                 except ValueError:
                     with self.lock_labbook():
-                        self._sweep_uncommitted_changes()
+                        self.sweep_uncommitted_changes()
                     n = method_ref(self, *args, **kwargs)  # type: ignore
                     with self.lock_labbook():
-                        self._sweep_uncommitted_changes()
+                        self.sweep_uncommitted_changes()
                 finally:
                     _check_git_tracked(self.git)
             else:
@@ -476,8 +476,8 @@ class LabBook(object):
         """
         return ''.join(c for c in value if c not in '\<>?/;"`\'')
 
-    def _sweep_uncommitted_changes(self, upload: bool = False,
-                                   extra_msg: Optional[str] = None) -> None:
+    def sweep_uncommitted_changes(self, upload: bool = False,
+                                  extra_msg: Optional[str] = None) -> None:
         """ Sweep all changes into a commit, and create activity record.
             NOTE: This method MUST be called inside a lock. """
         result_status = self.git.status()

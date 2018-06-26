@@ -50,7 +50,8 @@ logger = LMLogger.get_logger()
 #       process_id: <id for the background task>
 #        ... custom fields for the specific activity monitor class
 
-def start_labbook_monitor(labbook: LabBook, username: str, dev_tool: str, database: int = 1,
+def start_labbook_monitor(labbook: LabBook, username: str, dev_tool: str,
+                          url: str, database: int = 1,
                           author: Optional[GitAuthor] = None) -> None:
     """Method to start Development Environment Monitors for a given Lab Book if available
 
@@ -58,6 +59,7 @@ def start_labbook_monitor(labbook: LabBook, username: str, dev_tool: str, databa
         labbook(LabBook): A populated LabBook instance to start monitoring
         username(str): The username of the logged in user
         dev_tool(str): The name of the development tool to monitor
+        url(str): URL (from LabManager) at which this dev tool can be reached.
         database(int): The redis database ID to use for key storage. Default should be 1
         author(GitAuthor): A GitAuthor instance for the current logged in user starting the monitor
 
@@ -106,6 +108,7 @@ def start_labbook_monitor(labbook: LabBook, username: str, dev_tool: str, databa
                                                                                        username))
         redis_conn.hset(dev_env_monitor_key, "process_id", job_key.key_str)
         redis_conn.hset(dev_env_monitor_key, "labbook_root", labbook.root_dir)
+        redis_conn.hset(dev_env_monitor_key, "url", url)
 
         # Set author information so activity records can be committed on behalf of the user
         if author:

@@ -584,20 +584,20 @@ class TestLabBook(object):
             newf.write(os.urandom(2 ** 24))
 
         assert 'input/sillyfile' in lb.git.status()['untracked']
-        lb._sweep_uncommitted_changes()
+        lb.sweep_uncommitted_changes()
         s = lb.git.status()
         assert all([len(s[key]) == 0 for key in s.keys()])
 
         with open(os.path.join(lb.root_dir, 'input', 'sillyfile'), 'wb') as newf:
             newf.write(os.urandom(2 ** 16))
         assert 'input/sillyfile' in [n[0] for n in lb.git.status()['unstaged']]
-        lb._sweep_uncommitted_changes()
+        lb.sweep_uncommitted_changes()
         s = lb.git.status()
         assert all([len(s[key]) == 0 for key in s.keys()])
         os.remove(os.path.join(lb.root_dir, 'input', 'sillyfile'))
         assert 'input/sillyfile' in [n[0] for n in lb.git.status()['unstaged']]
 
-        lb._sweep_uncommitted_changes()
+        lb.sweep_uncommitted_changes()
         s = lb.git.status()
         assert all([len(s[key]) == 0 for key in s.keys()])
 

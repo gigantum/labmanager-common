@@ -29,7 +29,7 @@ import yaml
 from lmcommon.labbook import LabBook
 from lmcommon.logging import LMLogger
 from lmcommon.activity import ActivityDetailType, ActivityType, ActivityRecord, ActivityDetailRecord, ActivityStore
-from lmcommon.environment import get_package_manager
+from lmcommon.environment.utils import get_package_manager
 
 
 logger = LMLogger.get_logger()

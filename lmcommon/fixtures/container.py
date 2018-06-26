@@ -41,7 +41,7 @@ def build_lb_image_for_jupyterlab(mock_config_with_repo):
     cm = ComponentManager(lb)
     # Add a component
     cm.add_component("base", ENV_UNIT_TEST_REPO, ENV_UNIT_TEST_BASE, ENV_UNIT_TEST_REV)
-    n = cm.add_package("pip", "requests", "2.18.4")
+    cm.add_packages("pip", [{"manager": "pip", "package": "requests", "version": "2.18.4"}])
 
     ib = ImageBuilder(lb)
     docker_lines = ib.assemble_dockerfile(write=True)

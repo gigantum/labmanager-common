@@ -54,7 +54,7 @@ class GitWorkflow(object):
                 raise ValueError(f"Must be on user workspace (gm.workspace-{username}) to sync")
 
             with self.labbook.lock_labbook():
-                self.labbook._sweep_uncommitted_changes()
+                self.labbook.sweep_uncommitted_changes()
 
             if self.labbook.has_remote:
                 raise ValueError("Cannot publish Labbook when remote already set.")

@@ -73,24 +73,20 @@ class JupyterLabMonitor(DevEnvMonitor):
             key(str): The unique string used as the key in redis to track this DevEnvMonitor instance
             redis_conn(redis.Redis): A redis client
 
-
         Returns:
             dict
         """
-        # Break key into parts
+
         _, username, owner, labbook_name, _ = key.split(':')
-
-        # Get container IP address
         lb_key = infer_docker_image_name(labbook_name, owner, username)
-        ip = JupyterLabMonitor.get_container_ip(lb_key)
-
-        # Get jupyter token
         token = redis_conn.get(f"{lb_key}-jupyter-token").decode()
+        url = redis_conn.hget(key, "url").decode()
 
         # Get List of active sessions
-        r = requests.get(f'http://{ip}:8888/api/sessions?token={token}')
+        path = f'{url}/api/sessions?token={token}'
+        r = requests.get(path)
         if r.status_code != 200:
-            raise IOError("Failed to get session listing from JupyterLab")
+            raise IOError(f"Failed to get session listing from JupyterLab {path}")
         sessions = r.json()
 
         data = {}
@@ -99,7 +95,6 @@ class JupyterLabMonitor(DevEnvMonitor):
                                              "kernel_name": session['kernel']['name'],
                                              "kernel_type": session['type'],
                                              "path": session['path']}
-
         return data
 
     def run(self, key: str, database=1) -> None:
@@ -221,7 +216,8 @@ class JupyterLabNotebookMonitor(ActivityMonitor):
         if msg['msg_type'] == 'status':
             # If status was busy and transitions to idle store cell since execution has completed
             if self.kernel_status == 'busy' and msg['content']['execution_state'] == 'idle':
-                if self.current_cell.cell_error is False:
+                if self.current_cell.cell_error is False and self.current_cell.is_empty() is False:
+                    # Current cell did not error and has content
                     # Add current cell to collection of cells ready to process
                     self.cell_data.append(self.current_cell)
 

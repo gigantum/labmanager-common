@@ -76,8 +76,8 @@ class TestContainerOps(object):
         result = ContainerOperations.run_command("/bin/true", my_lb, username="unittester")
         assert result.decode().strip() == ""
 
-        with pytest.raises(ContainerException):
-            ContainerOperations.run_command("/bin/false", my_lb, username="unittester")
+        result = ContainerOperations.run_command("/bin/false", my_lb, username="unittester")
+        assert result.decode().strip() == ""
 
     def test_start_container(self, build_lb_image_for_jupyterlab):
         # Check the resulting port mapping to confirm there are some mapped ports in there.
