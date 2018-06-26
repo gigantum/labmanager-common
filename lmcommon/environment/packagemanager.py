@@ -22,6 +22,7 @@ from typing import (List, Dict, Optional)
 from collections import namedtuple
 
 from lmcommon.labbook import LabBook
+import lmcommon.environment
 
 # A namedtuple for the result of package validation
 PackageResult = namedtuple('PackageResult', ['package', 'version', 'error'])
@@ -30,6 +31,16 @@ PackageResult = namedtuple('PackageResult', ['package', 'version', 'error'])
 class PackageManager(metaclass=abc.ABCMeta):
     """Class to implement the standard interface for all available Package Managers
     """
+
+    @staticmethod
+    def fallback_image(labbook: LabBook) -> str:
+        """ Generate the image name of the LabManager if the docker image for
+            the given labbook cannot be found. """
+        cm = getattr(lmcommon.environment, 'ComponentManager')(labbook)
+        base = cm.base_fields
+        return f"{base['image']['namespace']}" \
+               f"/{base['image']['repository']}" \
+               f":{base['image']['tag']}"
 
     @abc.abstractmethod
     def search(self, search_str: str, labbook: LabBook, username: str) -> List[str]:

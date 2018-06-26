@@ -65,7 +65,8 @@ class CondaPackageManagerBase(PackageManager):
 
         try:
             result = ContainerOperations.run_command(f'conda search  --json "{search_str}"',
-                                                     labbook=labbook, username=username)
+                                                     labbook=labbook, username=username,
+                                                     fallback_image=self.fallback_image(labbook))
         except ContainerException as e:
             logger.error(e)
             return list()
@@ -93,7 +94,8 @@ class CondaPackageManagerBase(PackageManager):
             list(str): Version strings
         """
         try:
-            result = ContainerOperations.run_command(f"conda info --json {package_name}", labbook, username)
+            result = ContainerOperations.run_command(f"conda info --json {package_name}", labbook, username,
+                                                     fallback_image=self.fallback_image(labbook))
             data = json.loads(result.decode())
         except ContainerException as e:
             logger.error(e)
@@ -139,13 +141,14 @@ class CondaPackageManagerBase(PackageManager):
             str: latest version string
         """
         result = ContainerOperations.run_command(f"conda install --dry-run --no-deps --json {package_name}",
-                                                 labbook, username)
+                                                 labbook, username, fallback_image=self.fallback_image(labbook))
         data = json.loads(result.decode().strip())
 
         if data.get('message') == 'All requested packages already installed.':
             # We enter this block if the given package_name is already installed to the latest version.
             # Then we have to retrieve the latest version using conda list
-            result = ContainerOperations.run_command("conda list --json", labbook, username)
+            result = ContainerOperations.run_command("conda list --json", labbook, username,
+                                                     fallback_image=self.fallback_image(labbook))
             data = json.loads(result.decode().strip())
             for pkg in data:
                 if pkg.get('name') == package_name:
@@ -182,7 +185,9 @@ class CondaPackageManagerBase(PackageManager):
         cmd = ['conda', 'install', '--dry-run', '--no-deps', '--json', *package_names]
 
         try:
-            result = ContainerOperations.run_command(' '.join(cmd), labbook, username).decode().strip()
+            result = ContainerOperations.run_command(
+                ' '.join(cmd), labbook, username, fallback_image=self.fallback_image(labbook)
+            ).decode().strip()
         except Exception as e:
             logger.error(e)
             pkgs = ", ".join(package_names)

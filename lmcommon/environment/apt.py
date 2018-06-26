@@ -42,7 +42,8 @@ class AptPackageManager(PackageManager):
         Returns:
             list(str): The list of package names that match the search string
         """
-        result = ContainerOperations.run_command(f"apt-cache search {search_str}", labbook, username)
+        result = ContainerOperations.run_command(f"apt-cache search {search_str}", labbook, username,
+                                                 fallback_image=self.fallback_image(labbook))
 
         packages = []
         if result:
@@ -62,7 +63,8 @@ class AptPackageManager(PackageManager):
         Returns:
             list(str): Version strings
         """
-        result = ContainerOperations.run_command(f"apt-cache madison {package_name}", labbook, username)
+        result = ContainerOperations.run_command(f"apt-cache madison {package_name}", labbook, username,
+                                                 fallback_image=self.fallback_image(labbook))
 
         package_versions: List[str] = []
         if result:

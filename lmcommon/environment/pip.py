@@ -44,7 +44,10 @@ class PipPackageManager(PackageManager):
         Returns:
             list(str): The list of package names that match the search string
         """
-        search_result = ContainerOperations.run_command(f'pip search {search_str}', labbook, username)
+        search_result = ContainerOperations.run_command(
+            f'pip search {search_str}', labbook, username,
+            fallback_image=self.fallback_image(labbook))
+
         lines = search_result.decode().splitlines()
         return [x.split(' ')[0] for x in lines]
 
@@ -124,7 +127,8 @@ class PipPackageManager(PackageManager):
         Returns:
             list
         """
-        packages = ContainerOperations.run_command('pip list --format=json', labbook, username)
+        packages = ContainerOperations.run_command('pip list --format=json', labbook, username,
+                                                   fallback_image=self.fallback_image(labbook))
         return json.loads(packages.decode())
 
     def list_available_updates(self, labbook: LabBook, username: str) -> List[Dict[str, str]]:
@@ -139,7 +143,8 @@ class PipPackageManager(PackageManager):
         Returns:
             list
         """
-        packages = ContainerOperations.run_command('pip list --format=json -o', labbook, username)
+        packages = ContainerOperations.run_command('pip list --format=json -o', labbook, username,
+                                                   fallback_image=self.fallback_image(labbook))
         return json.loads(packages.decode())
 
     def validate_packages(self, package_list: List[Dict[str, str]], labbook: LabBook, username: str) -> List[PackageResult]:

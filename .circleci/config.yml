@@ -6,10 +6,13 @@ jobs:
     steps:
       - checkout
       - setup_remote_docker
-
       - run:
           name: Set Git credentials config
           command: git config --global user.email "noreply@gigantum.io" && git config --global user.name "CircleCI" && git config --global credential.helper store
+
+      - run:
+          name: Install proxy lib
+          command: cd /tmp && git clone https://github.com/gigantum/confhttpproxy.git && pip3 install -e confhttpproxy
 
       - run:
           name: Run mypy type checker

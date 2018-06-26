@@ -57,3 +57,18 @@ flask:
   DEBUG: true
   TESTING: true
   allow_cors: true
+
+# Details for route proxying
+proxy:
+  # The host for the proxy control (to manipulate routes)
+  api_host: localhost
+  # The port for the proxy control
+  api_port: 1999
+  # All inbound requests (to be proxied) arrive
+  # at 0.0.0.0 on the following port
+  external_proxy_port: 10000
+  # Port from the perspective of the UI that the proxy
+  # is available from
+  apparent_proxy_port: 10000
+  # All LabManager api traffic has this default prefix.
+  labmanager_api_prefix: /api

@@ -139,9 +139,6 @@ class IdentityManager(metaclass=abc.ABCMeta):
 
                 check_and_add_user(admin_service=admin_service, access_token=access_token, username=username)
 
-                # TODO: Give build a 3 second head start for now. Use subscription in the future
-                time.sleep(5)
-
     def _get_jwt_public_key(self, id_token: str) -> Optional[Dict[str, str]]:
         """Method to get the public key for JWT signing
 

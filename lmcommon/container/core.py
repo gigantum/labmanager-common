@@ -47,6 +47,13 @@ def get_labmanager_ip() -> Optional[str]:
     return ip
 
 
+def get_container_ip(lb_key: str) -> str:
+    """Return the IP address of the given labbook container"""
+    client = get_docker_client()
+    container = client.containers.get(lb_key)
+    return container.attrs['NetworkSettings']['Networks']['bridge']['IPAddress']
+
+
 def build_docker_image(root_dir: str, override_image_tag: Optional[str], nocache: bool = False,
                        username: Optional[str] = None) -> str:
     """

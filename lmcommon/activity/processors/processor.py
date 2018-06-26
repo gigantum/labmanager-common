@@ -38,6 +38,13 @@ class ExecutionData(object):
         # Flag indicating if the block errored and should be ignored
         self.cell_error = False
 
+    def is_empty(self):
+        """Helper method to check if any data has been added to the object"""
+        if len(self.code) == 0 and len(self.result) == 0 and len(self.tags) == 0:
+            return True
+        else:
+            return False
+
 
 class ActivityProcessor(metaclass=abc.ABCMeta):
     """Class to process activity and return content for an ActivityRecord"""
