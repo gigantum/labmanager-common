@@ -9,7 +9,7 @@ import requests
 
 from lmcommon.logging import LMLogger
 from lmcommon.configuration import get_docker_client
-from lmcommon.portmap import PortMap
+from lmcommon.environment import ComponentManager
 from lmcommon.container.core import infer_docker_image_name, get_container_ip
 from lmcommon.labbook import LabBook, LabbookException
 
@@ -64,11 +64,19 @@ def start_jupyter(labbook: LabBook, username: str, tag: Optional[str] = None,
         raise ValueError(f'Multiple ({len(jupyter_ps)}) Jupyter Lab instances detected')
 
 
+def _shim_skip_python2_savehook(labbook: LabBook) -> bool:
+    """Return True if the LabBook uses a Python 2 base image.
+    If the base is Python 2, we cannot use the save hook.
+    TODO - This should be fixed with upstream JupyterLab fixes. """
+    cm = ComponentManager(labbook)
+    return 'python2' in cm.base_fields['id'].lower().replace(' ', '')
+
+
 def _start_jupyter_process(labbook: LabBook, lb_container,
                            username: str, lb_key: str, token: str,
                            proxy_prefix: Optional[str] = None) -> None:
-    # If jupyterlab is not already running.
-    # Use a random hexadecimal string as token.
+    use_savehook = os.path.exists('/mnt/share/jupyterhooks') \
+                   and not _shim_skip_python2_savehook(labbook)
     un = labbook.owner['username']
     cmd = (f"export PYTHONPATH=/mnt/share:$PYTHONPATH && "
            f'echo "{username},{un},{labbook.name},{token}" > /home/giguser/jupyter_token && '
@@ -77,7 +85,7 @@ def _start_jupyter_process(labbook: LabBook, lb_container,
            f"--NotebookApp.token='{token}' --no-browser "
            f'--ConnectionFileMixin.ip=0.0.0.0 ' +
            (f'--FileContentsManager.post_save_hook="jupyterhooks.post_save_hook" '
-            if os.path.exists('/mnt/share/jupyterhooks') else "") +
+            if use_savehook else "") +
            (f'--NotebookApp.base_url="{proxy_prefix}" '
             if proxy_prefix else ''))
 
