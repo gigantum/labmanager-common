@@ -21,11 +21,12 @@
 import subprocess
 import datetime
 import time
-from typing import Optional, List
+from typing import Optional
 
 from lmcommon.gitlib.gitlab import GitLabManager
 from lmcommon.labbook import LabBook, LabbookException, LabbookMergeException
 from lmcommon.logging import LMLogger
+from lmcommon.configuration.utils import call_subprocess
 
 logger = LMLogger.get_logger()
 
@@ -40,35 +41,6 @@ class MergeError(WorkflowsException):
 
 class GitLabRemoteError(WorkflowsException):
     pass
-
-
-def call_subprocess(cmd_tokens: List[str], cwd: str, check: bool = True) -> None:
-    """Execute a subprocess call and properly benchmark and log
-
-    Args:
-        cmd_tokens: List of command tokens, e.g., ['ls', '-la']
-        cwd: Current working directory
-        check: Raise exception if command fails
-
-    Returns:
-        None
-
-    Raises:
-        subprocess.CalledProcessError
-    """
-    logger.debug(f"Executing `{' '.join(cmd_tokens)}` in {cwd}")
-    start_time = time.time()
-    try:
-        r = subprocess.run(cmd_tokens, cwd=cwd, stderr=subprocess.PIPE, stdout=subprocess.PIPE, check=check)
-        finish_time = time.time()
-        elapsed_time = finish_time - start_time
-        logger.debug(f"Finished command `{' '.join(cmd_tokens)}` in {elapsed_time}s")
-        if elapsed_time > 1.0:
-            logger.warning(f"Successful command `{' '.join(cmd_tokens)}` took {elapsed_time}s")
-    except subprocess.CalledProcessError as x:
-        fail_time = time.time() - start_time
-        logger.error(f"Command failed `{' '.join(cmd_tokens)}` after {fail_time}s: stderr={x.stderr}")
-        raise
 
 
 def git_garbage_collect(labbook: LabBook) -> None:
@@ -233,7 +205,7 @@ def sync_with_remote(labbook: LabBook, username: str, remote: str, force: bool) 
         updates = 0
         logger.info(f"Syncing {str(labbook)} for user {username} to remote {remote}")
         with labbook.lock_labbook():
-            labbook._sweep_uncommitted_changes()
+            labbook.sweep_uncommitted_changes()
             git_garbage_collect(labbook)
 
             tokens = ['git', 'pull', '--commit', 'origin', 'gm.workspace']
@@ -291,7 +263,7 @@ def sync_locally(labbook: LabBook, username: Optional[str] = None) -> None:
     """
     try:
         with labbook.lock_labbook():
-            labbook._sweep_uncommitted_changes()
+            labbook.sweep_uncommitted_changes()
 
             git_garbage_collect(labbook)
 

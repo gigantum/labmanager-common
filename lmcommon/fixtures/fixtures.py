@@ -25,19 +25,15 @@ import uuid
 import collections
 import git
 from pkg_resources import resource_filename
-import docker.errors
 import pytest
-import pprint
 
-from lmcommon.configuration import Configuration, get_docker_client
-from lmcommon.container import ContainerOperations
+from lmcommon.configuration import Configuration
 from lmcommon.environment import RepositoryManager, ComponentManager
 from lmcommon.labbook import LabBook
-from lmcommon.container import ContainerOperations
 from lmcommon.activity.detaildb import ActivityDetailDB
 from lmcommon.activity import ActivityStore
-from lmcommon.imagebuilder import ImageBuilder
 from lmcommon.gitlib.git import GitAuthor
+from lmcommon.files import FileOperations
 
 
 ENV_UNIT_TEST_REPO = 'gig-dev_components2'
@@ -68,7 +64,6 @@ def _create_temp_work_dir(override_dict: dict = None, lfs_enabled: bool = True):
             'import_demo_on_first_login': False
         },
         'environment': {
-            #'repo_url': ["https://github.com/gig-dev/environment-components.git"]
             'repo_url': ["https://github.com/gig-dev/components2.git"]
         },
         'flask': {
@@ -370,7 +365,7 @@ def remote_labbook_repo():
     with open(os.path.join('/tmp', 'codefile.c'), 'wb') as codef:
         codef.write(b'// Cody McCodeface ...')
 
-    lb.insert_file("code", "/tmp/codefile.c", "")
+    FileOperations.insert_file(lb, "code", "/tmp/codefile.c")
 
     assert lb.is_repo_clean
     lb.checkout_branch("gm.workspace")
@@ -416,92 +411,3 @@ def labbook_dir_tree():
                         os.path.join(tempdir, "my-temp-labbook", ".gigantum", "env", "custom"))
 
         yield os.path.join(tempdir, 'my-temp-labbook')
-
-
-@pytest.fixture(scope='function')
-def build_lb_image_for_jupyterlab(mock_config_with_repo):
-    # Create a labook
-    lb = LabBook(mock_config_with_repo[0])
-    labbook_dir = lb.new(name="containerunittestbook", description="Testing docker building.",
-                         owner={"username": "unittester"})
-    # Create Component Manager
-    cm = ComponentManager(lb)
-    # Add a component
-    cm.add_component("base", ENV_UNIT_TEST_REPO, ENV_UNIT_TEST_BASE, ENV_UNIT_TEST_REV)
-    n = cm.add_package("pip", "requests", "2.18.4")
-
-    ib = ImageBuilder(lb)
-    docker_lines = ib.assemble_dockerfile(write=True)
-    pprint.pprint(docker_lines)
-    assert 'RUN pip install requests==2.18.4' in docker_lines
-    assert all(['==None' not in l for l in docker_lines.split()])
-    assert all(['=None' not in l for l in docker_lines.split()])
-    client = get_docker_client()
-    client.containers.prune()
-
-    assert os.path.exists(os.path.join(lb.root_dir, '.gigantum', 'env', 'entrypoint.sh'))
-
-    try:
-        lb, docker_image_id = ContainerOperations.build_image(labbook=lb, username="unittester")
-        lb, container_id, port_maps = ContainerOperations.start_container(lb, username="unittester")
-
-        assert isinstance(container_id, str)
-        yield lb, ib, client, docker_image_id, container_id, port_maps, 'unittester'
-
-        try:
-            _, s = ContainerOperations.stop_container(labbook=lb, username="unittester")
-        except docker.errors.APIError:
-            client.containers.get(container_id=container_id).stop(timeout=2)
-            s = False
-    finally:
-        shutil.rmtree(lb.root_dir)
-        # Stop and remove container if it's still there
-        try:
-            client.containers.get(container_id=container_id).stop(timeout=2)
-            client.containers.get(container_id=container_id).remove()
-        except:
-            pass
-
-        # Remove image if it's still there
-        try:
-            ContainerOperations.delete_image(labbook=lb, username='unittester')
-            client.images.remove(docker_image_id, force=True, noprune=False)
-        except:
-            pass
-
-        try:
-            client.images.remove(docker_image_id, force=True, noprune=False)
-        except:
-            pass
-
-
-@pytest.fixture #(scope='method')
-def build_lb_image_for_env(mock_config_with_repo):
-    # Create a labook
-    lb = LabBook(mock_config_with_repo[0])
-    labbook_dir = lb.new(name="containerunittestbookenv", description="Testing environment functions.",
-                         owner={"username": "unittester"})
-    # Create Component Manager
-    cm = ComponentManager(lb)
-    # Add a component
-    cm.add_component("base", ENV_UNIT_TEST_REPO, ENV_UNIT_TEST_BASE, ENV_UNIT_TEST_REV)
-
-    ib = ImageBuilder(lb)
-    ib.assemble_dockerfile(write=True)
-    client = get_docker_client()
-    client.containers.prune()
-
-    try:
-        lb, docker_image_id = ContainerOperations.build_image(labbook=lb, username="unittester")
-
-        yield lb, 'unittester'
-
-    finally:
-        shutil.rmtree(lb.root_dir)
-
-        # Remove image if it's still there
-        try:
-            client.images.remove(docker_image_id, force=True, noprune=False)
-        except:
-            pass
-

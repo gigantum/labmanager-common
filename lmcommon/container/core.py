@@ -47,6 +47,13 @@ def get_labmanager_ip() -> Optional[str]:
     return ip
 
 
+def get_container_ip(lb_key: str) -> str:
+    """Return the IP address of the given labbook container"""
+    client = get_docker_client()
+    container = client.containers.get(lb_key)
+    return container.attrs['NetworkSettings']['Networks']['bridge']['IPAddress']
+
+
 def build_docker_image(root_dir: str, override_image_tag: Optional[str], nocache: bool = False,
                        username: Optional[str] = None) -> str:
     """
@@ -147,9 +154,21 @@ def start_labbook_container(labbook_root: str, config_path: str,
     else:
         env_var = ["WINDOWS_HOST=1"]
 
+    # Get resource limits
+    resource_args = dict()
+    memory_limit = lb.labmanager_config.config['container']['memory']
+    cpu_limit = lb.labmanager_config.config['container']['cpu']
+    if memory_limit:
+        # If memory_limit not None, pass to Docker to limit memory allocation to container
+        resource_args["mem_limit"] = memory_limit
+    if cpu_limit:
+        # If cpu_limit not None, pass to Docker to limit CPU allocation to container
+        # "nano_cpus" is an integer in factional parts of a CPU
+        resource_args["nano_cpus"] = round(cpu_limit * 1e9)
+
     docker_client = get_docker_client()
     container_id = docker_client.containers.run(tag, detach=True, init=True, name=tag, ports=exposed_ports,
-                                                environment=env_var, volumes=volumes_dict).id
+                                                environment=env_var, volumes=volumes_dict, **resource_args).id
 
     labmanager_ip = ""
     try:

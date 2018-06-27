@@ -120,7 +120,7 @@ def to_workspace_branch(labbook, username: Optional[str] = None) -> str:
 
     with labbook.lock_labbook():
         logger.warning(f"Upgrading {str(labbook)} to new gm.workspace branch model")
-        labbook._sweep_uncommitted_changes()
+        labbook.sweep_uncommitted_changes()
         labbook.checkout_branch('gm.workspace', new=True)
 
         if username:

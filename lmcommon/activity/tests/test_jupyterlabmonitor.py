@@ -58,6 +58,7 @@ class TestJupyterLabMonitor(object):
                                                            'jupyterlab')
         lb_key = infer_docker_image_name('test-labbook', 'default', 'default')
         redis_client.set(f"{lb_key}-jupyter-token", "afaketoken")
+        redis_client.hset(dev_env_key, "url", "http://localhost:10000/jupyter/asdf/")
 
         sessions = monitor.get_sessions(dev_env_key, redis_conn=redis_client)
 
@@ -85,6 +86,7 @@ class TestJupyterLabMonitor(object):
         redis_client.set(f"{lb_key}-jupyter-token", "afaketoken")
         redis_client.hset(dev_env_key, "author_name", "default")
         redis_client.hset(dev_env_key, "author_email", "default@default.io")
+        redis_client.hset(dev_env_key, "url", "http://localhost:10000/jupyter/asdf/")
 
         monitor.run(dev_env_key)
 

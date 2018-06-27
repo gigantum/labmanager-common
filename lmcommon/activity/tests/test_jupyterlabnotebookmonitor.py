@@ -138,7 +138,7 @@ class TestJupyterLabNotebookMonitor(object):
         assert record.type == ActivityType.CODE
         assert record.show is True
         assert record.importance == 0
-        assert record.tags is None
+        assert not record.tags
         assert record.message == 'Executed cell in notebook code/Test.ipynb'
         assert len(record.detail_objects) == 3
         assert record.detail_objects[0][0] is True
@@ -298,7 +298,7 @@ class TestJupyterLabNotebookMonitor(object):
         assert record.type == ActivityType.CODE
         assert record.show is True
         assert record.importance == 0
-        assert record.tags is None
+        assert not record.tags
         assert record.message == 'Executed cell in notebook code/Test.ipynb'
         assert len(record.detail_objects) == 4
         assert record.detail_objects[0][0] is True
@@ -384,7 +384,7 @@ class TestJupyterLabNotebookMonitor(object):
         assert record.type == ActivityType.CODE
         assert record.show is False
         assert record.importance == 0
-        assert record.tags is None
+        assert not record.tags
         assert record.message == 'Executed cell in notebook code/Test.ipynb'
         assert len(record.detail_objects) == 1
         assert record.detail_objects[0][0] is False
@@ -470,7 +470,7 @@ class TestJupyterLabNotebookMonitor(object):
         assert record.type == ActivityType.CODE
         assert record.show is True
         assert record.importance == 0
-        assert record.tags is None
+        assert not record.tags
         assert record.message == 'Executed cell in notebook code/Test.ipynb'
         assert len(record.detail_objects) == 262
         assert record.detail_objects[0][0] is True
@@ -680,7 +680,7 @@ class TestJupyterLabNotebookMonitor(object):
         assert record.type == ActivityType.CODE
         assert record.show is True
         assert record.importance == 0
-        assert record.tags is None
+        assert not record.tags
         assert record.message == 'Executed cell in notebook code/Test.ipynb'
         assert len(record.detail_objects) == 5
         assert record.detail_objects[0][0] is True

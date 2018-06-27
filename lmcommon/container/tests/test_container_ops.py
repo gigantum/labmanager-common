@@ -26,9 +26,9 @@ import requests
 
 from lmcommon.configuration import get_docker_client
 
-from lmcommon.container import ContainerOperations
+from lmcommon.container.container import ContainerOperations
 from lmcommon.container.utils import infer_docker_image_name
-from lmcommon.fixtures import build_lb_image_for_jupyterlab, mock_config_with_repo
+from lmcommon.fixtures.container import build_lb_image_for_jupyterlab, mock_config_with_repo
 from lmcommon.container.exceptions import ContainerBuildException, ContainerException
 
 
@@ -76,8 +76,8 @@ class TestContainerOps(object):
         result = ContainerOperations.run_command("/bin/true", my_lb, username="unittester")
         assert result.decode().strip() == ""
 
-        with pytest.raises(ContainerException):
-            ContainerOperations.run_command("/bin/false", my_lb, username="unittester")
+        result = ContainerOperations.run_command("/bin/false", my_lb, username="unittester")
+        assert result.decode().strip() == ""
 
     def test_start_container(self, build_lb_image_for_jupyterlab):
         # Check the resulting port mapping to confirm there are some mapped ports in there.

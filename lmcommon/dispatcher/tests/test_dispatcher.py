@@ -276,44 +276,26 @@ class TestDispatcher(object):
             elapsed_time = elapsed_time + 1
             time.sleep(1)
 
-        # w.terminate()
-
         res = d.query_task(job_ref)
         assert res
         print(res.status)
         assert res.status == 'finished'
 
-        ## Finish building image
+        # Finish building image
 
         startc_kwargs = {
             'root': lb.root_dir,
             'config_path': lb.labmanager_config.config_file,
             'username': 'unittester'
         }
-        ## Start the docker container, and then wait till it's done.
+        # Start the docker container, and then wait till it's done.
         container_id = bg_jobs.start_labbook_container(**startc_kwargs)
         time.sleep(5)
         assert get_docker_client().containers.get(container_id).status == 'running'
 
-        ## Stop the docker container, and wait until that is done.
-        stop_ref = d.dispatch_task(bg_jobs.stop_labbook_container, args=(res.result,))
-
-        elapsed_time = 0
-        while True:
-            status = d.query_task(stop_ref).status
-            print(status)
-            if status in ['success', 'failed', 'finished']:
-                print(d.query_task(stop_ref).exc_info)
-                break
-            if elapsed_time > 10:
-                w.terminate()
-                assert False, "timed out {}".format(status)
-            elapsed_time = elapsed_time + 1
-            time.sleep(1)
-
-        res = d.query_task(stop_ref)
-        assert res
-        assert res.status == 'finished'
+        # Stop the docker container, and wait until that is done.
+        print(container_id)
+        bg_jobs.stop_labbook_container(container_id)
 
         w.terminate()
 

@@ -22,14 +22,25 @@ from typing import (List, Dict, Optional)
 from collections import namedtuple
 
 from lmcommon.labbook import LabBook
+import lmcommon.environment
 
 # A namedtuple for the result of package validation
-PackageValidation = namedtuple('PackageValidation', ['package', 'version'])
+PackageResult = namedtuple('PackageResult', ['package', 'version', 'error'])
 
 
 class PackageManager(metaclass=abc.ABCMeta):
     """Class to implement the standard interface for all available Package Managers
     """
+
+    @staticmethod
+    def fallback_image(labbook: LabBook) -> str:
+        """ Generate the image name of the LabManager if the docker image for
+            the given labbook cannot be found. """
+        cm = getattr(lmcommon.environment, 'ComponentManager')(labbook)
+        base = cm.base_fields
+        return f"{base['image']['namespace']}" \
+               f"/{base['image']['repository']}" \
+               f":{base['image']['tag']}"
 
     @abc.abstractmethod
     def search(self, search_str: str, labbook: LabBook, username: str) -> List[str]:
@@ -109,14 +120,16 @@ class PackageManager(metaclass=abc.ABCMeta):
         raise NotImplemented
 
     @abc.abstractmethod
-    def is_valid(self, package_name: str, labbook: LabBook, username: str, package_version: Optional[str] = None) -> PackageValidation:
-        """Method to validate package names and versions
+    def validate_packages(self, package_list: List[Dict[str, str]], labbook: LabBook, username: str) -> List[PackageResult]:
+        """Method to validate a list of packages, and if needed fill in any missing versions
 
-        result should be in the format {package: bool, version: bool}
+        Should check both the provided package name and version. If the version is omitted, it should be generated
+        from the latest version.
 
         Args:
-            package_name(str): The package name to validate
-            package_version(str): The package version to validate
+            package_list(list): A list of dictionaries of packages to validate
+            labbook(str): The labbook instance
+            username(str): The username for the logged in user
 
         Returns:
             namedtuple: namedtuple indicating if the package and version are valid

@@ -155,7 +155,6 @@ class PortMap(object):
             self._redis_client.set(f"__hostport__labbook__{labbook_key}",
                                    json.dumps((interface, desired_port + increment)))
 
-
         return desired_port + increment
 
     def release(self, labbook_key: str) -> None:

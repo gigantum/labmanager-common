@@ -21,7 +21,7 @@ import pytest
 import getpass
 import pprint
 
-from lmcommon.fixtures import mock_config_with_repo, build_lb_image_for_env
+from lmcommon.fixtures.container import mock_config_with_repo, build_lb_image_for_env
 from lmcommon.environment.conda import Conda3PackageManager, Conda2PackageManager
 
 
@@ -86,11 +86,11 @@ class TestConda3PackageManager(object):
 
         # Note, "requests" is an installed package
         result = mrg.latest_version("requests", lb, username)
-        assert result == "2.18.4"
+        assert result == "2.19.1"
 
         # numpy is a non-installed package
         result = mrg.latest_version("numpy", lb, username)
-        assert result == '1.14.3'
+        assert result == '1.14.5'
 
     def test_latest_versions(self, build_lb_image_for_env):
         """Test latest_version command"""
@@ -100,8 +100,8 @@ class TestConda3PackageManager(object):
         pkgs = ["numpy", "requests"]
         result = mrg.latest_versions(pkgs, lb, username)
 
-        assert result[0] == '1.14.3'  # Numpy
-        assert result[1] == '2.18.4'  # Requests
+        assert result[0] == '1.14.5'  # Numpy
+        assert result[1] == '2.19.1'  # Requests
 
     def test_latest_versions_bad_pkg(self, build_lb_image_for_env):
         """Test latest_version command"""
@@ -177,23 +177,51 @@ class TestConda3PackageManager(object):
         with pytest.raises(ValueError):
             mrg.list_versions("gigantumasdfasdfasdf", lb, username)
 
-    def test_is_valid(self, build_lb_image_for_env):
+    def test_is_valid_errors(self, build_lb_image_for_env):
         """Test list_versions command"""
+        pkgs = [{"manager": "conda3", "package": "numpy", "version": "1.14.2"},
+                {"manager": "conda3", "package": "plotly", "version": "100.00"},
+                {"manager": "conda3", "package": "scipy", "version": ""},
+                {"manager": "conda3", "package": "asdfasdfasdf", "version": ""}]
+
         mrg = Conda3PackageManager()
         lb = build_lb_image_for_env[0]
         username = build_lb_image_for_env[1]
+        result = mrg.validate_packages(pkgs, lb, username)
 
-        result = mrg.is_valid("requests", lb, username, "10.0")
-        assert result.package is True
-        assert result.version is False
+        assert result[0].package == "numpy"
+        assert result[0].version == "1.14.2"
+        assert result[0].error is False
 
-        result = mrg.is_valid("requests", lb, username, "2.18.4")
-        assert result.package is True
-        assert result.version is True
+        assert result[1].package == "plotly"
+        assert result[1].version == "100.00"
+        assert result[1].error is True
 
-        result = mrg.is_valid("requestsasdfasdfasd", lb, username)
-        assert result.package is False
-        assert result.version is False
+        assert result[2].package == "scipy"
+        assert result[2].version == ""
+        assert result[2].error is False
+
+        assert result[3].package == "asdfasdfasdf"
+        assert result[3].version == ""
+        assert result[3].error is True
+
+    def test_is_valid_good(self, build_lb_image_for_env):
+        """Test valid packages command"""
+        pkgs = [{"manager": "conda3", "package": "numpy", "version": "1.14.2"},
+                {"manager": "conda3", "package": "plotly", "version": ""}]
+
+        mrg = Conda3PackageManager()
+        lb = build_lb_image_for_env[0]
+        username = build_lb_image_for_env[1]
+        result = mrg.validate_packages(pkgs, lb, username)
+
+        assert result[0].package == "numpy"
+        assert result[0].version == "1.14.2"
+        assert result[0].error is False
+
+        assert result[1].package == "plotly"
+        assert result[1].version == "2.7.0"
+        assert result[1].error is False
 
 
 class TestConda2PackageManager(object):
@@ -205,5 +233,51 @@ class TestConda2PackageManager(object):
         pkgs = ["numpy", "requests"]
         result = mrg.latest_versions(pkgs, lb, username)
 
-        assert result[0] == '1.14.3' #Numpy
-        assert result[1] == '2.18.4' # Requests
+        assert result[0] == '1.14.5'  # Numpy
+        assert result[1] == '2.19.1'  # Requests
+
+    def test_is_valid_errors(self, build_lb_image_for_env):
+        """Test list_versions command"""
+        pkgs = [{"manager": "conda2", "package": "numpy", "version": "1.14.2"},
+                {"manager": "conda2", "package": "plotly", "version": "100.00"},
+                {"manager": "conda2", "package": "scipy", "version": ""},
+                {"manager": "conda2", "package": "asdfasdfasdf", "version": ""}]
+
+        mrg = Conda2PackageManager()
+        lb = build_lb_image_for_env[0]
+        username = build_lb_image_for_env[1]
+        result = mrg.validate_packages(pkgs, lb, username)
+
+        assert result[0].package == "numpy"
+        assert result[0].version == "1.14.2"
+        assert result[0].error is False
+
+        assert result[1].package == "plotly"
+        assert result[1].version == "100.00"
+        assert result[1].error is True
+
+        assert result[2].package == "scipy"
+        assert result[2].version == ""
+        assert result[2].error is False
+
+        assert result[3].package == "asdfasdfasdf"
+        assert result[3].version == ""
+        assert result[3].error is True
+
+    def test_is_valid_good(self, build_lb_image_for_env):
+        """Test valid packages command"""
+        pkgs = [{"manager": "conda2", "package": "numpy", "version": "1.14.2"},
+                {"manager": "conda2", "package": "plotly", "version": ""}]
+
+        mrg = Conda2PackageManager()
+        lb = build_lb_image_for_env[0]
+        username = build_lb_image_for_env[1]
+        result = mrg.validate_packages(pkgs, lb, username)
+
+        assert result[0].package == "numpy"
+        assert result[0].version == "1.14.2"
+        assert result[0].error is False
+
+        assert result[1].package == "plotly"
+        assert result[1].version == "2.7.0"
+        assert result[1].error is False

@@ -37,7 +37,7 @@ class TestActivityRecord(object):
         assert ar.message is None
         assert ar.show is True
         assert ar.importance is None
-        assert ar.tags is None
+        assert not ar.tags
         assert ar.detail_objects == []
 
         ar = ActivityRecord(ActivityType.CODE,
@@ -173,7 +173,7 @@ class TestActivityRecord(object):
 
         assert ar.log_str == """_GTM_ACTIVITY_START_**
 msg:added some code**
-metadata:{"show":true,"importance":50,"type":2,"linked_commit":"aaaaaaaa","tags":null}**
+metadata:{"show":true,"importance":50,"type":2,"linked_commit":"aaaaaaaa","tags":[]}**
 details:**
 4,1,0,my_fake_detail_key,0**
 _GTM_ACTIVITY_END_"""

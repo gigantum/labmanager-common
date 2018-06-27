@@ -20,11 +20,11 @@
 import abc
 import importlib
 import requests
-import shutil
 import os
 import pathlib
 import time
 from jose import jwt
+import json
 
 from typing import (Optional, Dict, Any)
 
@@ -139,9 +139,6 @@ class IdentityManager(metaclass=abc.ABCMeta):
 
                 check_and_add_user(admin_service=admin_service, access_token=access_token, username=username)
 
-                # TODO: Give build a 3 second head start for now. Use subscription in the future
-                time.sleep(3)
-
     def _get_jwt_public_key(self, id_token: str) -> Optional[Dict[str, str]]:
         """Method to get the public key for JWT signing
 
@@ -151,9 +148,30 @@ class IdentityManager(metaclass=abc.ABCMeta):
         Returns:
             dict
         """
-        url = "https://" + self.config.config['auth']['provider_domain'] + "/.well-known/jwks.json"
-        response = requests.get(url)
-        jwks = response.json()
+        key_path = "/mnt/share"
+        key_file = os.path.join(key_path, "jwks.json")
+
+        # Check for local cached key data
+        if os.path.exists(key_file):
+            with open(key_file, 'rt') as jwk_file:
+                jwks = json.load(jwk_file)
+
+        else:
+            url = "https://" + self.config.config['auth']['provider_domain'] + "/.well-known/jwks.json"
+            response = requests.get(url)
+            if response.status_code != 200:
+                raise AuthenticationError("Failed to load public RSA key to validate Bearer token", 401)
+
+            jwks = response.json()
+
+            # Save for later use
+            if os.path.exists(key_path):
+                with open(key_file, 'wt') as jwk_file:
+                    json.dump(jwks, jwk_file)
+
+            logger.info("Fetched RSA key from server and saved to disk")
+
+        # Load header
         try:
             unverified_header = jwt.get_unverified_header(id_token)
         except jwt.JWTError as err:

@@ -17,7 +17,6 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-
 import os
 import re
 import time
@@ -27,7 +26,7 @@ import redis
 import requests
 import docker
 import docker.errors
-
+import confhttpproxy
 
 from lmcommon.configuration import get_docker_client, Configuration
 from lmcommon.logging import LMLogger
@@ -37,7 +36,8 @@ from lmcommon.portmap import PortMap
 from lmcommon.container.utils import infer_docker_image_name
 from lmcommon.container.exceptions import ContainerException
 from lmcommon.container.core import (build_docker_image, stop_labbook_container,
-                                     start_labbook_container)
+                                     start_labbook_container, get_container_ip)
+from lmcommon.container.jupyter import start_jupyter
 
 logger = LMLogger.get_logger()
 
@@ -45,8 +45,9 @@ logger = LMLogger.get_logger()
 class ContainerOperations(object):
 
     @classmethod
-    def build_image(cls, labbook: LabBook, override_image_tag: Optional[str] = None,
-                    username: Optional[str] = None, nocache: bool = False) -> Tuple[LabBook, str]:
+    def build_image(
+            cls, labbook: LabBook, override_image_tag: Optional[str] = None,
+            username: Optional[str] = None, nocache: bool = False) -> Tuple[LabBook, str]:
         """ Build docker image according to the Dockerfile just assembled.
 
         Args:
@@ -61,10 +62,13 @@ class ContainerOperations(object):
         Raises:
             Todo.
         """
-        logger.info(f"Building docker image for {str(labbook)} using override name `{override_image_tag}`")
-        return (labbook,
-                build_docker_image(labbook.root_dir, override_image_tag=override_image_tag, username=username,
-                                   nocache=nocache))
+        logger.info(f"Building docker image for {str(labbook)}, "
+                    f"using override name `{override_image_tag}`")
+        docker_img_id = build_docker_image(labbook.root_dir,
+                                           override_image_tag=override_image_tag,
+                                           username=username,
+                                           nocache=nocache)
+        return labbook, docker_img_id
 
     @classmethod
     def delete_image(cls, labbook: LabBook, override_image_tag: Optional[str] = None,
@@ -97,26 +101,51 @@ class ContainerOperations(object):
         return labbook, True
 
     @classmethod
-    def run_command(cls, cmd_text: str, labbook: LabBook, username: Optional[str] = None,
-                    override_image_tag: Optional[str] = None) -> bytes:
+    def run_command(
+            cls, cmd_text: str, labbook: LabBook, username: Optional[str] = None,
+            override_image_tag: Optional[str] = None, fallback_image: str = None) -> bytes:
         """Run a command executed in the context of the LabBook's docker image.
 
         Args:
+            cmd_text: Content of command to be executed.
             labbook: Subject labbook
             username: Optional active username
             override_image_tag: If set, does not automatically infer container name.
+            fallback_image: If LabBook image can't be found, use this one instead.
 
         Returns:
             A tuple containing the labbook, Docker container id, and port mapping.
         """
-        image_name = override_image_tag or infer_docker_image_name(labbook_name=labbook.name,
-                                                                   owner=labbook.owner['username'],
-                                                                   username=username)
+        image_name = override_image_tag
+        if not image_name:
+            image_name = infer_docker_image_name(labbook_name=labbook.name,
+                                                 owner=labbook.owner['username'],
+                                                 username=username)
+        # Get a docker client instance
+        client = get_docker_client()
+
+        # Verify image name exists. If it doesn't, fallback and use the base image
+        try:
+            client.images.get(image_name)
+        except docker.errors.ImageNotFound:
+            # Image not found...assume build has failed and fallback to base
+            if not fallback_image:
+                raise
+            logger.warning(f"LabBook image not available for package query."
+                           f"Falling back to base image `{fallback_image}`.")
+            image_name = fallback_image
+
         t0 = time.time()
         try:
             # Note, for container docs see: http://docker-py.readthedocs.io/en/stable/containers.html
-            result = get_docker_client().containers.run(image_name, cmd_text, entrypoint=[],
-                                                        remove=True)
+            container = client.containers.run(image_name, cmd_text, entrypoint=[], remove=False, detach=True,
+                                              stdout=True)
+            while container.status != "exited":
+                time.sleep(.25)
+                container.reload()
+            result = container.logs(stdout=True, stderr=False)
+            container.remove(v=True)
+
         except docker.errors.ContainerError as e:
             tfail = time.time()
             logger.error(f'Command ({cmd_text}) failed after {tfail-t0}s - '
@@ -124,7 +153,7 @@ class ContainerOperations(object):
             raise ContainerException(e)
 
         ts = time.time()
-        if ts - t0 > 3.0:
+        if ts - t0 > 5.0:
             logger.warning(f'Command ({cmd_text}) in {str(labbook)} took {ts-t0} sec')
 
         return result
@@ -157,8 +186,8 @@ class ContainerOperations(object):
 
     @classmethod
     def stop_container(cls, labbook: LabBook, username: Optional[str] = None) -> Tuple[LabBook, bool]:
-        """ Stop the given labbook. Returns True in the second field if stopped, otherwise False (False can simply
-        imply no container was running).
+        """ Stop the given labbook. Returns True in the second field if stopped,
+            otherwise False (False can simply imply no container was running).
 
         Args:
             labbook: Subject labbook
@@ -167,8 +196,7 @@ class ContainerOperations(object):
         Returns:
             A tuple of (Labbook, boolean indicating whether a container was successfully stopped).
         """
-        # Todo - Potentially make container_id optional and query for id of container.
-
+        # TODO - Potentially make container_id optional and query for id of container.
         n = infer_docker_image_name(labbook_name=labbook.name, owner=labbook.owner['username'], username=username)
         logger.info(f"Stopping {str(labbook)} ({n})")
 
@@ -180,14 +208,32 @@ class ContainerOperations(object):
         finally:
             # Save state of LB when container turned off.
             with labbook.lock_labbook():
-                labbook._sweep_uncommitted_changes()
+                labbook.sweep_uncommitted_changes()
 
         return labbook, stopped
 
     @classmethod
-    def start_dev_tool(cls, labbook: LabBook, dev_tool_name: str,
-                       username: str, tag: Optional[str] = None,
-                       check_reachable: bool = True) -> Tuple[LabBook, str]:
+    def get_labbook_ip(cls, labbook: LabBook, username: str) -> Tuple[str, int]:
+        """Return the IP on the docker network of the LabBook container
+
+        Args:
+            labbook: Subject LabBook
+            username: Username of active user
+
+        Returns:
+            Tuple of externally facing IP and port
+        """
+        docker_key = infer_docker_image_name(labbook_name=labbook.name,
+                                             owner=labbook.owner['username'],
+                                             username=username)
+        extport = PortMap(labbook.labmanager_config).lookup(labbook.key)[1]
+        return get_container_ip(docker_key), extport
+
+    @classmethod
+    def start_dev_tool(
+            cls, labbook: LabBook, dev_tool_name: str, username: str,
+            tag: Optional[str] = None, check_reachable: bool = True,
+            proxy_prefix: Optional[str] = None) -> Tuple[LabBook, str]:
         """ Start a given development tool (e.g., JupyterLab).
 
         Args:
@@ -195,104 +241,19 @@ class ContainerOperations(object):
             dev_tool_name: Name of development tool, only "jupyterlab" is currently allowed.
             username: Username of active LabManager user.
             tag: Tag of Docker container
+            check_reachable: Affirm that dev tool launched and is reachable
+            proxy_prefix: Give proxy route to IDE endpoint if needed
 
         Returns:
-            (labbook, info): New labbook instance with modified state, info needed to connect to dev tool.
+            (labbook, info): New labbook instance with modified state,
+                             resource suffix needed to connect to dev tool.
+                             (e.g., "/lab?token=xyz" -- it is the caller's
+                             responsibility to know the host)
         """
-        # A dictionary of dev tools and the port at which they run IN THE CONTAINER
-        supported_dev_tools = {'jupyterlab': 8888}
-
+        # A dictionary of dev tools and the port IN THE CONTAINER
+        supported_dev_tools = ['jupyterlab']
         if dev_tool_name not in supported_dev_tools:
-            raise LabbookException(f"Development Tool '{dev_tool_name}' not currently supported")
-
-        lb_key = tag or infer_docker_image_name(labbook_name=labbook.name, owner=labbook.owner['username'],
-                                                username=username)
-        docker_client = get_docker_client()
-
-        lb_container = docker_client.containers.get(lb_key)
-        if lb_container.status != 'running':
-            raise LabbookException(f"{str(labbook)} container is not running")
-
-        jupyter_ps = [l for l in lb_container.exec_run(
-            f'sh -c "ps aux | grep \'jupyter lab\' | grep -v \' grep \'"').decode().split('\n') if l]
-
-        if len(jupyter_ps) == 1:
-            # If jupyterlab is already running, get port from portmap store
-            pmap = PortMap(labbook.labmanager_config)
-            host, port = pmap.lookup(labbook.key)
-
-            # Get token from PS in container
-            t = re.search("token='?([a-zA-Z\d-]+)'?", jupyter_ps[0])
-            if not t:
-                raise LabbookException('Cannot detect Jupyter Lab token')
-            token = t.groups()[0]
-
-            return labbook, f'http://{host}:{port}/lab?token={token}'
-
-        elif len(jupyter_ps) == 0:
-            # If jupyterlab is not already running.
-            # Use a random hexadecimal string as token.
-            token = str(uuid.uuid4()).replace('-', '')
-            un = labbook.owner['username']
-            cmd = (f"export PYTHONPATH=/mnt/share:$PYTHONPATH && "
-                  f'echo "{username},{un},{labbook.name},{token}" > /home/giguser/jupyter_token && '
-                  f"cd /mnt/labbook && "
-                  f"jupyter lab --port={supported_dev_tools[dev_tool_name]} --ip=0.0.0.0 "
-                  f"--NotebookApp.token='{token}' --no-browser "
-                  f'--ConnectionFileMixin.ip=0.0.0.0 ' +
-                  (f'--FileContentsManager.post_save_hook="jupyterhooks.post_save_hook"'
-                    if os.path.exists('/mnt/share/jupyterhooks') else ""))
-            bash = f'sh -c "{cmd}"'
-            logger.info(cmd)
-            lb_container.exec_run(bash, detach=True, user='giguser')
-            # Pause briefly to avoid race conditions
-            for timeout in range(10):
-                time.sleep(1)
-                new_ps_list = lb_container.exec_run(
-                    f'sh -c "ps aux | grep jupyter | grep -v \' grep \'"').decode().split('\n')
-                if any(['jupyter lab' in l or 'jupyter-lab' in l for l in new_ps_list]):
-                    logger.info(f"JupyterLab started within {timeout + 1} seconds")
-                    break
-            else:
-                raise ValueError('Jupyter Lab failed to start after 10 seconds')
-
-            pmap = PortMap(labbook.labmanager_config)
-            host, port = pmap.lookup(labbook.key)
-            tool_url = f'http://{host}:{port}/lab?token={token}'
-
-            # Store token in redis (activity data is stored in db1) for later activity monitoring
-            redis_conn = redis.Redis(db=1)
-            redis_conn.set(f"{lb_key}-jupyter-token", token)
-
-            if check_reachable:
-                for n in range(30):
-                    # Get IP of container on Docker Bridge Network
-                    client = get_docker_client()
-                    container = client.containers.get(lb_key)
-                    lb_ip_addr = container.attrs['NetworkSettings']['Networks']['bridge']['IPAddress']
-
-                    test_url = f'http://{lb_ip_addr}:{supported_dev_tools[dev_tool_name]}/lab?token={token}'
-                    logger.debug(f"Attempt {n + 1}: Testing if JupyerLab is up at {test_url}...")
-                    try:
-                        r = requests.get(test_url, timeout=0.5)
-
-                        if r.status_code != 200:
-                            time.sleep(0.5)
-                        else:
-                            logger.info(f'Found JupyterLab up at {tool_url} after {n/2.0} seconds')
-                            break
-
-                    except requests.exceptions.ConnectionError:
-                        # Assume API isn't up at all yet, so no connection can be made
-                        time.sleep(0.5)
-                else:
-                    raise LabbookException(f'Could not reach JupyterLab at {tool_url} after timeout')
-
-            logger.info(f"JupyterLab up at {tool_url}")
-            return labbook, tool_url
-
-        else:
-            # If "ps aux" for jupyterlab returns multiple hits - this should never happen.
-            for n, l in enumerate(jupyter_ps):
-                logger.error(f'Multiple JupyerLab instances - ({n+1} of {len(jupyter_ps)}) - {l}')
-            raise ValueError(f'Multiple ({len(jupyter_ps)}) Jupyter Lab instances detected')
+            raise LabbookException(f"'{dev_tool_name}' not currently supported")
+        suffix = start_jupyter(labbook, username, tag, check_reachable,
+                               proxy_prefix)
+        return labbook, suffix
