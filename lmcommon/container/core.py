@@ -25,7 +25,6 @@ from typing import Optional, List, Tuple, Any, Dict
 
 from lmcommon.configuration import get_docker_client
 from lmcommon.logging import LMLogger
-from lmcommon.portmap import PortMap
 from lmcommon.labbook import LabBook
 from lmcommon.container.utils import infer_docker_image_name
 from lmcommon.container.exceptions import ContainerBuildException
@@ -37,7 +36,7 @@ def get_labmanager_ip() -> Optional[str]:
     """Method to get the monitored lab book container's IP address on the Docker bridge network
 
     Returns:
-        str
+        str of IP address
     """
     client = get_docker_client()
     container = [c for c in client.containers.list()
@@ -137,12 +136,10 @@ def start_labbook_container(labbook_root: str, config_path: str,
     # TODO - This is the hard-coded ports for JupyterLab. This method should be parameterized
     # with port tuples in the future. (It cannot directly query other top-level modules otherwise
     # a circular dependency will occur)
-    opened_ports: List[Tuple] = [(8888, 8890)]
+    opened_ports: List[int] = [8888]
+    exposed_ports = {f"{port}/tcp": port for port in opened_ports}
 
-    portmap = PortMap(lb.labmanager_config)
-    exposed_ports = {f"{port[0]}/tcp": portmap.assign(lb.key, "0.0.0.0", port[1]) for port in opened_ports}
     mnt_point = labbook_root.replace('/mnt/gigantum', os.environ['HOST_WORK_DIR'])
-
     volumes_dict = {
         mnt_point: {'bind': '/mnt/labbook', 'mode': 'cached'},
         'labmanager_share_vol': {'bind': '/mnt/share', 'mode': 'rw'}

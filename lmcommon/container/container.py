@@ -31,7 +31,6 @@ import confhttpproxy
 from lmcommon.configuration import get_docker_client, Configuration
 from lmcommon.logging import LMLogger
 from lmcommon.labbook import LabBook, LabbookException
-from lmcommon.portmap import PortMap
 
 from lmcommon.container.utils import infer_docker_image_name
 from lmcommon.container.exceptions import ContainerException
@@ -200,9 +199,6 @@ class ContainerOperations(object):
         n = infer_docker_image_name(labbook_name=labbook.name, owner=labbook.owner['username'], username=username)
         logger.info(f"Stopping {str(labbook)} ({n})")
 
-        pm = PortMap(labbook.labmanager_config)
-        pm.release(labbook.key)
-
         try:
             stopped = stop_labbook_container(n)
         finally:
@@ -213,7 +209,7 @@ class ContainerOperations(object):
         return labbook, stopped
 
     @classmethod
-    def get_labbook_ip(cls, labbook: LabBook, username: str) -> Tuple[str, int]:
+    def get_labbook_ip(cls, labbook: LabBook, username: str) -> str:
         """Return the IP on the docker network of the LabBook container
 
         Args:
@@ -221,13 +217,12 @@ class ContainerOperations(object):
             username: Username of active user
 
         Returns:
-            Tuple of externally facing IP and port
+            Externally facing IP
         """
         docker_key = infer_docker_image_name(labbook_name=labbook.name,
                                              owner=labbook.owner['username'],
                                              username=username)
-        extport = PortMap(labbook.labmanager_config).lookup(labbook.key)[1]
-        return get_container_ip(docker_key), extport
+        return get_container_ip(docker_key)
 
     @classmethod
     def start_dev_tool(
