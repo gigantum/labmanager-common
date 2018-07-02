@@ -21,6 +21,7 @@
 import subprocess
 import datetime
 import time
+import os
 from typing import Optional
 
 from lmcommon.gitlib.gitlab import GitLabManager
@@ -59,6 +60,10 @@ def git_garbage_collect(labbook: LabBook) -> None:
         subprocess.CalledProcessError when git gc fails.
         """
     logger.info(f"Running git gc (Garbage Collect) in {str(labbook)}...")
+    if os.environ.get('WINDOWS_HOST'):
+        logger.warning(f"Avoiding `git gc` in {str(labbook)} on Windows host fs")
+        return
+
     try:
         call_subprocess(['git', 'gc'], cwd=labbook.root_dir)
     except subprocess.CalledProcessError:
