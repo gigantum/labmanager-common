@@ -30,7 +30,7 @@ from distutils.version import StrictVersion
 from distutils.version import LooseVersion
 
 from contextlib import redirect_stdout
-from lmcommon.environment.packagemanager import PackageManager, PackageValidation
+from lmcommon.environment.packagemanager import PackageManager, PackageResult
 from lmcommon.container.container import ContainerOperations
 from lmcommon.container.exceptions import ContainerException
 from lmcommon.labbook import LabBook
@@ -65,7 +65,8 @@ class CondaPackageManagerBase(PackageManager):
 
         try:
             result = ContainerOperations.run_command(f'conda search  --json "{search_str}"',
-                                                     labbook=labbook, username=username)
+                                                     labbook=labbook, username=username,
+                                                     fallback_image=self.fallback_image(labbook))
         except ContainerException as e:
             logger.error(e)
             return list()
@@ -93,7 +94,8 @@ class CondaPackageManagerBase(PackageManager):
             list(str): Version strings
         """
         try:
-            result = ContainerOperations.run_command(f"conda info --json {package_name}", labbook, username)
+            result = ContainerOperations.run_command(f"conda info --json {package_name}", labbook, username,
+                                                     fallback_image=self.fallback_image(labbook))
             data = json.loads(result.decode())
         except ContainerException as e:
             logger.error(e)
@@ -139,13 +141,14 @@ class CondaPackageManagerBase(PackageManager):
             str: latest version string
         """
         result = ContainerOperations.run_command(f"conda install --dry-run --no-deps --json {package_name}",
-                                                 labbook, username)
+                                                 labbook, username, fallback_image=self.fallback_image(labbook))
         data = json.loads(result.decode().strip())
 
         if data.get('message') == 'All requested packages already installed.':
             # We enter this block if the given package_name is already installed to the latest version.
             # Then we have to retrieve the latest version using conda list
-            result = ContainerOperations.run_command("conda list --json", labbook, username)
+            result = ContainerOperations.run_command("conda list --json", labbook, username,
+                                                     fallback_image=self.fallback_image(labbook))
             data = json.loads(result.decode().strip())
             for pkg in data:
                 if pkg.get('name') == package_name:
@@ -182,7 +185,9 @@ class CondaPackageManagerBase(PackageManager):
         cmd = ['conda', 'install', '--dry-run', '--no-deps', '--json', *package_names]
 
         try:
-            result = ContainerOperations.run_command(' '.join(cmd), labbook, username).decode().strip()
+            result = ContainerOperations.run_command(
+                ' '.join(cmd), labbook, username, fallback_image=self.fallback_image(labbook)
+            ).decode().strip()
         except Exception as e:
             logger.error(e)
             pkgs = ", ".join(package_names)
@@ -191,6 +196,12 @@ class CondaPackageManagerBase(PackageManager):
         output_versions: List[str] = list()
         if result:
             data = json.loads(result)
+
+            if data.get('exception_name') == "PackagesNotFoundError":
+                # Conda failed because of invalid packages. indicate failure
+                err_pkgs = [x for x in data.get('packages')]
+                raise ValueError(f"Could not retrieve latest versions due to invalid package name in list: {err_pkgs}")
+
             versions = {pn: "" for pn in package_names}
             for package_name in package_names:
                 if isinstance(data.get('actions'), dict) is True:
@@ -254,36 +265,76 @@ class CondaPackageManagerBase(PackageManager):
         # packages = [x for x in data if data.get(x)]
         # return packages
 
-    def is_valid(self, package_name: str, labbook: LabBook, username: str, package_version: Optional[str] = None) -> PackageValidation:
-        """Method to validate package names and versions
+    def validate_packages(self, package_list: List[Dict[str, str]], labbook: LabBook, username: str) -> List[PackageResult]:
+        """Method to validate a list of packages, and if needed fill in any missing versions
 
-        result should be in the format {package: bool, version: bool}
+        Should check both the provided package name and version. If the version is omitted, it should be generated
+        from the latest version.
 
         Args:
-            package_name(str): The package name to validate
-            package_version(str): The package version to validate
+            package_list(list): A list of dictionaries of packages to validate
+            labbook(str): The labbook instance
+            username(str): The username for the logged in user
 
         Returns:
             namedtuple: namedtuple indicating if the package and version are valid
         """
-        invalid_result = PackageValidation(package=False, version=False)
+        # Build install string
+        pkgs = list()
+        for p in package_list:
+            if p['version']:
+                pkgs.append(f"{p['package']}={p['version']}")
+            else:
+                pkgs.append(p['package'])
+
+        cmd = ['conda', 'install', '--dry-run', '--no-deps', '--json', *pkgs]
 
         try:
-            version_list = self.list_versions(package_name, labbook, username)
-        except (ValueError, ContainerException):
-            return invalid_result
+            container_result = ContainerOperations.run_command(' '.join(cmd), labbook, username).decode().strip()
+        except Exception as e:
+            logger.error(e)
+            raise ValueError(f"An error occured while validating packages")
 
-        if not version_list:
-            # If here, no versions found for the package...so invalid
-            return invalid_result
+        if not container_result:
+            raise ValueError(f"Failed to get response from Docker while querying for package info")
+
+        # Good to process
+        data = json.loads(container_result)
+
+        if data.get('exception_name') == "PackagesNotFoundError":
+            # Conda failed because of invalid packages. indicate failures.
+            result = list()
+            for pkg_str, pkg_data in zip(pkgs, package_list):
+                if pkg_str in data.get('packages'):
+                    result.append(PackageResult(package=pkg_data['package'],
+                                                version=pkg_data['version'],
+                                                error=True))
+                else:
+                    result.append(PackageResult(package=pkg_data['package'],
+                                                version=pkg_data['version'],
+                                                error=False))
+
+            return result
+
+        # All packages are valid, collect data
+        conda_data = dict()
+        if isinstance(data.get('actions'), dict) is True:
+            # New method - added when bases updated to conda 4.5.1
+            for p in data.get('actions').get('LINK'):
+                conda_data[p.get('name')] = p.get('version')
         else:
-            if package_version:
-                if package_version in version_list:
-                    # Both package name and version are valid
-                    return PackageValidation(package=True, version=True)
+            # legacy methods to handle older bases built on conda 4.3.31
+            try:
+                for p in [x.get('LINK')[0] for x in data.get('actions') if x]:
+                    conda_data[p.get('name')] = p.get('version')
+            except:
+                for p in [x.get('LINK') for x in data.get('actions') if x]:
+                    conda_data[p.get('name')] = p.get('version')
 
-            # Since versions were returned, package name is valid, but version was either omitted or not valid
-            return PackageValidation(package=True, version=False)
+        # Return properly formatted data
+        return [PackageResult(package=x['package'],
+                              version=conda_data[x['package']],
+                              error=False) for x in package_list]
 
     def generate_docker_install_snippet(self, packages: List[Dict[str, str]], single_line: bool = False) -> List[str]:
         """Method to generate a docker snippet to install 1 or more packages

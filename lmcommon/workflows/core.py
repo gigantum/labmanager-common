@@ -21,6 +21,7 @@
 import subprocess
 import datetime
 import time
+import os
 from typing import Optional
 
 from lmcommon.gitlib.gitlab import GitLabManager
@@ -59,6 +60,10 @@ def git_garbage_collect(labbook: LabBook) -> None:
         subprocess.CalledProcessError when git gc fails.
         """
     logger.info(f"Running git gc (Garbage Collect) in {str(labbook)}...")
+    if os.environ.get('WINDOWS_HOST'):
+        logger.warning(f"Avoiding `git gc` in {str(labbook)} on Windows host fs")
+        return
+
     try:
         call_subprocess(['git', 'gc'], cwd=labbook.root_dir)
     except subprocess.CalledProcessError:
@@ -205,7 +210,7 @@ def sync_with_remote(labbook: LabBook, username: str, remote: str, force: bool) 
         updates = 0
         logger.info(f"Syncing {str(labbook)} for user {username} to remote {remote}")
         with labbook.lock_labbook():
-            labbook._sweep_uncommitted_changes()
+            labbook.sweep_uncommitted_changes()
             git_garbage_collect(labbook)
 
             tokens = ['git', 'pull', '--commit', 'origin', 'gm.workspace']
@@ -263,7 +268,7 @@ def sync_locally(labbook: LabBook, username: Optional[str] = None) -> None:
     """
     try:
         with labbook.lock_labbook():
-            labbook._sweep_uncommitted_changes()
+            labbook.sweep_uncommitted_changes()
 
             git_garbage_collect(labbook)
 

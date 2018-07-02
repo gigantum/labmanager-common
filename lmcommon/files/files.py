@@ -253,5 +253,5 @@ class FileOperations(object):
                 if cancel:
                     logger.warning("Sweeping aborted batch upload.")
                 m = "Cancelled upload `{txid}`. " if cancel else ''
-                labbook._sweep_uncommitted_changes(upload=True,
-                                                   extra_msg=m)
+                labbook.sweep_uncommitted_changes(upload=True,
+                                                  extra_msg=m)

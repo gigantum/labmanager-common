@@ -27,6 +27,7 @@ from lmcommon.fixtures import mock_config_file, mock_config_with_repo
 from lmcommon.labbook import LabBook
 import lmcommon.fixtures
 
+
 class TestComponentManager(object):
     def test_initalize_labbook(self, mock_config_with_repo):
         """Test preparing an empty labbook"""
@@ -62,10 +63,13 @@ class TestComponentManager(object):
         cm = ComponentManager(lb)
 
         # Add some sample components
-        cm.add_package("apt", "ack")
-        cm.add_package("pip3", "requests")
-        cm.add_package("apt", "docker")
-        cm.add_package("pip3", "docker")
+        pkgs = [{"manager": "pip3", "package": "requests", "version": "2.18.2"},
+                {"manager": "pip3", "package": "gigantum", "version": "0.5"}]
+        cm.add_packages('pip3', pkgs)
+
+        pkgs = [{"manager": "apt", "package": "ack", "version": "1.0"},
+                {"manager": "apt", "package": "docker", "version": "3.5"}]
+        cm.add_packages('apt', pkgs)
 
         package_path = os.path.join(lb._root_dir, '.gigantum', 'env', 'package_manager')
         assert os.path.exists(package_path)
@@ -80,16 +84,17 @@ class TestComponentManager(object):
             full_path = os.path.join(package_path, file)
             with open(full_path) as package_yaml:
                 fields_dict = yaml.load(package_yaml.read())
-                for required_field in 'manager', 'package', 'from_base':
+                for required_field in ['manager', 'package', 'from_base', 'version']:
                     assert required_field in fields_dict.keys()
 
         # Verify git/activity
         log = lb.git.log()
-        assert len(log) == 11
+        print(log)
+        assert len(log) == 7
         assert "_GTM_ACTIVITY_START_" in log[0]["message"]
-        assert 'managed package: ' in log[0]["message"]
-        assert "_GTM_ACTIVITY_START_" in log[4]["message"]
-        assert 'managed package: ' in log[4]["message"]
+        assert 'Added 2 apt package(s)' in log[0]["message"]
+        assert "_GTM_ACTIVITY_START_" in log[2]["message"]
+        assert 'Added 2 pip3 package(s)' in log[2]["message"]
 
     def test_add_duplicate_package(self, mock_config_with_repo):
         """Test adding a duplicate package to a labbook"""
@@ -103,22 +108,23 @@ class TestComponentManager(object):
         cm = ComponentManager(lb)
 
         # Add a component;
-        cm.add_package('pip', 'requests', '2.18.4')
+        pkgs = [{"manager": "pip3", "package": "requests", "version": "2.18.2"}]
+        cm.add_packages('pip3', pkgs)
 
         # Verify file
         package_file = os.path.join(labbook_dir,
-                                      '.gigantum',
-                                      'env',
-                                      'package_manager',
-                                      'pip_requests.yaml')
+                                     '.gigantum',
+                                     'env',
+                                     'package_manager',
+                                     'pip3_requests.yaml')
         assert os.path.exists(package_file) is True
 
         # Add a component
         with pytest.raises(ValueError):
-            cm.add_package('pip', 'requests', '2.18.4')
+            cm.add_packages('pip3', pkgs)
 
         # Force add a component
-        cm.add_package('pip', 'requests', '2.18.2', force=True)
+        cm.add_packages('pip3', pkgs, force=True)
         assert os.path.exists(package_file) is True
 
         with open(package_file, 'rt') as pf:
@@ -151,9 +157,11 @@ class TestComponentManager(object):
         with open(component_file, 'rt') as cf:
             data = yaml.load(cf)
 
-        preinstalled_pkgs = os.listdir(os.path.join(labbook_dir,".gigantum/env/package_manager"))
-        for p in [n for n in preinstalled_pkgs if '.yaml' in n]:
-            with open(os.path.join(labbook_dir,".gigantum/env/package_manager", p)) as f:
+        preinstalled_pkgs = os.listdir(os.path.join(labbook_dir, ".gigantum/env/package_manager"))
+        pkg_yaml_files = [n for n in preinstalled_pkgs if '.yaml' in n]
+        assert len(pkg_yaml_files) == 7
+        for p in pkg_yaml_files:
+            with open(os.path.join(labbook_dir, ".gigantum/env/package_manager", p)) as f:
                 assert 'from_base: true' in f.read()
 
         assert data['id'] == lmcommon.fixtures.ENV_UNIT_TEST_BASE
@@ -164,6 +172,10 @@ class TestComponentManager(object):
         assert len(log) >= 4
         assert "_GTM_ACTIVITY_START_" in log[0]["message"]
         assert 'environment component:' in log[0]["message"]
+        assert "_GTM_ACTIVITY_START_" in log[2]["message"]
+        assert 'Added 6 pip3 package(s)' in log[2]["message"]
+        assert "_GTM_ACTIVITY_START_" in log[4]["message"]
+        assert 'Added 1 apt package(s)' in log[4]["message"]
 
     def test_add_duplicate_component(self, mock_config_with_repo):
         """Test adding a duplicate component to a labbook"""
@@ -224,24 +236,19 @@ class TestComponentManager(object):
         cm = ComponentManager(lb)
 
         # mock_config_with_repo is a ComponentManager Instance
-        cm.add_package("apt", "ack")
-        cm.add_package("pip3", "requests", package_version='2.18.4')
-        cm.add_package("apt", "docker")
-        cm.add_package("pip3", "docker")
+        pkgs = [{"manager": "pip3", "package": "requests", "version": "2.18.2"},
+                {"manager": "pip3", "package": "gigantum", "version": "0.5"}]
+        cm.add_packages('pip3', pkgs)
 
         packages = cm.get_component_list('package_manager')
 
-        assert len(packages) == 4
-        assert packages[0]['manager'] == 'apt'
-        assert packages[0]['package'] == 'ack'
-        assert packages[1]['manager'] == 'apt'
-        assert packages[1]['package'] == 'docker'
-        assert packages[2]['manager'] == 'pip3'
-        assert packages[2]['package'] == 'docker'
-        assert packages[2].get('version') is None
-        assert packages[3]['manager'] == 'pip3'
-        assert packages[3]['package'] == 'requests'
-        assert packages[3]['version'] == '2.18.4'
+        assert len(packages) == 2
+        assert packages[1]['manager'] == 'pip3'
+        assert packages[1]['package'] == 'requests'
+        assert packages[1]['version'] == '2.18.2'
+        assert packages[0]['manager'] == 'pip3'
+        assert packages[0]['package'] == 'gigantum'
+        assert packages[0]['version'] == '0.5'
 
     def test_get_component_list_custom(self, mock_config_with_repo):
         """Test listing custom dependencies added a to labbook"""
@@ -275,14 +282,15 @@ class TestComponentManager(object):
 
         # Try removing package that doesn't exist
         with pytest.raises(ValueError):
-            cm.remove_package('apt', 'ack')
+            cm.remove_packages('apt', ['ack'])
 
         # Add a package as if it's from the base
-        cm.add_package("pip3", "requests", from_base=True)
+        pkgs = [{"manager": "pip3", "package": "requests", "version": "2.18.2"}]
+        cm.add_packages('pip3', pkgs, from_base=True)
 
         # Try removing package that you can't because it comes from a base
         with pytest.raises(ValueError):
-            cm.remove_package('pip3', 'requests')
+            cm.remove_packages('pip3', ['requests'])
 
     def test_remove_package(self, mock_config_with_repo):
         """Test removing a package such as one from apt-get or pip3. """
@@ -295,37 +303,40 @@ class TestComponentManager(object):
         cm = ComponentManager(lb)
 
         # Add some sample components
-        cm.add_package("apt", "ack")
-        cm.add_package("pip", "requests")
-        cm.add_package("apt", "docker")
-        cm.add_package("pip", "docker", package_version="1.3")
-        cm.add_package("pip", "matplotlib", from_base=True)
+        pkgs = [{"manager": "pip3", "package": "requests", "version": "2.18.2"},
+                {"manager": "pip3", "package": "docker", "version": "0.5"}]
+        cm.add_packages('pip3', pkgs)
+
+        pkgs = [{"manager": "apt", "package": "ack", "version": "1.5"},
+                {"manager": "apt", "package": "docker", "version": "1.3"}]
+        cm.add_packages('apt', pkgs)
+
+        pkgs = [{"manager": "pip3", "package": "matplotlib", "version": "2.0.0"}]
+        cm.add_packages('pip3', pkgs, from_base=True)
 
         package_path = os.path.join(lb._root_dir, '.gigantum', 'env', 'package_manager')
         assert os.path.exists(package_path)
 
         # Ensure all four packages exist
         assert os.path.exists(os.path.join(package_path, "apt_ack.yaml"))
-        assert os.path.exists(os.path.join(package_path, "pip_requests.yaml"))
+        assert os.path.exists(os.path.join(package_path, "pip3_requests.yaml"))
         assert os.path.exists(os.path.join(package_path, "apt_docker.yaml"))
-        assert os.path.exists(os.path.join(package_path, "pip_docker.yaml"))
-        assert os.path.exists(os.path.join(package_path, "pip_matplotlib.yaml"))
+        assert os.path.exists(os.path.join(package_path, "pip3_docker.yaml"))
+        assert os.path.exists(os.path.join(package_path, "pip3_matplotlib.yaml"))
 
         # Remove packages
-        cm.remove_package("apt", "ack")
-        cm.remove_package("pip", "requests")
-        cm.remove_package("apt", "docker")
-        cm.remove_package("pip", "docker")
+        cm.remove_packages("apt", ["ack", "docker"])
+        cm.remove_packages("pip3", ["requests", "docker"])
 
         with pytest.raises(ValueError):
-            cm.remove_package("pip", "matplotlib")
+            cm.remove_packages("pip3", ["matplotlib"])
 
         # Ensure files are gone
         assert not os.path.exists(os.path.join(package_path, "apt_ack.yaml"))
-        assert not os.path.exists(os.path.join(package_path, "pip_requests.yaml"))
+        assert not os.path.exists(os.path.join(package_path, "pip3_requests.yaml"))
         assert not os.path.exists(os.path.join(package_path, "apt_docker.yaml"))
-        assert not os.path.exists(os.path.join(package_path, "pip_docker.yaml"))
-        assert os.path.exists(os.path.join(package_path, "pip_matplotlib.yaml"))
+        assert not os.path.exists(os.path.join(package_path, "pip3_docker.yaml"))
+        assert os.path.exists(os.path.join(package_path, "pip3_matplotlib.yaml"))
 
         # Ensure git is clean
         status = lb.git.status()
@@ -336,7 +347,7 @@ class TestComponentManager(object):
         # Ensure activity is being written
         log = lb.git.log()
         assert "_GTM_ACTIVITY_START_" in log[0]["message"]
-        assert 'Remove pip managed package' in log[0]["message"]
+        assert 'Removed 2 pip3 managed package(s)' in log[0]["message"]
 
     def test_remove_component_errors(self, mock_config_with_repo):
         """Test removing a component from a labbook expecting errors"""

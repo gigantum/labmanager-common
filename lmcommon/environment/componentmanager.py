@@ -27,7 +27,7 @@ from typing import Optional
 
 
 from lmcommon.labbook import LabBook, LabbookException
-from lmcommon.environment import ComponentRepository  # type: ignore
+from lmcommon.environment.repository import ComponentRepository  # type: ignore
 from lmcommon.logging import LMLogger
 from lmcommon.activity import ActivityStore, ActivityType, ActivityRecord, ActivityDetailType, ActivityDetailRecord, \
     ActivityAction
@@ -213,140 +213,143 @@ exec gosu giguser "$@"
             ars = ActivityStore(self.labbook)
             ars.create_activity_record(ar)
 
-    def add_package(self, package_manager: str, package_name: str,
-                    package_version: Optional[str] = None, force: bool = False,
-                    from_base: bool = False) -> str:
+    def add_packages(self, package_manager: str, packages: List[dict],
+                    force: bool = False, from_base: bool = False) -> None:
         """Add a new yaml file describing the new package and its context to the labbook.
 
         Args:
             package_manager: The package manager (eg., "apt" or "pip3")
-            package_name: Name of package (e.g., "docker" or "requests")
-            package_version: Unique indentifier or version, for now, can be None
+            packages: A dictionary of packages to install (package & version are main keys needed)
             force: Force overwriting a component if it already exists (e.g. you want to update the version)
             from_base: If a package in a base image, not deletable. Otherwise, can be deleted by LB user.
 
         Returns:
             None
         """
-
         if not package_manager:
             raise ValueError('Argument package_manager cannot be None or empty')
-
-        if not package_name:
-            raise ValueError('Argument package_name cannot be None or empty')
-
-        version_str = f'"{package_version}"' if package_version else 'null'
-
-        yaml_lines = ['# Generated on: {}'.format(str(datetime.datetime.now())),
-                      'manager: "{}"'.format(package_manager),
-                      'package: "{}"'.format(package_name),
-                      'version: {}'.format(version_str),
-                      f'from_base: {str(from_base).lower()}',
-                      f'schema: {CURRENT_SCHEMA}']
-        yaml_filename = '{}_{}.yaml'.format(package_manager, package_name)
-        package_yaml_path = os.path.join(self.env_dir, 'package_manager', yaml_filename)
-
-        # Set activity message
-        short_message = "Add {} managed package: {} v{}".format(package_manager, package_name,
-                                                                package_version)
-
-        # Check if package already exists
-        if os.path.exists(package_yaml_path):
-            if force:
-                # You are updating, since force is set and package already exists.
-                logger.warning("Updating package file at {}".format(package_yaml_path))
-                short_message = "Update {} managed package: {} v{}".format(package_manager, package_name,
-                                                                           package_version)
-            else:
-                raise ValueError("The package {} already exists in this LabBook.".format(package_name) +
-                                 " Use `force` to overwrite")
-
-        # Write the YAML to the file
-        with open(package_yaml_path, 'w') as package_yaml_file:
-            package_yaml_file.write(os.linesep.join(yaml_lines))
-
-        # Validate that the written YAML is valid and parseable.
-        with open(package_yaml_path) as package_read_file:
-            yaml.load(package_read_file)
-
-        logger.info("Added package {} to labbook at {}".format(package_name, self.labbook.root_dir))
-
-        # Add to git
-        self.labbook.git.add(package_yaml_path)
-        commit = self.labbook.git.commit(short_message)
-
-        # Create detail record
-        adr = ActivityDetailRecord(ActivityDetailType.ENVIRONMENT, show=False, action=ActivityAction.CREATE)
-        adr.add_value('text/plain', short_message)
 
         # Create activity record
         ar = ActivityRecord(ActivityType.ENVIRONMENT,
                             show=True,
-                            message=short_message,
-                            linked_commit=commit.hexsha,
+                            message="",
+                            linked_commit="",
                             tags=["environment", 'package_manager', package_manager])
-        ar.add_detail_object(adr)
+
+        update_cnt = 0
+        add_cnt = 0
+        for pkg in packages:
+            version_str = f'"{pkg["version"]}"' if pkg["version"] else 'latest'
+
+            yaml_lines = ['# Generated on: {}'.format(str(datetime.datetime.now())),
+                          'manager: "{}"'.format(package_manager),
+                          'package: "{}"'.format(pkg["package"]),
+                          'version: {}'.format(version_str),
+                          f'from_base: {str(from_base).lower()}',
+                          f'schema: {CURRENT_SCHEMA}']
+            yaml_filename = '{}_{}.yaml'.format(package_manager, pkg["package"])
+            package_yaml_path = os.path.join(self.env_dir, 'package_manager', yaml_filename)
+
+            # Check if package already exists
+            if os.path.exists(package_yaml_path):
+                if force:
+                    # You are updating, since force is set and package already exists.
+                    logger.warning("Updating package file at {}".format(package_yaml_path))
+                    detail_msg = "Update {} managed package: {} {}".format(package_manager, pkg["package"], version_str)
+                    adr = ActivityDetailRecord(ActivityDetailType.ENVIRONMENT, show=False, action=ActivityAction.EDIT)
+                    update_cnt += 1
+                else:
+                    raise ValueError("The package {} already exists in this LabBook.".format(pkg["package"]) +
+                                     " Use `force` to overwrite")
+            else:
+                add_cnt += 1
+                detail_msg = "Add {} managed package: {} {}".format(package_manager, pkg["package"], version_str)
+                adr = ActivityDetailRecord(ActivityDetailType.ENVIRONMENT, show=False, action=ActivityAction.CREATE)
+
+            # Write the YAML to the file
+            with open(package_yaml_path, 'w') as package_yaml_file:
+                package_yaml_file.write(os.linesep.join(yaml_lines))
+
+            # Create activity record
+            adr.add_value('text/plain', detail_msg)
+            ar.add_detail_object(adr)
+            logger.info("Added package {} to labbook at {}".format(pkg["package"], self.labbook.root_dir))
+
+        # Set activity message
+        ar_msg = ""
+        if add_cnt > 0:
+            ar_msg = f"Added {add_cnt} {package_manager} package(s). "
+
+        if update_cnt > 0:
+            ar_msg = f"{ar_msg}Updated {update_cnt} {package_manager} package(s)"
+
+        # Add to git
+        self.labbook.git.add_all(self.env_dir)
+        commit = self.labbook.git.commit(ar_msg)
+        ar.linked_commit = commit.hexsha
+        ar.message = ar_msg
 
         # Store
         ars = ActivityStore(self.labbook)
         ars.create_activity_record(ar)
 
-        return package_yaml_path
-
-    def remove_package(self, package_manager: str, package_name: str) -> None:
-        """Remove yaml file describing a package and its context to the labbook.
+    def remove_packages(self, package_manager: str, package_names: List[str]) -> None:
+        """Remove yaml files describing a package and its context to the labbook.
 
         Args:
             package_manager: The package manager (eg., "apt" or "pip3")
-            package_name: Name of package (e.g., "docker" or "requests")
+            package_names: A list of packages to uninstall
 
         Returns:
             None
         """
-        yaml_filename = '{}_{}.yaml'.format(package_manager, package_name)
-        package_yaml_path = os.path.join(self.env_dir, 'package_manager', yaml_filename)
-
-        # Check for package to exist
-        if not os.path.exists(package_yaml_path):
-            raise ValueError(f"{package_manager} installed package {package_name} does not exist.")
-
-        # Check to make sure package isn't from the base. You cannot remove packages from the base yet.
-        with open(package_yaml_path, 'rt') as cf:
-            package_data = yaml.load(cf)
-
-        if not package_data:
-            raise IOError("Failed to load package description")
-
-        if package_data['from_base'] is True:
-            raise ValueError("Cannot remove a package installed in the Base")
-
-        # Delete the yaml file, which on next Dockerfile gen/rebuild will remove the dependency
-        os.remove(package_yaml_path)
-        if os.path.exists(package_yaml_path):
-            raise ValueError(f"Failed to remove package.")
-
-        # Add to git
-        short_message = "Remove {} managed package: {}".format(package_manager, package_name)
-        self.labbook.git.remove(package_yaml_path)
-        commit = self.labbook.git.commit(short_message)
-
-        # Create detail record
-        adr = ActivityDetailRecord(ActivityDetailType.ENVIRONMENT, show=False, action=ActivityAction.DELETE)
-        adr.add_value('text/plain', short_message)
-
         # Create activity record
         ar = ActivityRecord(ActivityType.ENVIRONMENT,
-                            message=short_message,
+                            message="",
                             show=True,
-                            linked_commit=commit.hexsha,
+                            linked_commit="",
                             tags=["environment", 'package_manager', package_manager])
-        ar.add_detail_object(adr)
+
+        for pkg in package_names:
+            yaml_filename = '{}_{}.yaml'.format(package_manager, pkg)
+            package_yaml_path = os.path.join(self.env_dir, 'package_manager', yaml_filename)
+
+            # Check for package to exist
+            if not os.path.exists(package_yaml_path):
+                raise ValueError(f"{package_manager} installed package {pkg} does not exist.")
+
+            # Check to make sure package isn't from the base. You cannot remove packages from the base yet.
+            with open(package_yaml_path, 'rt') as cf:
+                package_data = yaml.load(cf)
+
+            if not package_data:
+                raise IOError("Failed to load package description")
+
+            if package_data['from_base'] is True:
+                raise ValueError("Cannot remove a package installed in the Base")
+
+            # Delete the yaml file, which on next Dockerfile gen/rebuild will remove the dependency
+            os.remove(package_yaml_path)
+            if os.path.exists(package_yaml_path):
+                raise ValueError(f"Failed to remove package.")
+
+            self.labbook.git.remove(package_yaml_path)
+
+            # Create detail record
+            adr = ActivityDetailRecord(ActivityDetailType.ENVIRONMENT, show=False, action=ActivityAction.DELETE)
+            adr.add_value('text/plain', f"Removed {package_manager} managed package: {pkg}")
+            ar.add_detail_object(adr)
+            logger.info(f"Removed {package_manager} managed package: {pkg}")
+
+        # Add to git
+        short_message = f"Removed {len(package_names)} {package_manager} managed package(s)"
+        commit = self.labbook.git.commit(short_message)
+        ar.linked_commit = commit.hexsha
+        ar.message = short_message
 
         # Store
         ars = ActivityStore(self.labbook)
         ars.create_activity_record(ar)
-
-        logger.info("Removed package {}".format(package_name))
 
     def add_component(self, component_class: str, repository: str, component: str, revision: int,
                       force: bool = False) -> None:
@@ -391,15 +394,16 @@ exec gosu giguser "$@"
 
         if component_class == 'base':
             for manager in component_data['package_managers']:
+                packages = list()
+                # Build dictionary of packages
                 for p_manager in manager.keys():
                     if manager[p_manager]:
                         for pkg in manager[p_manager]:
                             pkg_name, pkg_version = strip_package_and_version(p_manager, pkg)
-                            self.add_package(package_manager=p_manager,
-                                             package_name=pkg_name,
-                                             package_version=pkg_version,
-                                             force=True,
-                                             from_base=True)
+                            packages.append({"package": pkg_name, "version": pkg_version, "manager": p_manager})
+
+                        self.add_packages(package_manager=p_manager, packages=packages,
+                                          force=True, from_base=True)
 
         logger.info(f"Added {component_class} from {repository}: {component} rev{revision}")
 

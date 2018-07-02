@@ -55,7 +55,7 @@ class TestPipPackageManager(object):
         username = build_lb_image_for_env[1]
         result = mrg.latest_version("gigantum", lb, username)
 
-        assert result == "0.9"
+        assert result == "0.10"
 
     def test_latest_versions(self, build_lb_image_for_env):
         """Test latest_version command"""
@@ -64,7 +64,7 @@ class TestPipPackageManager(object):
         username = build_lb_image_for_env[1]
         gig_res, req_res = mrg.latest_versions(["gigantum", "requests"], lb, username)
 
-        assert gig_res == "0.9"
+        assert gig_res == "0.10"
         assert req_res.startswith('2.')
 
     def test_list_installed_packages(self, build_lb_image_for_env):
@@ -137,42 +137,48 @@ class TestPipPackageManager(object):
         with pytest.raises(ValueError):
             mrg.list_versions("gigantumasdfasdfasdf", lb, username)
 
-    def test_is_valid(self, build_lb_image_for_env):
+    def test_is_valid_errors(self, build_lb_image_for_env):
         """Test list_versions command"""
+        pkgs = [{"manager": "pip", "package": "numpy", "version": "1.14.2"},
+                {"manager": "pip", "package": "plotly", "version": "100.00"},
+                {"manager": "pip", "package": "scipy", "version": ""},
+                {"manager": "pip", "package": "asdfasdfasdf", "version": ""}]
+
         mrg = PipPackageManager()
         lb = build_lb_image_for_env[0]
         username = build_lb_image_for_env[1]
-        result = mrg.is_valid("gigantumasdfasdfasdf", lb, username)
+        result = mrg.validate_packages(pkgs, lb, username)
 
-        assert result.package is False
-        assert result.version is False
+        assert result[0].package == "numpy"
+        assert result[0].version == "1.14.2"
+        assert result[0].error is False
 
-        result = mrg.is_valid("gigantum", lb, username, package_version="10.0")
+        assert result[1].package == "plotly"
+        assert result[1].version == "100.00"
+        assert result[1].error is True
 
-        assert result.package is True
-        assert result.version is False
+        assert result[2].package == "scipy"
+        assert result[2].version == "1.1.0"
+        assert result[2].error is False
 
-        result = mrg.is_valid("gigantum", lb, username, package_version="0.1")
+        assert result[3].package == "asdfasdfasdf"
+        assert result[3].version == ""
+        assert result[3].error is True
 
-        assert result.package is True
-        assert result.version is True
+    def test_is_valid_good(self, build_lb_image_for_env):
+        """Test valid packages command"""
+        pkgs = [{"manager": "pip", "package": "numpy", "version": "1.14.2"},
+                {"manager": "pip", "package": "plotly", "version": ""}]
 
-        result = mrg.is_valid("numpy", lb, username)
+        mrg = PipPackageManager()
+        lb = build_lb_image_for_env[0]
+        username = build_lb_image_for_env[1]
+        result = mrg.validate_packages(pkgs, lb, username)
 
-        assert result.package is True
-        assert result.version is False
+        assert result[0].package == "numpy"
+        assert result[0].version == "1.14.2"
+        assert result[0].error is False
 
-        result = mrg.is_valid("numpy", lb, username, "1.11.2rc1")
-
-        assert result.package is True
-        assert result.version is True
-
-        result = mrg.is_valid("numpy", lb, username, package_version="1.12.1")
-
-        assert result.package is True
-        assert result.version is True
-
-        result = mrg.is_valid("numpy", lb, username, "10000000")
-
-        assert result.package is True
-        assert result.version is False
+        assert result[1].package == "plotly"
+        assert result[1].version == "2.7.0"
+        assert result[1].error is False

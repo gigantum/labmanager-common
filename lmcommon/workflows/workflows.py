@@ -35,7 +35,7 @@ class GitWorkflow(object):
     def garbagecollect(self):
         """ Run a `git gc` on the labbook. """
         with self.labbook.lock_labbook():
-            call_subprocess(['git', 'gc'], cwd=self.labbook.root_dir)
+            core.git_garbage_collect(self.labbook)
 
     def publish(self, username: str, access_token: Optional[str] = None, remote: str = "origin") -> None:
         """ Publish this labbook to the remote GitLab instance.
@@ -54,7 +54,7 @@ class GitWorkflow(object):
                 raise ValueError(f"Must be on user workspace (gm.workspace-{username}) to sync")
 
             with self.labbook.lock_labbook():
-                self.labbook._sweep_uncommitted_changes()
+                self.labbook.sweep_uncommitted_changes()
 
             if self.labbook.has_remote:
                 raise ValueError("Cannot publish Labbook when remote already set.")

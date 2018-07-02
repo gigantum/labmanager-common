@@ -173,7 +173,7 @@ class TestImageBuilder(object):
         cm = ComponentManager(lb)
         custom = ['RUN true', 'RUN touch /tmp/cat', 'RUN rm /tmp/cat']
         cm.add_component("base", ENV_UNIT_TEST_REPO, ENV_UNIT_TEST_BASE, ENV_UNIT_TEST_REV)
-        cm.add_package("pip", "requests", "2.18.4")
+        cm.add_packages("pip", [{"manager": "pip", "package": "requests", "version": "2.18.4"}])
         cm.add_docker_snippet('test-docker', custom, description="Apostrophe's and wėįrd çhårāčtêrś")
         ib = ImageBuilder(lb)
         l = ib.assemble_dockerfile()

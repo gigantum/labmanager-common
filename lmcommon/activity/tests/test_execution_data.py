@@ -18,27 +18,30 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 import pytest
-from lmcommon.environment.utils import get_package_manager
-from lmcommon.labbook import LabBook
-
-from lmcommon.environment.pip import PipPackageManager
-from lmcommon.environment.conda import Conda2PackageManager, Conda3PackageManager
-from lmcommon.environment.apt import AptPackageManager
+from lmcommon.activity.processors.processor import ExecutionData
 
 
-class TestPackageManagerHelper(object):
-    def test_get_pip(self):
-        assert type(get_package_manager('pip')) == PipPackageManager
-        assert type(get_package_manager('pip2')) == PipPackageManager
+class TestExecutionData(object):
 
-    def test_get_conda(self):
-        assert type(get_package_manager('conda2')) == Conda2PackageManager
-        assert type(get_package_manager('conda3')) == Conda3PackageManager
+    def test_is_empty(self):
+        """Test the constructor"""
+        ed = ExecutionData()
 
-    def test_get_apt(self):
-        assert type(get_package_manager('apt')) == AptPackageManager
-        assert type(get_package_manager('apt-get')) == AptPackageManager
+        assert ed.is_empty() is True
 
-    def test_get_invalid(self):
-        with pytest.raises(ValueError):
-            get_package_manager("asdfasdf")
+    def test_is_not_empty(self):
+        """Test the constructor"""
+        ed = ExecutionData()
+        ed.code.append({"this": "thing"})
+
+        assert ed.is_empty() is False
+
+        ed = ExecutionData()
+        ed.result.append({"this": "thing"})
+
+        assert ed.is_empty() is False
+
+        ed = ExecutionData()
+        ed.tags.append("tag")
+
+        assert ed.is_empty() is False

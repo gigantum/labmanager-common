@@ -9,6 +9,15 @@ core:
   logging_config: "/etc/gigantum/logging.json" # Location of configuration file for the LabManager logger
   import_demo_on_first_login: true # Should the app import a labbook into new user's working dirs on first login
 
+# LabBook Container Configuration
+container:
+  # If null, no limit
+  # To set enter string with a units identification char (e.g. 100000b, 1000k, 128m, 1g)
+  memory: null
+  # If null, no limit
+  # To set enter a float for the CPU allocation desired. e.g. 4 CPUs available, 1.5 limits container to 1.5 CPUs
+  cpu: null
+
 # Authentication Configuration
 auth:
   provider_domain: gigantum.auth0.com
@@ -57,3 +66,18 @@ flask:
   DEBUG: true
   TESTING: true
   allow_cors: true
+
+# Details for route proxying
+proxy:
+  # The host for the proxy control (to manipulate routes)
+  api_host: localhost
+  # The port for the proxy control
+  api_port: 1999
+  # All inbound requests (to be proxied) arrive
+  # at 0.0.0.0 on the following port
+  external_proxy_port: 10000
+  # Port from the perspective of the UI that the proxy
+  # is available from
+  apparent_proxy_port: 10000
+  # All LabManager api traffic has this default prefix.
+  labmanager_api_prefix: /api

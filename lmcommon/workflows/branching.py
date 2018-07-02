@@ -90,7 +90,7 @@ class BranchManager(object):
             raise InvalidBranchName('Branch with title {title} already exists')
 
         with self.labbook.lock_labbook():
-            self.labbook._sweep_uncommitted_changes()
+            self.labbook.sweep_uncommitted_changes()
             if revision:
                 # The following call prints "commit" if {revision} exists in git history.
                 result = subprocess.check_output(f'git cat-file -t {revision} || echo "invalid"',
@@ -141,7 +141,7 @@ class BranchManager(object):
             raise InvalidBranchName(f'Target branch to work on `{branch_name}` does not exist')
 
         with self.labbook.lock_labbook():
-            self.labbook._sweep_uncommitted_changes()
+            self.labbook.sweep_uncommitted_changes()
             self.labbook.checkout_branch(branch_name=branch_name)
             logger.info(f'Activated new branch {self.active_branch} in {str(self.labbook)}')
 
@@ -157,7 +157,7 @@ class BranchManager(object):
         logger.info(f"In {str(self.labbook)} merging branch `{other_branch}` into `{self.active_branch}`...")
         with self.labbook.lock_labbook():
             try:
-                self.labbook._sweep_uncommitted_changes()
+                self.labbook.sweep_uncommitted_changes()
                 if force:
                     logger.warning("Using force to overwrite local changes")
                     call_subprocess(['git', 'merge', '-s', 'recursive', '-X', 'theirs', other_branch],
