@@ -199,7 +199,18 @@ def build_labbook_image(path: str, username: Optional[str] = None,
     logger.info(f"Starting build_labbook_image({path}, {username}, {tag}, {nocache}) in pid {os.getpid()}")
 
     try:
-        image_id = build_image(path, override_image_tag=tag, nocache=nocache, username=username)
+        job = get_current_job()
+
+        def save_metadata_callback(line: str) -> None:
+            try:
+                job.meta['feedback'] = (job.meta.get('feedback') or '') + line
+                job.save_meta()
+            except Exception as e:
+                logger.error(e)
+
+        image_id = build_image(path, override_image_tag=tag, nocache=nocache, username=username,
+                               feedback_callback=save_metadata_callback)
+
         logger.info(f"Completed build_labbook_image in pid {os.getpid()}: {image_id}")
         return image_id
     except Exception as e:
