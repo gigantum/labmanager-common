@@ -105,14 +105,19 @@ def build_docker_image(root_dir: str, override_image_tag: Optional[str], nocache
         # From: https://docker-py.readthedocs.io/en/stable/api.html#docker.api.build.BuildApiMixin.build
         # This builds the image and generates output status text.
         for line in APIClient().build(path=env_dir, tag=image_name, pull=True, nocache=nocache, forcerm=True):
-            output = json.loads(line)['stream'].strip()
+            print(f"-------------------- {line}")
+            ldict = json.loads(line)
+            stream = (json.loads(line).get("stream") or "").strip()
             if feedback_callback:
-                feedback_callback(output)
+                feedback_callback(stream)
+            status = (json.loads(line).get("status") or "").strip()
+            if feedback_callback:
+                feedback_callback(status)
 
-            if 'successfully built' in output.lower():
+            if 'Successfully built'.lower() in stream.lower():
                 # When build, final line is in form of "Successfully build 02faas3"
                 # There is no other (simple) way to grab the image ID
-                image_id = output.split(' ')[-1]
+                image_id = stream.split(' ')[-1]
 
         #docker_image = get_docker_client().images.build(path=env_dir, tag=image_name, pull=True, nocache=nocache,
         #                                                forcerm=True)
@@ -120,7 +125,7 @@ def build_docker_image(root_dir: str, override_image_tag: Optional[str], nocache
         raise ContainerBuildException(e)
 
     if not image_id:
-        raise ValueError(f"Cannot determine docker image on LabBook from {root_dir}")
+        raise ContainerBuildException(f"Cannot determine docker image on LabBook from {root_dir}")
 
     return image_id
 
