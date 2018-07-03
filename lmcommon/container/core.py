@@ -104,7 +104,8 @@ def build_docker_image(root_dir: str, override_image_tag: Optional[str], nocache
         image_id = None
         # From: https://docker-py.readthedocs.io/en/stable/api.html#docker.api.build.BuildApiMixin.build
         # This builds the image and generates output status text.
-        for line in APIClient().build(path=env_dir, tag=image_name, pull=True, nocache=nocache, forcerm=True):
+        base = os.environ.get('DOCKER_HOST')
+        for line in APIClient(base_url=base).build(path=env_dir, tag=image_name, pull=True, nocache=nocache, forcerm=True):
             print(f"-------------------- {line}")
             ldict = json.loads(line)
             stream = (json.loads(line).get("stream") or "").strip()
