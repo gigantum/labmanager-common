@@ -23,19 +23,17 @@ import json
 import os
 import time
 from typing import Optional
-import zipfile
 import subprocess
 import shutil
 
 from rq import get_current_job
-from docker.errors import NotFound
 
 from lmcommon.activity.monitors.devenv import DevEnvMonitorManager
-from lmcommon.configuration import get_docker_client, Configuration
+from lmcommon.configuration import Configuration
+from lmcommon.configuration.utils import call_subprocess
 from lmcommon.labbook import LabBook
-from lmcommon.labbook import shims as labbook_shims
 from lmcommon.logging import LMLogger
-from lmcommon.workflows import GitWorkflow, sync_locally
+from lmcommon.workflows import sync_locally
 from lmcommon.container.core import (build_docker_image as build_image,
                                      start_labbook_container as start_container,
                                      stop_labbook_container as stop_container)
@@ -66,23 +64,21 @@ def export_labbook_as_zip(labbook_path: str, lb_export_directory: str) -> str:
         labbook.from_directory(labbook_path)
         sync_locally(labbook)
 
+        labbook_dir, _ = labbook.root_dir.rsplit(os.path.sep, 1)
+
         logger.info(f"(Job {p}) Exporting `{labbook.root_dir}` to `{lb_export_directory}`")
         if not os.path.exists(lb_export_directory):
             logger.warning(f"(Job {p}) Creating Lab Manager export directory at `{lb_export_directory}`")
             os.makedirs(lb_export_directory)
 
-        lb_zip_name = f'{labbook.name}_{datetime.datetime.now().strftime("%Y-%m-%d")}.lbk'
+        lb_zip_name = f'{labbook.name}_{datetime.datetime.now().strftime("%Y-%m-%d")}'
         zip_path = os.path.join(lb_export_directory, lb_zip_name)
-        with zipfile.ZipFile(zip_path, 'w') as lb_archive:
-            basename = os.path.basename(labbook_path)
-            for root, dirs, files in os.walk(labbook_path):
-                for file_ in files:
-                    rel_path = os.path.join(root, file_).replace(labbook_path, basename)
-                    logger.debug(f"Adding file `{os.path.join(root, file_)}` as `{rel_path}`")
-                    lb_archive.write(os.path.join(root, file_), arcname=rel_path)
 
-        logger.info(f"(Job {p}) Finished exporting {str(labbook)} to {zip_path}")
-        return zip_path
+        # zip data
+        call_subprocess(['zip', '-r', zip_path, labbook.name], cwd=labbook_dir, check=True)
+
+        logger.info(f"(Job {p}) Finished exporting {str(labbook)} to {zip_path}.zip")
+        return f"{zip_path}.zip"
     except Exception as e:
         logger.exception(f"(Job {p}) Error on export_labbook_as_zip: {e}")
         raise
@@ -109,12 +105,14 @@ def import_labboook_from_zip(archive_path: str, username: str, owner: str,
     logger.info(f"(Job {p}) Starting import_labbook_from_zip(archive_path={archive_path},"
                 f"username={username}, owner={owner}, config_file={config_file})")
 
+    lb: Optional[LabBook] = None
+    new_lb_path = ""
     try:
         if not os.path.isfile(archive_path):
             raise ValueError(f'Archive at {archive_path} is not a file or does not exist')
 
-        if '.lbk' not in archive_path:
-            raise ValueError(f'Archive at {archive_path} does not have .lbk extension')
+        if '.zip' not in archive_path and '.lbk' not in archive_path:
+            raise ValueError(f'Archive at {archive_path} does not have .zip (or legacy .lbk) extension')
 
         logger.info(f"(Job {p}) Using {config_file or 'default'} LabManager configuration.")
         lm_config = Configuration(config_file)
@@ -130,12 +128,23 @@ def import_labboook_from_zip(archive_path: str, username: str, owner: str,
             raise ValueError(f'(Job {p}) LabBook {inferred_labbook_name} already exists at {lb_containing_dir}, cannot overwrite.')
 
         logger.info(f"(Job {p}) Extracting LabBook from archive {archive_path} into {lb_containing_dir}")
-        with zipfile.ZipFile(archive_path) as lb_zip:
-            lb_zip.extractall(path=lb_containing_dir)
+        if lb_containing_dir[-1] != os.path.sep:
+            dest_path = lb_containing_dir + os.path.sep
+        else:
+            dest_path = lb_containing_dir
+
+        call_subprocess(['unzip', archive_path, '-d', dest_path], cwd=lm_working_dir, check=True)
 
         new_lb_path = os.path.join(lb_containing_dir, inferred_labbook_name)
         if not os.path.isdir(new_lb_path):
             raise ValueError(f"(Job {p}) Expected LabBook not found at {new_lb_path}")
+        
+        # Make sure you actually unzipped a Project archive
+        if not os.path.exists(os.path.join(new_lb_path, '.gigantum', 'labbook.yaml')):
+            # Delete bad import
+            logger.warning(f'Imported invalid project archive. Deleting {new_lb_path}.')
+            shutil.rmtree(new_lb_path)
+            raise ValueError("Malformed Project archive. Verify you uploaded the correct file.")
 
         logger.info(f'(Job {p}) Extracted imported archive to {new_lb_path}')
         # Make the user also the new owner of the Labbook on import.
@@ -143,20 +152,15 @@ def import_labboook_from_zip(archive_path: str, username: str, owner: str,
         lb.from_directory(new_lb_path)
         logger.info(f'(Job {p}) Extracted archive resolves to new LabBook {str(lb)}')
 
-        r = subprocess.check_output("git config core.fileMode false", cwd=lb.root_dir, shell=True)
+        # Ignore execution bit changes (due to moving between windows/mac/linux)
+        subprocess.check_output("git config core.fileMode false", cwd=lb.root_dir, shell=True)
+
+        # This makes sure the working directory is set properly.
+        sync_locally(lb, username=username)
 
         if not lb._data:
             raise ValueError(f'Could not load data from imported LabBook {lb}')
         lb._data['owner']['username'] = owner
-
-        # Also, remove any lingering remotes. If it gets re-published, it will be to a new remote.
-        if lb.has_remote:
-            lb.git.remove_remote('origin')
-        # This makes sure the working directory is set properly.
-        sync_locally(lb, username=username)
-
-        if not lb.is_repo_clean:
-            raise ValueError(f'Imported LabBook {lb} should have clean repo after import')
 
         lb._save_labbook_data()
         if not lb.is_repo_clean:
@@ -166,19 +170,25 @@ def import_labboook_from_zip(archive_path: str, username: str, owner: str,
         if lb._data['owner']['username'] != owner:
             raise ValueError(f'Error importing LabBook {lb} - cannot set owner')
 
+        # Also, remove any lingering remotes. If it gets re-published, it will be to a new remote.
+        if lb.has_remote:
+            lb.git.remove_remote('origin')
+
         logger.info(f"(Job {p}) LabBook {inferred_labbook_name} imported to {new_lb_path}")
 
-        if remove_source:
-            try:
-                logger.info(f'Deleting archive for {str(lb)} at `{archive_path}`')
-                os.remove(archive_path)
-            except FileNotFoundError as e:
-                logger.error(f'Could not delete archive for {str(lb)} at `{archive_path}`: {e}')
-
-        return new_lb_path
     except Exception as e:
         logger.exception(f"(Job {p}) Error on import_labbook_from_zip({archive_path}): {e}")
         raise
+    finally:
+        if remove_source:
+            if lb is not None:
+                try:
+                    logger.info(f'Deleting uploaded archive for {str(lb)}')
+                    os.remove(archive_path)
+                except FileNotFoundError as e:
+                    logger.error(f'Could not delete archive for {str(lb)} at `{archive_path}`: {e}')
+
+    return new_lb_path
 
 
 def build_labbook_image(path: str, username: Optional[str] = None,
