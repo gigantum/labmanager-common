@@ -50,6 +50,10 @@ class TestJobs(object):
         ib = ImageBuilder(lb)
         ib.assemble_dockerfile()
 
+        # Make sure the destination user exists locally
+        working_dir = lb.labmanager_config.config['git']['working_directory']
+        os.makedirs(os.path.join(working_dir, 'unittester2', 'unittester2', 'labbooks'), exist_ok=True)
+
         lb_root = lb.root_dir
         with tempfile.TemporaryDirectory() as temp_dir_path:
             # Export the labbook
@@ -61,6 +65,7 @@ class TestJobs(object):
             shutil.rmtree(lb.root_dir)
             assert not os.path.exists(lb_root), f"LabBook at {lb_root} should not exist."
 
+            assert os.path.exists(tmp_archive_path)
             # Now import the labbook as a new user, validating that the change of namespace works properly.
             imported_lb_path = jobs.import_labboook_from_zip(archive_path=tmp_archive_path, username='unittester2',
                                                              owner='unittester2', config_file=mock_config_with_repo[0])
@@ -112,6 +117,63 @@ class TestJobs(object):
             except Exception as e:
                 pprint.pprint(e)
                 raise
+
+    def test_success_import_export_lbk(self, mock_config_with_repo):
+        """Test legacy .lbk extension still works"""
+        # Create new LabBook to be exported
+        lb = LabBook(mock_config_with_repo[0])
+        labbook_dir = lb.new(name="unittest-lb-for-export-import-test-lbk", description="Testing import-export.",
+                             owner={"username": 'unittester'})
+        cm = ComponentManager(lb)
+        cm.add_component("base", lmcommon.fixtures.ENV_UNIT_TEST_REPO, lmcommon.fixtures.ENV_UNIT_TEST_BASE,
+                         lmcommon.fixtures.ENV_UNIT_TEST_REV)
+
+        ib = ImageBuilder(lb)
+        ib.assemble_dockerfile()
+
+        # Make sure the destination user exists locally
+        working_dir = lb.labmanager_config.config['git']['working_directory']
+        os.makedirs(os.path.join(working_dir, 'unittester2', 'unittester2', 'labbooks'), exist_ok=True)
+
+        lb_root = lb.root_dir
+        with tempfile.TemporaryDirectory() as temp_dir_path:
+            # Export the labbook
+            export_dir = os.path.join(mock_config_with_repo[1], "export")
+            exported_archive_path = jobs.export_labbook_as_zip(lb.root_dir, export_dir)
+            tmp_archive_path = shutil.copy(exported_archive_path, '/tmp')
+
+            lbk_archive_path = tmp_archive_path.replace(".zip", ".lbk")
+            lbk_archive_path = shutil.copy(tmp_archive_path, lbk_archive_path)
+            print(lbk_archive_path)
+
+            # Delete the labbook
+            shutil.rmtree(lb.root_dir)
+            assert not os.path.exists(lb_root), f"LabBook at {lb_root} should not exist."
+
+            assert os.path.exists(tmp_archive_path)
+            # Now import the labbook as a new user, validating that the change of namespace works properly.
+            imported_lb_path = jobs.import_labboook_from_zip(archive_path=lbk_archive_path, username='unittester2',
+                                                             owner='unittester2', config_file=mock_config_with_repo[0])
+
+            assert not os.path.exists(lbk_archive_path)
+            tmp_archive_path = shutil.copy(exported_archive_path, '/tmp')
+            assert os.path.exists(tmp_archive_path)
+
+            # New path should reflect username of new owner and user.
+            assert imported_lb_path == lb_root.replace('/unittester/unittester/', '/unittester2/unittester2/')
+            import_lb = LabBook(mock_config_with_repo[0])
+            import_lb.from_directory(imported_lb_path)
+
+            ib = ImageBuilder(import_lb)
+            ib.assemble_dockerfile(write=True)
+            assert os.path.exists(os.path.join(imported_lb_path, '.gigantum', 'env', 'Dockerfile'))
+
+            assert import_lb.data['owner']['username'] == 'unittester2'
+
+            # After importing, the new user (in this case "cat") should be the current, active workspace.
+            # And be created, if necessary.
+            assert import_lb.active_branch == "gm.workspace-unittester2"
+            assert not import_lb.has_remote
 
     def test_fail_import_export_zip(self, mock_config_with_repo):
 
