@@ -22,7 +22,7 @@ import docker
 import docker.errors
 import time
 import json
-from typing import Optional, List, Tuple, Any, Dict
+from typing import Callable, Optional, List, Tuple, Any, Dict
 from docker import APIClient
 
 from lmcommon.configuration import get_docker_client
@@ -106,14 +106,23 @@ def build_docker_image(root_dir: str, override_image_tag: Optional[str], nocache
         # This builds the image and generates output status text.
         for line in APIClient().build(path=env_dir, tag=image_name, pull=True, nocache=nocache, forcerm=True):
             output = json.loads(line)['stream'].strip()
-            feedback_callback(output)
+            if feedback_callback:
+                feedback_callback(output)
+
+            if 'successfully built' in output.lower():
+                # When build, final line is in form of "Successfully build 02faas3"
+                # There is no other (simple) way to grab the image ID
+                image_id = output.split(' ')[-1]
 
         #docker_image = get_docker_client().images.build(path=env_dir, tag=image_name, pull=True, nocache=nocache,
         #                                                forcerm=True)
     except docker.errors.BuildError as e:
         raise ContainerBuildException(e)
 
-    return docker_image.short_id.split(':')[1]
+    if not image_id:
+        raise ValueError(f"Cannot determine docker image on LabBook from {root_dir}")
+
+    return image_id
 
 
 def start_labbook_container(labbook_root: str, config_path: str,
