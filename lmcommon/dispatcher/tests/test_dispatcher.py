@@ -195,6 +195,7 @@ class TestDispatcher(object):
             print(status)
             r = d.query_task(job_ref)
             print(r.meta)
+            assert r.meta.get('feedback')
             if status in ['success', 'failed', 'finished']:
                 print(r.exc_info)
                 break
@@ -208,7 +209,6 @@ class TestDispatcher(object):
         res = d.query_task(job_ref)
         assert res
         assert res.status == 'finished'
-        assert False
 
     def test_start_and_stop_docker_container(self, temporary_worker, mock_config_file):
         # start_docker_container(docker_image_id, exposed_ports, volumes_dict) -> str:
