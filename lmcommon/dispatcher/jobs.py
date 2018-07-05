@@ -213,7 +213,9 @@ def build_labbook_image(path: str, username: Optional[str] = None,
 
         def save_metadata_callback(line: str) -> None:
             try:
-                job.meta['feedback'] = (job.meta.get('feedback') or '') + line
+                if not line:
+                    return
+                job.meta['feedback'] = (job.meta.get('feedback') or '') + line + '\n'
                 job.save_meta()
             except Exception as e:
                 logger.error(e)

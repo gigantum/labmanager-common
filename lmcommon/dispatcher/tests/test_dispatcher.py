@@ -170,24 +170,15 @@ class TestDispatcher(object):
 
     def test_build_docker_image(self, temporary_worker, mock_config_file):
         w, d = temporary_worker
-
         erm = RepositoryManager(mock_config_file[0])
         erm.update_repositories()
         erm.index_repositories()
-
-        # Create a labook
         lb = LabBook(mock_config_file[0])
-
         labbook_dir = lb.new(name="unittest-dispatcher-build-image", description="Testing docker building.",
                              owner={"username": "unittester"})
 
-        # Create Component Manager
         cm = ComponentManager(lb)
-
-        # Add a component
-        cm.add_component("base", lmcommon.fixtures.ENV_UNIT_TEST_REPO, 'ut-busybox',
-                         0)
-
+        cm.add_component("base", lmcommon.fixtures.ENV_UNIT_TEST_REPO, 'ut-busybox', 0)
         ib = ImageBuilder(lb)
         ib.assemble_dockerfile(write=True)
         assert os.path.exists(os.path.join(labbook_dir, '.gigantum', 'env', 'Dockerfile'))
@@ -202,8 +193,9 @@ class TestDispatcher(object):
         while True:
             status = d.query_task(job_ref).status
             print(status)
+            r = d.query_task(job_ref)
+            print(r.meta)
             if status in ['success', 'failed', 'finished']:
-                r = d.query_task(job_ref)
                 print(r.exc_info)
                 break
             if elapsed_time > 60:
@@ -211,12 +203,12 @@ class TestDispatcher(object):
                 assert False, "timed out {}".format(status)
             elapsed_time = elapsed_time + 1
             time.sleep(1)
-
         w.terminate()
 
         res = d.query_task(job_ref)
         assert res
         assert res.status == 'finished'
+        assert False
 
     def test_start_and_stop_docker_container(self, temporary_worker, mock_config_file):
         # start_docker_container(docker_image_id, exposed_ports, volumes_dict) -> str:
