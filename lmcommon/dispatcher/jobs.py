@@ -108,6 +108,11 @@ def import_labboook_from_zip(archive_path: str, username: str, owner: str,
     lb: Optional[LabBook] = None
     new_lb_path = ""
     try:
+        job = get_current_job()
+        statusmsg = "Initializing"
+        job.meta['feedback'] = statusmsg
+        job.save_meta()
+
         if not os.path.isfile(archive_path):
             raise ValueError(f'Archive at {archive_path} is not a file or does not exist')
 
@@ -133,7 +138,15 @@ def import_labboook_from_zip(archive_path: str, username: str, owner: str,
         else:
             dest_path = lb_containing_dir
 
+        statusmsg = f'{statusmsg}\nUnzipping Project Archive...'
+        job.meta['feedback'] = statusmsg
+        job.save_meta()
+
         call_subprocess(['unzip', archive_path, '-d', dest_path], cwd=lm_working_dir, check=True)
+
+        statusmsg = f'{statusmsg}\nFinished Unzip, checking integrity...'
+        job.meta['feedback'] = statusmsg
+        job.save_meta()
 
         new_lb_path = os.path.join(lb_containing_dir, inferred_labbook_name)
         if not os.path.isdir(new_lb_path):
@@ -155,6 +168,10 @@ def import_labboook_from_zip(archive_path: str, username: str, owner: str,
         # Ignore execution bit changes (due to moving between windows/mac/linux)
         subprocess.check_output("git config core.fileMode false", cwd=lb.root_dir, shell=True)
 
+        statusmsg = f'{statusmsg}\nCreating workspace branch...'
+        job.meta['feedback'] = statusmsg
+        job.save_meta()
+
         # This makes sure the working directory is set properly.
         sync_locally(lb, username=username)
 
@@ -173,6 +190,10 @@ def import_labboook_from_zip(archive_path: str, username: str, owner: str,
         # Also, remove any lingering remotes. If it gets re-published, it will be to a new remote.
         if lb.has_remote:
             lb.git.remove_remote('origin')
+
+        statusmsg = f'{statusmsg}\nImport Complete'
+        job.meta['feedback'] = statusmsg
+        job.save_meta()
 
         logger.info(f"(Job {p}) LabBook {inferred_labbook_name} imported to {new_lb_path}")
 
