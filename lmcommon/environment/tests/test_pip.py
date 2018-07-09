@@ -180,5 +180,5 @@ class TestPipPackageManager(object):
         assert result[0].error is False
 
         assert result[1].package == "plotly"
-        assert result[1].version == "2.7.0"
+        assert result[1].version == '3.0.0'
         assert result[1].error is False
