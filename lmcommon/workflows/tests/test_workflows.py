@@ -25,6 +25,7 @@ import os
 
 from lmcommon.labbook import LabBook
 from lmcommon.workflows import GitWorkflow, MergeError
+from lmcommon.files import FileOperations
 from lmcommon.fixtures import (mock_config_file, mock_labbook_lfs_disabled, mock_duplicate_labbook, remote_bare_repo,
                                sample_src_file, _MOCK_create_remote_repo2 as _MOCK_create_remote_repo,
                                mock_config_lfs_disabled)
@@ -154,7 +155,7 @@ class TestLabbookShareProtocol(object):
         assert not os.path.exists(os.path.join(bob_user_lb.root_dir, 'code', 'testy-tracked-dir'))
         bob_wf.sync('bob')
 
-        test_user_lb.insert_file("code", sample_src_file, 'testy-tracked-dir')
+        FileOperations.insert_file(test_user_lb, "code", sample_src_file, 'testy-tracked-dir')
         test_wf.sync('test')
         assert os.path.exists(os.path.join(test_user_lb.root_dir, 'code', 'testy-tracked-dir'))
 
@@ -167,7 +168,7 @@ class TestLabbookShareProtocol(object):
         with open('/tmp/s1.txt', 'w') as s1:
             s1.write('aaaaa\nbbbbbb\nccccc')
         test_user_lb = mock_labbook_lfs_disabled[2]
-        test_user_lb.insert_file(section='code', src_file=s1.name, dst_dir='')
+        FileOperations.insert_file(test_user_lb, section='code', src_file=s1.name)
         wf_test_user = GitWorkflow(test_user_lb)
         wf_test_user.publish('test')
 

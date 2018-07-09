@@ -105,6 +105,11 @@ class TestGitLabManager(object):
                               "description": "",
                             },
                       status=201)
+        responses.add(responses.POST, 'https://usersrv.gigantum.io/webhook/testuser/new-labbook',
+                      json={
+                              "success": True
+                            },
+                      status=201)
         responses.add(responses.GET, 'https://repo.gigantum.io/api/v4/projects/testuser%2Fnew-labbook',
                       json=[{
                                 "message": "404 Project Not Found"
@@ -396,6 +401,9 @@ class TestGitLabManager(object):
                                 "message": "404 Project Not Found"
                             }],
                       status=404)
+        responses.add(responses.DELETE, 'https://usersrv.gigantum.io/webhook/testuser/new-labbook',
+                      json={},
+                      status=204)
 
         assert gitlab_mngr_fixture.labbook_exists("testuser", "new-labbook") is True
 
@@ -412,36 +420,6 @@ class TestGitLabManager(object):
         responses.add(responses.GET, 'https://usersrv.gigantum.io/key',
                       json={'key': 'afaketoken'}, status=200)
         dummy_data = [
-                        {
-                            "id": 118,
-                            "name": "test11",
-                            "name_with_namespace": "testuser / test11",
-                            "path_with_namespace": "testuser/test11",
-                            "created_at": "2018-04-19T19:06:11.009Z",
-                            "last_activity_at": "2018-04-19T22:08:05.974Z",
-                            "visibility": "private",
-                            "owner": {
-                                "id": 14,
-                                "name": "testuser",
-                                "username": "testuser",
-                                "state": "active",
-                            },
-                            "creator_id": 14,
-                            "namespace": {
-                                "id": 14,
-                                "name": "testuser",
-                                "path": "testuser",
-                                "kind": "user",
-                                "full_path": "testuser"
-                            },
-                            "import_status": "none",
-                            "permissions": {
-                                "project_access": {
-                                    "access_level": 30,
-                                    "notification_level": 3
-                                },
-                            }
-                        },
                         {
                             "id": 138,
                             "name": "test2",
@@ -471,10 +449,44 @@ class TestGitLabManager(object):
                                     "notification_level": 3
                                 },
                             }
-                        }]
+                        },
+                        {
+                            "id": 118,
+                            "name": "test11",
+                            "name_with_namespace": "testuser / test11",
+                            "path_with_namespace": "testuser/test11",
+                            "created_at": "2018-04-19T19:06:11.009Z",
+                            "last_activity_at": "2018-04-19T22:08:05.974Z",
+                            "visibility": "private",
+                            "owner": {
+                                "id": 14,
+                                "name": "testuser",
+                                "username": "testuser",
+                                "state": "active",
+                            },
+                            "creator_id": 14,
+                            "namespace": {
+                                "id": 14,
+                                "name": "testuser",
+                                "path": "testuser",
+                                "kind": "user",
+                                "full_path": "testuser"
+                            },
+                            "import_status": "none",
+                            "permissions": {
+                                "project_access": {
+                                    "access_level": 30,
+                                    "notification_level": 3
+                                },
+                            }
+                        }
+                      ]
 
-        responses.add(responses.GET, 'https://repo.gigantum.io/api/v4/projects/',
+        responses.add(responses.GET, 'https://repo.gigantum.io/api/v4/projects?page=0&per_page=20&order_by=name&sort=desc',
                       json=dummy_data, status=200)
+
+        responses.add(responses.GET, 'https://repo.gigantum.io/api/v4/projects?page=0&per_page=20&order_by=name&sort=asc',
+                      json=list(reversed(dummy_data)), status=200)
 
         labbooks = gitlab_mngr_fixture.list_labbooks()
 
@@ -492,7 +504,7 @@ class TestGitLabManager(object):
         assert labbooks[1]['created_on'] == "2018-04-19T19:06:11.009Z"
         assert labbooks[1]['modified_on'] == "2018-04-19T22:08:05.974Z"
 
-        labbooks = gitlab_mngr_fixture.list_labbooks(reverse=True)
+        labbooks = gitlab_mngr_fixture.list_labbooks(sort_str="asc")
 
         assert len(labbooks) == 2
         assert labbooks[0]['id'] == 118
@@ -575,10 +587,14 @@ class TestGitLabManager(object):
                             }
                         }]
 
-        responses.add(responses.GET, 'https://repo.gigantum.io/api/v4/projects/',
+        responses.add(responses.GET, 'https://repo.gigantum.io/api/v4/projects?page=0&per_page=20&order_by=created_at&sort=desc',
+                      json=list(reversed(dummy_data)), status=200)
+        responses.add(responses.GET, 'https://repo.gigantum.io/api/v4/projects?page=0&per_page=20&last_activity_at=created_at&sort=desc',
                       json=dummy_data, status=200)
+        responses.add(responses.GET, 'https://repo.gigantum.io/api/v4/projects?page=0&per_page=20&last_activity_at=created_at&sort=asc',
+                      json=list(reversed(dummy_data)), status=200)
 
-        labbooks = gitlab_mngr_fixture.list_labbooks(sort_mode="created_on")
+        labbooks = gitlab_mngr_fixture.list_labbooks(order_by="created_on")
 
         assert len(labbooks) == 2
         assert labbooks[0]['id'] == 138
@@ -594,7 +610,7 @@ class TestGitLabManager(object):
         assert labbooks[1]['created_on'] == "2018-04-19T19:06:11.009Z"
         assert labbooks[1]['modified_on'] == "2018-04-20T22:08:05.974Z"
 
-        labbooks = gitlab_mngr_fixture.list_labbooks(sort_mode="modified_on")
+        labbooks = gitlab_mngr_fixture.list_labbooks(order_by="modified_on")
 
         assert len(labbooks) == 2
         assert labbooks[0]['id'] == 118
@@ -609,3 +625,19 @@ class TestGitLabManager(object):
         assert labbooks[1]['description'] == ""
         assert labbooks[1]['created_on'] == "2018-04-19T19:36:11.009Z"
         assert labbooks[1]['modified_on'] == "2018-04-19T20:58:05.974Z"
+
+        labbooks = gitlab_mngr_fixture.list_labbooks(order_by="modified_on", sort_str='asc')
+
+        assert len(labbooks) == 2
+        assert labbooks[0]['id'] == 138
+        assert labbooks[0]['namespace'] == "testuser"
+        assert labbooks[0]['labbook_name'] == "test2"
+        assert labbooks[0]['description'] == ""
+        assert labbooks[0]['created_on'] == "2018-04-19T19:36:11.009Z"
+        assert labbooks[0]['modified_on'] == "2018-04-19T20:58:05.974Z"
+        assert labbooks[1]['id'] == 118
+        assert labbooks[1]['namespace'] == "testuser"
+        assert labbooks[1]['labbook_name'] == "test11"
+        assert labbooks[1]['description'] == ""
+        assert labbooks[1]['created_on'] == "2018-04-19T19:06:11.009Z"
+        assert labbooks[1]['modified_on'] == "2018-04-20T22:08:05.974Z"

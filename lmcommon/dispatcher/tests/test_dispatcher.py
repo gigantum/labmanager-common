@@ -206,7 +206,7 @@ class TestDispatcher(object):
                 r = d.query_task(job_ref)
                 print(r.exc_info)
                 break
-            if elapsed_time > 30:
+            if elapsed_time > 60:
                 w.terminate()
                 assert False, "timed out {}".format(status)
             elapsed_time = elapsed_time + 1
@@ -232,7 +232,7 @@ class TestDispatcher(object):
                              owner={"username": "unittester"})
 
         cm = ComponentManager(lb)
-        cm.add_component("base", lmcommon.fixtures.ENV_UNIT_TEST_REPO, 'ut-busybox', 0)
+        cm.add_component("base", lmcommon.fixtures.ENV_UNIT_TEST_REPO, 'quickstart-jupyterlab', 2)
 
         ib = ImageBuilder(lb)
         ib.assemble_dockerfile(write=True)
@@ -270,66 +270,32 @@ class TestDispatcher(object):
             if status in ['success', 'failed', 'finished']:
                 print(d.query_task(job_ref).exc_info)
                 break
-            if elapsed_time > 30:
+            if elapsed_time > 60:
                 w.terminate()
                 assert False, "timed out {}".format(status)
             elapsed_time = elapsed_time + 1
             time.sleep(1)
-
-        # w.terminate()
 
         res = d.query_task(job_ref)
         assert res
         print(res.status)
         assert res.status == 'finished'
 
-        ## Finish building image
+        # Finish building image
 
         startc_kwargs = {
             'root': lb.root_dir,
             'config_path': lb.labmanager_config.config_file,
             'username': 'unittester'
         }
-        ## Start the docker container, and then wait till it's done.
-        start_ref = d.dispatch_task(bg_jobs.start_labbook_container, kwargs=startc_kwargs)
+        # Start the docker container, and then wait till it's done.
+        container_id = bg_jobs.start_labbook_container(**startc_kwargs)
+        time.sleep(5)
+        assert get_docker_client().containers.get(container_id).status == 'running'
 
-        elapsed_time = 0
-        while True:
-            status = d.query_task(start_ref).status
-            print(status)
-            if status in ['success', 'failed', 'finished']:
-                print(d.query_task(job_ref).exc_info)
-                break
-            if elapsed_time > 8:
-                w.terminate()
-                assert False, "timed out {}".format(status)
-            elapsed_time = elapsed_time + 1
-            time.sleep(1)
-
-        res = d.query_task(start_ref)
-        assert res
-        print(res.exc_info)
-        assert res.status == 'finished'
-
-        ## Stop the docker container, and wait until that is done.
-        stop_ref = d.dispatch_task(bg_jobs.stop_labbook_container, args=(res.result,))
-
-        elapsed_time = 0
-        while True:
-            status = d.query_task(stop_ref).status
-            print(status)
-            if status in ['success', 'failed', 'finished']:
-                print(d.query_task(stop_ref).exc_info)
-                break
-            if elapsed_time > 8:
-                w.terminate()
-                assert False, "timed out {}".format(status)
-            elapsed_time = elapsed_time + 1
-            time.sleep(1)
-
-        res = d.query_task(stop_ref)
-        assert res
-        assert res.status == 'finished'
+        # Stop the docker container, and wait until that is done.
+        print(container_id)
+        bg_jobs.stop_labbook_container(container_id)
 
         w.terminate()
 

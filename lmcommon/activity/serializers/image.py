@@ -52,7 +52,7 @@ class Base64ImageSerializer(MimeSerializer):
 
         image_bytes = io.BytesIO()
         if image_obj.mode == "RGBA":
-            # Discard alpha if needed
+            # Discard alpha if needed (convert("RGB") as used below would not work properly)
             image_obj.load()
 
             rgb_img = Image.new("RGB", image_obj.size, (255, 255, 255))
@@ -60,6 +60,10 @@ class Base64ImageSerializer(MimeSerializer):
 
             # Serialize to bytes, encoded as jpeg
             rgb_img.save(image_bytes, format='JPEG', quality=90, optimize=True)
+        elif image_obj.mode != "RGB":
+            #
+            # Might not always work, but we try
+            image_obj.convert("RGB").save(image_bytes, format="JPEG", quality=90, optimize=True)
         else:
             # Serialize to bytes, encoded as jpeg
             image_obj.save(image_bytes, format='JPEG', quality=90, optimize=True)

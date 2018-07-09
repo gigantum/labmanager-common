@@ -19,7 +19,7 @@
 # SOFTWARE.
 import pytest
 import json
-from lmcommon.activity.records import ActivityDetailRecord, ActivityDetailType
+from lmcommon.activity.records import ActivityDetailRecord, ActivityDetailType, ActivityAction
 
 
 class TestActivityDetailRecord(object):
@@ -50,13 +50,18 @@ class TestActivityDetailRecord(object):
         """Test the log string property"""
         adr = ActivityDetailRecord(ActivityDetailType.CODE_EXECUTED, key="my_key", show=False, importance=233)
 
-        assert adr.log_str == "3,0,233,my_key"
+        assert adr.log_str == "3,0,233,my_key,0"
 
         adr = ActivityDetailRecord(ActivityDetailType.OUTPUT_DATA, key="my_key", show=True, importance=25)
 
-        assert adr.log_str == "1,1,25,my_key"
+        assert adr.log_str == "1,1,25,my_key,0"
 
-    def test_from_log_str(self):
+        adr = ActivityDetailRecord(ActivityDetailType.OUTPUT_DATA, key="my_key", show=True, importance=25,
+                                   action=ActivityAction.EDIT)
+
+        assert adr.log_str == "1,1,25,my_key,2"
+
+    def test_from_log_str_legacy(self):
         """Test the creating from a log string"""
         adr = ActivityDetailRecord.from_log_str("2,1,25,my_key")
 
@@ -67,6 +72,20 @@ class TestActivityDetailRecord(object):
         assert adr.importance == 25
         assert adr.tags == []
         assert adr.data == {}
+        assert adr.action == ActivityAction.NOACTION
+
+    def test_from_log_str(self):
+        """Test the creating from a log string"""
+        adr = ActivityDetailRecord.from_log_str("2,1,25,my_key,3")
+
+        assert type(adr) == ActivityDetailRecord
+        assert adr.type == ActivityDetailType.RESULT
+        assert adr.key == "my_key"
+        assert adr.show is True
+        assert adr.importance == 25
+        assert adr.tags == []
+        assert adr.data == {}
+        assert adr.action == ActivityAction.DELETE
 
     def test_add_value(self):
         """Test adding values to the detail object"""
@@ -103,6 +122,7 @@ class TestActivityDetailRecord(object):
         dict_obj = adr.to_dict()
         assert type(dict_obj) == dict
         assert dict_obj['type'] == 3
+        assert dict_obj['action'] == 0
         assert dict_obj['importance'] == 25
         assert dict_obj['show'] == 1
         assert dict_obj['data'] == {"text/plain": "this is some data",
@@ -110,7 +130,8 @@ class TestActivityDetailRecord(object):
 
     def test_to_bytes_from_bytes(self):
         """Test converting to a byte array"""
-        adr = ActivityDetailRecord(ActivityDetailType.CODE_EXECUTED, key="my_key3", show=True, importance=225)
+        adr = ActivityDetailRecord(ActivityDetailType.CODE_EXECUTED, key="my_key3", show=True, importance=225,
+                                   action=ActivityAction.CREATE)
         adr.add_value("text/plain", "this is some data")
 
         byte_array_no_compression = adr.to_bytes(compress=False)
@@ -120,6 +141,7 @@ class TestActivityDetailRecord(object):
 
         assert type(adr2) == ActivityDetailRecord
         assert adr2.type == ActivityDetailType.CODE_EXECUTED
+        assert adr2.action == ActivityAction.CREATE
         assert adr2.key is None
         assert adr2.show is True
         assert adr2.importance == 225
@@ -145,6 +167,7 @@ class TestActivityDetailRecord(object):
 
         assert type(adr3) == ActivityDetailRecord
         assert adr3.type == ActivityDetailType.INPUT_DATA
+        assert adr3.action == ActivityAction.NOACTION
         assert adr3.key is None
         assert adr3.show is True
         assert adr3.importance == 125

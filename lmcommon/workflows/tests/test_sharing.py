@@ -17,6 +17,7 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CO
 import pytest
+import os
 import pprint
 
 from lmcommon.workflows import GitWorkflow, MergeError, core, WorkflowsException
@@ -40,6 +41,9 @@ class TestWorkflowsSharing(object):
         lb.checkout_branch("distinct-branch", new=True)
         lb.add_remote("origin", remote_labbook_repo)
         core.push(lb, "origin")
+        lb.remove_remote('origin')
+        assert not lb.has_remote
+        assert all(['[lfs ' not in l for l in open(os.path.join(lb.root_dir, '.git/config')).readlines()])
 
     def test_push_to_remote_repo_with_same_branch_should_be_error(self, remote_labbook_repo, mock_config_file,
                                                                   mock_labbook_lfs_disabled):

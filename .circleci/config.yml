@@ -2,19 +2,22 @@ version: 2
 jobs:
   build:
     docker:
-      - image: gigantum/circleci-common:13711037-2018-05-09
+      - image: gigantum/circleci-common:df4dbd9a-2018-07-02
     steps:
       - checkout
       - setup_remote_docker
-
       - run:
           name: Set Git credentials config
           command: git config --global user.email "noreply@gigantum.io" && git config --global user.name "CircleCI" && git config --global credential.helper store
 
       - run:
+          name: Install proxy lib
+          command: cd /tmp && git clone https://github.com/gigantum/confhttpproxy.git && pip3 install -e confhttpproxy
+
+      - run:
           name: Run mypy type checker
           command: |
-            python -m mypy . --ignore-missing-imports --strict-optional
+            python3 -m mypy . --ignore-missing-imports --strict-optional
 
       - run:
           name: Set authentication credentials

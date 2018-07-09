@@ -22,7 +22,7 @@ import re
 import getpass
 
 from lmcommon.environment.apt import AptPackageManager
-from lmcommon.fixtures import build_lb_image_for_env, mock_config_with_repo
+from lmcommon.fixtures.container import build_lb_image_for_env, mock_config_with_repo
 
 
 class TestAptPackageManager(object):
@@ -35,7 +35,6 @@ class TestAptPackageManager(object):
         assert len(result) == 7
         assert 'libtiff5' in result
 
-    #@pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Cannot check apt versions on CircleCI")
     def test_list_versions(self, build_lb_image_for_env):
         """Test list_versions command"""
         mrg = AptPackageManager()
@@ -43,13 +42,11 @@ class TestAptPackageManager(object):
         username = build_lb_image_for_env[1]
         result = mrg.list_versions("libtiff5", lb, username)
 
-        assert len(result) == 2
-        assert re.match('\d.\d.\d-\dubuntu\d.\d', result[0])
-        #assert result[0] == "4.0.6-1ubuntu0.4"
-        assert re.match('\d.\d.\d-\d', result[1])
-        #assert result[1] == "4.0.6-1"
+        assert len(result) == 1
 
-    #@pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Cannot check apt versions on CircleCI")
+        # assert result == "4.0.9-5"
+        assert re.match('\d.\d.\d-\d', result[0])
+
     def test_latest_version(self, build_lb_image_for_env):
         """Test latest_version command"""
         mrg = AptPackageManager()
@@ -58,10 +55,9 @@ class TestAptPackageManager(object):
 
         result = mrg.latest_version("libtiff5", lb, username)
 
-        #assert result == "4.0.6-1ubuntu0.4"
-        assert re.match('\d.\d.\d-\dubuntu\d.\d', result)
+        # assert result == "4.0.9-5"
+        assert re.match('\d.\d.\d-\d', result)
 
-    #@pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Cannot check apt packages on CircleCI")
     def test_list_installed_packages(self, build_lb_image_for_env):
         """Test list_installed_packages command
 
@@ -127,7 +123,6 @@ class TestAptPackageManager(object):
         result = mrg.generate_docker_install_snippet(packages, single_line=True)
         assert result == ['RUN apt-get -y install mypackage yourpackage']
 
-    #@pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Cannot check apt versions on CircleCI")
     def test_list_versions_badpackage(self, build_lb_image_for_env):
         """Test list_versions command"""
         mrg = AptPackageManager()
@@ -137,24 +132,21 @@ class TestAptPackageManager(object):
         with pytest.raises(ValueError):
             mrg.list_versions("asdfasdfasd", lb, username)
 
-    #@pytest.mark.skipif(getpass.getuser() == 'circleci', reason="Cannot check apt versions on CircleCI")
     def test_is_valid(self, build_lb_image_for_env):
         """Test list_versions command"""
+        pkgs = [{"manager": "pip", "package": "libjpeg-dev", "version": ""},
+                {"manager": "pip", "package": "afdgfdgshfdg", "version": ""}]
+
         mrg = AptPackageManager()
         lb = build_lb_image_for_env[0]
         username = build_lb_image_for_env[1]
-        result = mrg.is_valid("asdfasfdfdghhsfd", lb, username)
+        result = mrg.validate_packages(pkgs, lb, username)
 
-        assert result.package is False
-        assert result.version is False
+        assert result[0].package == "libjpeg-dev"
+        assert result[0].version != ""
+        assert result[0].error is False
 
-        result = mrg.is_valid("zlib1g", package_version="10.0", labbook=lb, username=username)
-
-        assert result.package is True
-        assert result.version is False
-
-        result = mrg.is_valid("zlib1g", package_version="1:1.2.8.dfsg-2ubuntu4.1", labbook=lb, username=username)
-
-        assert result.package is True
-        assert result.version is True
+        assert result[1].package == "afdgfdgshfdg"
+        assert result[1].version == ""
+        assert result[1].error is True
 

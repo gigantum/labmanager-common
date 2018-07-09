@@ -19,6 +19,7 @@
 # SOFTWARE.
 
 from typing import Optional, Tuple
+from lmcommon.configuration.utils import call_subprocess
 from lmcommon.labbook import LabBook, LabbookException, LabbookMergeException
 from lmcommon.logging import LMLogger
 from lmcommon.workflows import core
@@ -30,6 +31,11 @@ class GitWorkflow(object):
 
     def __init__(self, labbook: LabBook) -> None:
         self.labbook = labbook
+
+    def garbagecollect(self):
+        """ Run a `git gc` on the labbook. """
+        with self.labbook.lock_labbook():
+            core.git_garbage_collect(self.labbook)
 
     def publish(self, username: str, access_token: Optional[str] = None, remote: str = "origin") -> None:
         """ Publish this labbook to the remote GitLab instance.
@@ -48,7 +54,7 @@ class GitWorkflow(object):
                 raise ValueError(f"Must be on user workspace (gm.workspace-{username}) to sync")
 
             with self.labbook.lock_labbook():
-                self.labbook._sweep_uncommitted_changes()
+                self.labbook.sweep_uncommitted_changes()
 
             if self.labbook.has_remote:
                 raise ValueError("Cannot publish Labbook when remote already set.")

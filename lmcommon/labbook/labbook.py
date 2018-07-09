@@ -21,7 +21,7 @@ import glob
 import os
 import re
 import shutil
-from typing import (Any, Dict, List, Optional, Set, Tuple)
+from typing import (Any, Dict, List, Optional, Tuple)
 import uuid
 import yaml
 import json
@@ -36,17 +36,18 @@ from collections import OrderedDict
 from git.exc import GitCommandError
 from natsort import natsorted
 
-from lmcommon.configuration import Configuration, get_docker_client
+from lmcommon.configuration import Configuration
+from lmcommon.configuration.utils import call_subprocess
 from lmcommon.gitlib import get_git_interface, GitAuthor, GitRepoInterface
 from lmcommon.logging import LMLogger, time_profiler
 from lmcommon.labbook.schemas import validate_labbook_schema
 from lmcommon.labbook import shims
-from lmcommon.activity import ActivityStore, ActivityType, ActivityRecord, ActivityDetailType, ActivityDetailRecord
+from lmcommon.activity import ActivityStore, ActivityType, ActivityRecord, ActivityDetailType, ActivityDetailRecord, \
+    ActivityAction
 from lmcommon.labbook.schemas import CURRENT_SCHEMA
 
 from redis import StrictRedis
 import redis_lock
-
 
 logger = LMLogger.get_logger()
 
@@ -140,10 +141,10 @@ class LabBook(object):
                     n = method_ref(self, *args, **kwargs) #type: ignore
                 except ValueError:
                     with self.lock_labbook():
-                        self._sweep_uncommitted_changes()
+                        self.sweep_uncommitted_changes()
                     n = method_ref(self, *args, **kwargs)  # type: ignore
                     with self.lock_labbook():
-                        self._sweep_uncommitted_changes()
+                        self.sweep_uncommitted_changes()
                 finally:
                     _check_git_tracked(self.git)
             else:
@@ -476,18 +477,33 @@ class LabBook(object):
         return ''.join(c for c in value if c not in '\<>?/;"`\'')
 
     @time_profiler(logger)
-    def _sweep_uncommitted_changes(self) -> None:
-        if not self.is_repo_clean:
-            logger.warning('Untracked changes detected; calling sweep;')
-            r = subprocess.check_output(f'git add -A && git commit -m "_sweep_uncommitted_changes"',
-                                        cwd=self.root_dir, shell=True)
-            #self.git.add_all()
-            #self.git.commit("Sweeping up lingering changes.")
+    def sweep_uncommitted_changes(self, upload: bool = False,
+                                  extra_msg: Optional[str] = None) -> None:
+        """ Sweep all changes into a commit, and create activity record.
+            NOTE: This method MUST be called inside a lock. """
+        result_status = self.git.status()
+        self.git.add_all()
+        self.git.commit("Sweep of uncommitted changes")
+        if any([result_status[k] for k in result_status.keys()]):
+            ar = ActivityRecord(ActivityType.LABBOOK,
+                                message="--overwritten--",
+                                show=True,
+                                importance=255,
+                                linked_commit=self.git.commit_hash,
+                                tags=['save'])
+            if upload:
+                ar.tags.append('upload')
+            ar, newcnt, modcnt = shims.process_sweep_status(
+                ar, result_status, LabBook.infer_section_from_relative_path)
+            nmsg = f"{newcnt} new file(s). " if newcnt > 0 else ""
+            mmsg = f"{modcnt} modified file(s). " if modcnt > 0 else ""
+            ar.message = f"{extra_msg or ''}" \
+                         f"{'Uploaded new file(s). ' if upload else ''}" \
+                         f"{nmsg}{mmsg}"
+            ars = ActivityStore(self)
+            ars.create_activity_record(ar)
         else:
             logger.info(f"{str(self)} no changes to sweep.")
-
-        if not self.is_repo_clean:
-            raise LabbookException("_sweep_uncommitted_changes failed")
 
     @staticmethod
     def get_activity_type_from_section(section_name: str) -> Tuple[ActivityType, ActivityDetailType, str]:
@@ -652,7 +668,7 @@ class LabBook(object):
             # This branch is local-only
             return self.active_branch, 0
 
-    def add_remote(self, remote_name: str, url: str):
+    def add_remote(self, remote_name: str, url: str) -> None:
         """Add a new git remote
 
         Args:
@@ -665,9 +681,45 @@ class LabBook(object):
             self.git.add_remote(remote_name, url)
             self.git.fetch(remote=remote_name)
         except Exception as e:
-            # Unsure what specific exception add_remote creates, so make a catchall.
-            logger.exception(e)
             raise LabbookException(e)
+
+    def remove_remote(self, remote_name: Optional[str] = "origin") -> None:
+        """Remove a remove from the git config
+
+        Args:
+            remote_name: Optional name of remote (default "origin")
+        """
+        try:
+            logger.info(f"Removing remote {remote_name} from {str(self)}")
+            self.git.remove_remote(remote_name)
+        except Exception as e:
+            raise LabbookException(e)
+
+    def remove_lfs_remotes(self) -> None:
+        """Remove all LFS endpoints.
+
+        Each LFS enpoint has its own entry in the git config. It takes the form of the following:
+
+        ```
+        [lfs "https://repo.location.whatever"]
+            access = basic
+        ```
+
+        In order to get the section name, which is "lfs.https://repo.location.whatever", we need to search
+        by all LFS fields and remove them (and in order to get the section need to strip the variables off the end).
+
+        Args:
+            None
+
+        Returns:
+            None
+        """
+        lfs_sections = call_subprocess(['git', 'config', '--get-regexp', 'lfs.http*'], cwd=self.root_dir).split('\n')
+        logger.info(f"LFS entries to delete are {lfs_sections}")
+        for lfs_sec in set([n for n in lfs_sections if n]):
+            var = lfs_sec.split(' ')[0]
+            section = '.'.join(var.split('.')[:-1])
+            call_subprocess(['git', 'config', '--remove-section', section], cwd=self.root_dir)
 
     def get_branches(self) -> Dict[str, List[str]]:
         """Return all branches a Dict of Lists. Dict contains two keys "local" and "remote".
@@ -686,94 +738,6 @@ class LabBook(object):
             # Unsure what specific exception add_remote creates, so make a catchall.
             logger.exception(e)
             raise LabbookException(e)
-
-
-    @_validate_git
-    def insert_file(self, section: str, src_file: str, dst_dir: str,
-                    base_filename: Optional[str] = None) -> Dict[str, Any]:
-        """Copy the file at `src_file` into the `dst_dir`. Filename removes upload ID if present.
-
-        Args:
-            section(str): Section name (code, input, output)
-            src_file(str): Full path of file to insert into
-            dst_dir(str): Relative path within labbook where `src_file` should be copied to
-            base_filename(str): The desired basename for the file, without an upload ID prepended
-
-        Returns:
-            dict: The inserted file's info
-        """
-        self._validate_section(section)
-
-        if not os.path.abspath(src_file):
-            raise ValueError(f"Source file `{src_file}` is not an absolute path")
-
-        if not os.path.isfile(src_file):
-            raise ValueError(f"Source file does not exist at `{src_file}`")
-
-        with self.lock_labbook():
-            # Remove any leading "/" -- without doing so os.path.join will break.
-            dst_dir = LabBook._make_path_relative(os.path.join(section, dst_dir))
-
-            # Check if this file contains an upload_id (which means it came from a chunked upload)
-            if base_filename:
-                dst_filename = base_filename
-            else:
-                dst_filename = os.path.basename(src_file)
-
-            # Create the absolute file path for the destination
-            dst_path = os.path.join(self.root_dir, dst_dir.replace('..', ''), dst_filename)
-            if not os.path.isdir(os.path.join(self.root_dir, dst_dir.replace('..', ''))):
-                raise ValueError(f"Target dir `{os.path.join(self.root_dir, dst_dir.replace('..', ''))}` does not exist")
-
-            # Copy file to destination
-            rel_path = os.path.relpath(dst_path, self.root_dir) #dst_path.replace(os.path.join(self.root_dir, section), '')
-            logger.info(f"Inserting new file for {str(self)} from `{src_file}` to `{rel_path}` ({dst_path})")
-            shutil.copyfile(src_file, dst_path)
-            assert os.path.exists(dst_path)
-
-            if not shims.in_untracked(self.root_dir, section):
-                # If we are setting this section to be untracked
-                activity_type, activity_detail_type, section_str = self.get_activity_type_from_section(section)
-
-                # Create commit
-                commit_msg = f"Added new {section_str} file {rel_path}"
-                try:
-                    self.git.add(rel_path)
-                    commit = self.git.commit(commit_msg)
-                except GitCommandError as e:
-                    logger.error(f"Cannot add {rel_path} to git repo!")
-                    os.remove(dst_path)
-                    raise e
-                except subprocess.CalledProcessError as c:
-                    logger.error(c)
-                    os.remove(dst_path)
-                    raise LabbookException(f'File `{dst_filename}` matches ignored pattern and cannot be added')
-                except Exception as x:
-                    logger.error(f"({type(x)}) Cannot add {rel_path} to git repo!")
-                    os.remove(dst_path)
-                    raise x
-
-                # Create Activity record and detail
-                _, ext = os.path.splitext(rel_path) or 'file'
-
-                # Create detail record
-                adr = ActivityDetailRecord(activity_detail_type, show=False, importance=0)
-                adr.add_value('text/plain', commit_msg)
-
-                # Create activity record
-                ar = ActivityRecord(activity_type,
-                                    message=commit_msg,
-                                    show=True,
-                                    importance=255,
-                                    linked_commit=commit.hexsha,
-                                    tags=[ext])
-                ar.add_detail_object(adr)
-
-                # Store
-                ars = ActivityStore(self)
-                ars.create_activity_record(ar)
-
-            return self.get_file_info(section, rel_path.replace(f"{section}/", '', 1))
 
     @_validate_git
     def delete_file(self, section: str, relative_path: str, directory: bool = False) -> bool:
@@ -825,7 +789,8 @@ class LabBook(object):
                 activity_type, activity_detail_type, section_str = self.get_activity_type_from_section(section)
 
                 # Create detail record
-                adr = ActivityDetailRecord(activity_detail_type, show=False, importance=0)
+                adr = ActivityDetailRecord(activity_detail_type, show=False, importance=0,
+                                           action=ActivityAction.DELETE)
                 adr.add_value('text/plain', commit_msg)
 
                 # Create activity record
@@ -900,7 +865,8 @@ class LabBook(object):
                     activity_type, activity_detail_type, section_str = self.get_activity_type_from_section(section)
 
                     # Create detail record
-                    adr = ActivityDetailRecord(activity_detail_type, show=False, importance=0)
+                    adr = ActivityDetailRecord(activity_detail_type, show=False, importance=0,
+                                               action=ActivityAction.EDIT)
                     adr.add_value('text/markdown', commit_msg)
 
                     # Create activity record
@@ -966,7 +932,8 @@ class LabBook(object):
                 if create_activity_record:
                     # Create detail record
                     activity_type, activity_detail_type, section_str = self.infer_section_from_relative_path(relative_path)
-                    adr = ActivityDetailRecord(activity_detail_type, show=False, importance=0)
+                    adr = ActivityDetailRecord(activity_detail_type, show=False, importance=0,
+                                               action=ActivityAction.CREATE)
 
                     msg = f"Created new {section_str} directory `{relative_path}`"
                     commit = self.git.commit(msg)
@@ -1383,12 +1350,10 @@ class LabBook(object):
 
             # Setup LFS
             if self.labmanager_config.config["git"]["lfs_enabled"] and not bypass_lfs:
-                # Make sure LFS install is setup
-                subprocess.run(f"git lfs install", shell=True, check=True, cwd=new_root_dir)
-
-                # Track input and output directories
-                subprocess.run(f"git lfs track input/**", shell=True, check=True, cwd=new_root_dir)
-                subprocess.run(f"git lfs track output/**", shell=True, check=True, cwd=new_root_dir)
+                # Make sure LFS install is setup and rack input and output directories
+                call_subprocess(["git", "lfs", "install"], cwd=new_root_dir)
+                call_subprocess(["git", "lfs", "track", "input/**"], cwd=new_root_dir)
+                call_subprocess(["git", "lfs", "track", "output/**"], cwd=new_root_dir)
 
                 # Commit .gitattributes file
                 self.git.add(os.path.join(self.root_dir, ".gitattributes"))
@@ -1501,7 +1466,7 @@ class LabBook(object):
             commit = self.git.commit(commit_msg)
 
             # Create detail record
-            adr = ActivityDetailRecord(ActivityDetailType.LABBOOK, show=False, importance=0)
+            adr = ActivityDetailRecord(ActivityDetailType.LABBOOK, show=False, importance=0, action=ActivityAction.EDIT)
             adr.add_value('text/plain', commit_msg)
 
             # Create activity record
@@ -1627,8 +1592,7 @@ class LabBook(object):
 
             t0 = time.time()
             try:
-                subprocess.run(['git', 'lfs', 'clone', remote_url], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                               check=True, cwd=lb_dir)
+                call_subprocess(['git', 'lfs', 'clone', remote_url], cwd=lb_dir)
                 self.git.set_working_directory(est_root_dir)
             except subprocess.CalledProcessError as e:
                 logger.error(e)
@@ -1655,7 +1619,7 @@ class LabBook(object):
 
     @time_profiler(logger)
     def list_local_labbooks(self, username: str,
-                            sort_mode: str = "az",
+                            sort_mode: str = "name",
                             reverse: bool = False) -> List[Dict[str, str]]:
         """Method to list available LabBooks
 
@@ -1665,7 +1629,7 @@ class LabBook(object):
             reverse(bool): Reverse sorting if True
 
         Supported sorting modes:
-            - az: naturally sort
+            - name: naturally sort
             - created_on: sort by creation date, newest first
             - modified_on: sort by modification date, newest first
 
@@ -1693,7 +1657,7 @@ class LabBook(object):
 
                 lb_item = {"owner": owner, "name": labbook}
 
-                if sort_mode == 'az':
+                if sort_mode == 'name':
                     lb_item['sort_val'] = labbook
                 elif sort_mode == 'created_on':
                     # get create data from yaml file
@@ -1790,14 +1754,16 @@ class LabBook(object):
         # Create commit
         if readme_exists:
             commit_msg = f"Updated LabBook README"
+            action = ActivityAction.EDIT
         else:
             commit_msg = f"Added README to LabBook"
+            action = ActivityAction.CREATE
 
         self.git.add(readme_file)
         commit = self.git.commit(commit_msg)
 
         # Create detail record
-        adr = ActivityDetailRecord(ActivityDetailType.LABBOOK, show=False, importance=0)
+        adr = ActivityDetailRecord(ActivityDetailType.LABBOOK, show=False, importance=0, action=action)
         adr.add_value('text/plain', commit_msg)
 
         # Create activity record
@@ -1826,4 +1792,3 @@ class LabBook(object):
                 contents = rf.read()
         
         return contents
-

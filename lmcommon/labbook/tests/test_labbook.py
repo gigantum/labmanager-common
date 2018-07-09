@@ -23,6 +23,7 @@ import os
 import yaml
 import time
 
+from lmcommon.files import FileOperations
 from lmcommon.labbook import LabBook, LabbookException
 from lmcommon.gitlib.git import GitAuthor
 from lmcommon.fixtures import mock_config_file, mock_labbook, remote_labbook_repo, sample_src_file
@@ -50,7 +51,6 @@ class TestLabBook(object):
         assert os.path.isdir(os.path.join(labbook_dir, ".gigantum", "activity", "log")) is True
         assert os.path.isdir(os.path.join(labbook_dir, ".gigantum", "activity", "index")) is True
         assert os.path.isfile(os.path.join(labbook_dir, ".gigantum", "buildinfo")) is True
-
 
         # Validate labbook data file
         with open(os.path.join(labbook_dir, ".gigantum", "labbook.yaml"), "rt") as data_file:
@@ -254,7 +254,7 @@ class TestLabBook(object):
         with pytest.raises(ValueError):
             lb1.list_local_labbooks(username="user1", sort_mode='asdf')
 
-        labbooks = lb1.list_local_labbooks(username="user1", reverse=True, sort_mode='az')
+        labbooks = lb1.list_local_labbooks(username="user1", reverse=True, sort_mode='name')
 
         assert len(labbooks) == 3
         assert labbooks[0]['name'] == 'labbook3'
@@ -583,22 +583,25 @@ class TestLabBook(object):
             newf.write(os.urandom(2 ** 24))
 
         assert 'input/sillyfile' in lb.git.status()['untracked']
-        lb._sweep_uncommitted_changes()
+        lb.sweep_uncommitted_changes()
         s = lb.git.status()
         assert all([len(s[key]) == 0 for key in s.keys()])
 
         with open(os.path.join(lb.root_dir, 'input', 'sillyfile'), 'wb') as newf:
             newf.write(os.urandom(2 ** 16))
         assert 'input/sillyfile' in [n[0] for n in lb.git.status()['unstaged']]
-        lb._sweep_uncommitted_changes()
+        lb.sweep_uncommitted_changes()
         s = lb.git.status()
         assert all([len(s[key]) == 0 for key in s.keys()])
         os.remove(os.path.join(lb.root_dir, 'input', 'sillyfile'))
         assert 'input/sillyfile' in [n[0] for n in lb.git.status()['unstaged']]
 
-        lb._sweep_uncommitted_changes()
+        lb.sweep_uncommitted_changes()
         s = lb.git.status()
         assert all([len(s[key]) == 0 for key in s.keys()])
+
+        assert any(['1 new file(s)' in l['message'] for l in lb.git.log()])
+
 
     def test_walkdir_with_favorites(self, mock_config_file, sample_src_file):
         lb = LabBook(mock_config_file[0])
@@ -606,9 +609,12 @@ class TestLabBook(object):
         dirs = ["code/cat_dir", "code/dog_dir"]
         for d in dirs:
             lb.makedir(d)
-        lb.insert_file('code', sample_src_file, '')
-        lb.insert_file('code', sample_src_file, 'dog_dir')
-        lb.insert_file('code', sample_src_file, 'cat_dir')
+
+        open('/tmp/dogfile', 'w').write('ddd')
+        open('/tmp/catfile', 'w').write('ccc')
+        FileOperations.insert_file(lb, 'code', sample_src_file)
+        FileOperations.insert_file(lb, 'code', '/tmp/dogfile', 'dog_dir')
+        FileOperations.insert_file(lb, 'code', '/tmp/catfile', 'cat_dir')
 
         sample_filename = os.path.basename(sample_src_file)
 
@@ -630,7 +636,7 @@ class TestLabBook(object):
         assert dir_walks[4]['is_dir'] is False
 
         lb.create_favorite("code", sample_filename, description="Fav 1")
-        lb.create_favorite("code", f"dog_dir/{sample_filename}", description="Fav 2")
+        lb.create_favorite("code", f"dog_dir/dogfile", description="Fav 2")
         lb.create_favorite("code", f"cat_dir/", description="Fav 3", is_dir=True)
 
         dir_walks = lb.walkdir('code')

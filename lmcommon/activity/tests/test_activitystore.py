@@ -23,7 +23,8 @@ import random
 from datetime import datetime, timedelta, timezone
 
 from lmcommon.labbook import LabBook
-from lmcommon.activity.records import ActivityType, ActivityRecord, ActivityDetailRecord, ActivityDetailType
+from lmcommon.activity.records import ActivityType, ActivityRecord, ActivityDetailRecord, ActivityDetailType,\
+    ActivityAction
 from lmcommon.activity import ActivityStore
 from lmcommon.fixtures import mock_config_with_activitystore
 
@@ -143,13 +144,13 @@ class TestActivityStore:
     def test_put_get_detail_record_with_tags(self, mock_config_with_activitystore):
         """Test to test storing and retrieving data from the activity detail db"""
         # Create test values
-        adr1 = ActivityDetailRecord(ActivityDetailType.CODE)
+        adr1 = ActivityDetailRecord(ActivityDetailType.CODE, action=ActivityAction.CREATE)
         adr1.show = True
         adr1.importance = 100
         adr1.add_value("text/plain", "first")
         adr1.tags = ['test1']
 
-        adr2 = ActivityDetailRecord(ActivityDetailType.CODE)
+        adr2 = ActivityDetailRecord(ActivityDetailType.CODE_EXECUTED, action=ActivityAction.EXECUTE)
         adr2.show = True
         adr2.importance = 0
         adr2.add_value("text/plain", "second")
@@ -173,6 +174,7 @@ class TestActivityStore:
         assert adr1.is_loaded == adr1_loaded.is_loaded is True
         assert adr1.data == adr1_loaded.data
         assert adr1.tags == adr1_loaded.tags
+        assert adr1.action == adr1_loaded.action == ActivityAction.CREATE
 
         assert adr2.key == adr2_loaded.key
         assert adr2.importance == adr2_loaded.importance
@@ -180,6 +182,7 @@ class TestActivityStore:
         assert adr2.is_loaded == adr2_loaded.is_loaded is True
         assert adr2.data == adr2_loaded.data
         assert adr2.tags == adr2_loaded.tags
+        assert adr2.action == adr2_loaded.action == ActivityAction.EXECUTE
 
     def test_put_get_detail_record_with_compression(self, mock_config_with_activitystore):
         """Test to test storing and retrieving data from the activity detail db w/ compression"""
