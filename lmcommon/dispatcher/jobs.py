@@ -100,6 +100,14 @@ def import_labboook_from_zip(archive_path: str, username: str, owner: str,
     Returns:
         str: directory path of imported labbook
     """
+
+    def update_meta(msg):
+        job = get_current_job()
+        if not job:
+            return
+        job.meta['feedback'] = msg
+        job.save_meta()
+
     p = os.getpid()
     logger = LMLogger.get_logger()
     logger.info(f"(Job {p}) Starting import_labbook_from_zip(archive_path={archive_path},"
@@ -108,10 +116,8 @@ def import_labboook_from_zip(archive_path: str, username: str, owner: str,
     lb: Optional[LabBook] = None
     new_lb_path = ""
     try:
-        job = get_current_job()
-        statusmsg = "Initializing"
-        job.meta['feedback'] = statusmsg
-        job.save_meta()
+        statusmsg = "Initializing..."
+        update_meta(statusmsg)
 
         if not os.path.isfile(archive_path):
             raise ValueError(f'Archive at {archive_path} is not a file or does not exist')
@@ -139,14 +145,12 @@ def import_labboook_from_zip(archive_path: str, username: str, owner: str,
             dest_path = lb_containing_dir
 
         statusmsg = f'{statusmsg}\nUnzipping Project Archive...'
-        job.meta['feedback'] = statusmsg
-        job.save_meta()
+        update_meta(statusmsg)
 
         call_subprocess(['unzip', archive_path, '-d', dest_path], cwd=lm_working_dir, check=True)
 
         statusmsg = f'{statusmsg}\nFinished Unzip, checking integrity...'
-        job.meta['feedback'] = statusmsg
-        job.save_meta()
+        update_meta(statusmsg)
 
         new_lb_path = os.path.join(lb_containing_dir, inferred_labbook_name)
         if not os.path.isdir(new_lb_path):
@@ -169,8 +173,7 @@ def import_labboook_from_zip(archive_path: str, username: str, owner: str,
         subprocess.check_output("git config core.fileMode false", cwd=lb.root_dir, shell=True)
 
         statusmsg = f'{statusmsg}\nCreating workspace branch...'
-        job.meta['feedback'] = statusmsg
-        job.save_meta()
+        update_meta(statusmsg)
 
         # This makes sure the working directory is set properly.
         sync_locally(lb, username=username)
@@ -192,8 +195,7 @@ def import_labboook_from_zip(archive_path: str, username: str, owner: str,
             lb.git.remove_remote('origin')
 
         statusmsg = f'{statusmsg}\nImport Complete'
-        job.meta['feedback'] = statusmsg
-        job.save_meta()
+        update_meta(statusmsg)
 
         logger.info(f"(Job {p}) LabBook {inferred_labbook_name} imported to {new_lb_path}")
 

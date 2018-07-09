@@ -195,7 +195,8 @@ class TestDispatcher(object):
             print(status)
             r = d.query_task(job_ref)
             print(r.meta)
-            assert r.meta.get('feedback')
+            if elapsed_time > 2:
+                assert r.meta.get('feedback')
             if status in ['success', 'failed', 'finished']:
                 print(r.exc_info)
                 break
