@@ -68,11 +68,10 @@ class TestLabbookFileOperations(object):
     def test_insert_and_make_intermediary_directories(self, mock_config_file, sample_src_file):
         lb = LabBook(mock_config_file[0])
         lb.new(owner={"username": "test"}, name="unittest-intermediary-dir", description="validate tests.")
-        bn = os.path.basename(sample_src_file)
-        FO.insert_file(lb, "code", sample_src_file, "/super/random/dir/inside")
-        p = os.path.join(lb.root_dir, 'code', "super/random/dir/inside")
+        FO.insert_file(lb, "code", sample_src_file, "/super/random/dir/inside.file")
+        p = os.path.join(lb.root_dir, 'code', "super/random/dir/inside.file")
         print(p)
-        assert os.path.exists(p)
+        assert os.path.isfile(p)
 
     def test_insert_file_fail_due_to_gitignore(self, mock_config_file):
         lb = LabBook(mock_config_file[0])
