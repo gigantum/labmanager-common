@@ -72,7 +72,7 @@ def build_docker_image(root_dir: str, override_image_tag: Optional[str], nocache
         override_image_tag: Tag of docker image; in general this should not be explicitly set.
         username: Username of active user.
         nocache: If True do not use docker cache.
-        feedback_callback:
+        feedback_callback: Optional method taking one argument (a string) to process each line of output
 
     Returns:
         A string container the short docker id of the newly built image.
