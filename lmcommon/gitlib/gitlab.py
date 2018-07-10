@@ -155,12 +155,15 @@ class GitLabManager(object):
 
         return user_id
 
-    def list_labbooks(self, sort_mode: str = "az", reverse: bool = False) -> List[Dict[str, Any]]:
+    def list_labbooks(self, order_by: str = 'name', sort_str: str = 'desc',
+                      page: int = 0, per_page: int = 20) -> List[Dict[str, Any]]:
         """Method to list all remote labbooks for a user
 
         Args:
-            sort_mode(sort_mode): String specifying how labbooks should be sorted
-            reverse(bool): Reverse sorting if True
+            order_by(str): String specifying how projects should be sorted
+            sort_str(str): string indicating order of results, desc or asc, for descending or ascending respectively
+            page(int): Page to query
+            per_page(int): Number of items to return per page
 
         Supported sorting modes:
             - az: naturally sort
@@ -170,9 +173,25 @@ class GitLabManager(object):
         Returns:
             bool
         """
+        # Prep request
+        if order_by == 'name':
+            order_by = 'name'
+        elif order_by == 'created_on':
+            order_by = 'created_at'
+        elif order_by == 'modified_on':
+            order_by = 'last_activity_at'
+        else:
+            raise ValueError(f"Unsupported order_by: {order_by}. Use `name`, `created_on`, `modified_on`")
+
+        if sort_str not in ['desc', 'asc']:
+            raise ValueError(f"Unsupported sort_str: {sort_str}. Use `desc`, `asc`")
+
+        query_url = f"https://{self.remote_host}/api/v4/projects?page={page}&" + \
+                    f"per_page={per_page}&order_by={order_by}&sort={sort_str}"
+
         # Call API to check for project
-        response = requests.get(f"https://{self.remote_host}/api/v4/projects/",
-                                headers={"PRIVATE-TOKEN": self.user_token}, timeout=10)
+        response = requests.get(query_url,
+                                headers={"PRIVATE-TOKEN": self.user_token}, timeout=30)
 
         if response.status_code == 200:
             # TODO: Add description after async task to populate description in GitLab is implemented
@@ -182,21 +201,11 @@ class GitLabManager(object):
                          "description": "",
                          "created_on": p.get("created_at"),
                          "modified_on": p.get("last_activity_at")} for p in response.json()]
-            if sort_mode == 'az':
-                labbooks = natsorted(labbooks, key=lambda x: x['labbook_name'], reverse=reverse)
 
-            elif sort_mode == 'created_on':
-                labbooks = sorted(labbooks, key=lambda x: x['created_on'], reverse=not reverse)
-
-            elif sort_mode == 'modified_on':
-                labbooks = sorted(labbooks, key=lambda x: x['modified_on'], reverse=not reverse)
-
-            else:
-                raise ValueError(f"Unsupported sort_mode: {sort_mode}")
             return labbooks
 
         else:
-            msg = f"Failed to list LabBooks. Status Code: {response.status_code}"
+            msg = f"Failed to list Projects. Status Code: {response.status_code}"
             logger.error(msg)
             logger.error(response.json())
             raise ValueError(msg)
