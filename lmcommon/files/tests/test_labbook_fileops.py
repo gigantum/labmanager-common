@@ -65,11 +65,14 @@ class TestLabbookFileOperations(object):
         assert new_file_data['key'] == f'testdir/{base_name}'
         assert new_file_data['is_dir'] is False
 
-    def test_insert_file_fail_1(self, mock_config_file, sample_src_file):
+    def test_insert_and_make_intermediary_directories(self, mock_config_file, sample_src_file):
         lb = LabBook(mock_config_file[0])
-        lb.new(owner={"username": "test"}, name="test-insert-fail", description="validate tests.")
-        with pytest.raises(FileNotFoundError):
-            FO.insert_file(lb, "code", sample_src_file, "/totally/invalid/dir")
+        lb.new(owner={"username": "test"}, name="unittest-intermediary-dir", description="validate tests.")
+        bn = os.path.basename(sample_src_file)
+        FO.insert_file(lb, "code", sample_src_file, "/super/random/dir/inside")
+        p = os.path.join(lb.root_dir, 'code', "super/random/dir/inside")
+        print(p)
+        assert os.path.exists(p)
 
     def test_insert_file_fail_due_to_gitignore(self, mock_config_file):
         lb = LabBook(mock_config_file[0])
