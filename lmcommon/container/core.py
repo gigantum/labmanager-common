@@ -117,9 +117,6 @@ def build_docker_image(root_dir: str, override_image_tag: Optional[str], nocache
                 # When build, final line is in form of "Successfully build 02faas3"
                 # There is no other (simple) way to grab the image ID
                 image_id = stream.split(' ')[-1]
-
-        #docker_image = get_docker_client().images.build(path=env_dir, tag=image_name, pull=True, nocache=nocache,
-        #                                                forcerm=True)
     except docker.errors.BuildError as e:
         raise ContainerBuildException(e)
 
