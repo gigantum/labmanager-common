@@ -100,6 +100,14 @@ def import_labboook_from_zip(archive_path: str, username: str, owner: str,
     Returns:
         str: directory path of imported labbook
     """
+
+    def update_meta(msg):
+        job = get_current_job()
+        if not job:
+            return
+        job.meta['feedback'] = msg
+        job.save_meta()
+
     p = os.getpid()
     logger = LMLogger.get_logger()
     logger.info(f"(Job {p}) Starting import_labbook_from_zip(archive_path={archive_path},"
@@ -108,6 +116,9 @@ def import_labboook_from_zip(archive_path: str, username: str, owner: str,
     lb: Optional[LabBook] = None
     new_lb_path = ""
     try:
+        statusmsg = "Initializing..."
+        update_meta(statusmsg)
+
         if not os.path.isfile(archive_path):
             raise ValueError(f'Archive at {archive_path} is not a file or does not exist')
 
@@ -133,7 +144,13 @@ def import_labboook_from_zip(archive_path: str, username: str, owner: str,
         else:
             dest_path = lb_containing_dir
 
+        statusmsg = f'{statusmsg}\nUnzipping Project Archive...'
+        update_meta(statusmsg)
+
         call_subprocess(['unzip', archive_path, '-d', dest_path], cwd=lm_working_dir, check=True)
+
+        statusmsg = f'{statusmsg}\nFinished Unzip, checking integrity...'
+        update_meta(statusmsg)
 
         new_lb_path = os.path.join(lb_containing_dir, inferred_labbook_name)
         if not os.path.isdir(new_lb_path):
@@ -155,6 +172,9 @@ def import_labboook_from_zip(archive_path: str, username: str, owner: str,
         # Ignore execution bit changes (due to moving between windows/mac/linux)
         subprocess.check_output("git config core.fileMode false", cwd=lb.root_dir, shell=True)
 
+        statusmsg = f'{statusmsg}\nCreating workspace branch...'
+        update_meta(statusmsg)
+
         # This makes sure the working directory is set properly.
         sync_locally(lb, username=username)
 
@@ -173,6 +193,9 @@ def import_labboook_from_zip(archive_path: str, username: str, owner: str,
         # Also, remove any lingering remotes. If it gets re-published, it will be to a new remote.
         if lb.has_remote:
             lb.git.remove_remote('origin')
+
+        statusmsg = f'{statusmsg}\nImport Complete'
+        update_meta(statusmsg)
 
         logger.info(f"(Job {p}) LabBook {inferred_labbook_name} imported to {new_lb_path}")
 
@@ -209,7 +232,20 @@ def build_labbook_image(path: str, username: Optional[str] = None,
     logger.info(f"Starting build_labbook_image({path}, {username}, {tag}, {nocache}) in pid {os.getpid()}")
 
     try:
-        image_id = build_image(path, override_image_tag=tag, nocache=nocache, username=username)
+        job = get_current_job()
+
+        def save_metadata_callback(line: str) -> None:
+            try:
+                if not line:
+                    return
+                job.meta['feedback'] = (job.meta.get('feedback') or '') + line + '\n'
+                job.save_meta()
+            except Exception as e:
+                logger.error(e)
+
+        image_id = build_image(path, override_image_tag=tag, nocache=nocache, username=username,
+                               feedback_callback=save_metadata_callback)
+
         logger.info(f"Completed build_labbook_image in pid {os.getpid()}: {image_id}")
         return image_id
     except Exception as e:

@@ -21,7 +21,9 @@ import os
 import docker
 import docker.errors
 import time
-from typing import Optional, List, Tuple, Any, Dict
+import json
+from typing import Callable, Optional, List, Tuple, Any, Dict
+from docker import APIClient
 
 from lmcommon.configuration import get_docker_client
 from lmcommon.logging import LMLogger
@@ -54,7 +56,7 @@ def get_container_ip(lb_key: str) -> str:
 
 
 def build_docker_image(root_dir: str, override_image_tag: Optional[str], nocache: bool = False,
-                       username: Optional[str] = None) -> str:
+                       username: Optional[str] = None, feedback_callback: Optional[Callable] = None) -> str:
     """
     Build a new docker image from the Dockerfile at the given directory, give this image
     the name defined by the image_name argument.
@@ -70,6 +72,7 @@ def build_docker_image(root_dir: str, override_image_tag: Optional[str], nocache
         override_image_tag: Tag of docker image; in general this should not be explicitly set.
         username: Username of active user.
         nocache: If True do not use docker cache.
+        feedback_callback: Optional method taking one argument (a string) to process each line of output
 
     Returns:
         A string container the short docker id of the newly built image.
@@ -98,12 +101,29 @@ def build_docker_image(root_dir: str, override_image_tag: Optional[str], nocache
         pass
 
     try:
-        docker_image = get_docker_client().images.build(path=env_dir, tag=image_name, pull=True, nocache=nocache,
-                                                        forcerm=True)
+        image_id = None
+        # From: https://docker-py.readthedocs.io/en/stable/api.html#docker.api.build.BuildApiMixin.build
+        # This builds the image and generates output status text.
+        for line in docker.from_env().api.build(path=env_dir, tag=image_name, pull=True, nocache=nocache, forcerm=True):
+            ldict = json.loads(line)
+            stream = (json.loads(line).get("stream") or "").strip()
+            if feedback_callback:
+                feedback_callback(stream)
+            status = (json.loads(line).get("status") or "").strip()
+            if feedback_callback:
+                feedback_callback(status)
+
+            if 'Successfully built'.lower() in stream.lower():
+                # When build, final line is in form of "Successfully build 02faas3"
+                # There is no other (simple) way to grab the image ID
+                image_id = stream.split(' ')[-1]
     except docker.errors.BuildError as e:
         raise ContainerBuildException(e)
 
-    return docker_image.short_id.split(':')[1]
+    if not image_id:
+        raise ContainerBuildException(f"Cannot determine docker image on LabBook from {root_dir}")
+
+    return image_id
 
 
 def start_labbook_container(labbook_root: str, config_path: str,
