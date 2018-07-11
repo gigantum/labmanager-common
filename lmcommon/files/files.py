@@ -166,6 +166,9 @@ class FileOperations(object):
         if os.path.isfile(os.path.join(full_dst, os.path.basename(src_file))):
             os.remove(os.path.join(full_dst, os.path.basename(src_file)))
 
+        if not os.path.isdir(os.path.dirname(full_dst)):
+            os.makedirs(os.path.dirname(full_dst), exist_ok=True)
+
         fdst = shutil.move(src_file, full_dst)
         relpath = fdst.replace(os.path.join(labbook.root_dir, section), '')
         return labbook.get_file_info(section, relpath)
