@@ -178,7 +178,8 @@ def start_labbook_container(labbook_root: str, config_path: str,
 
     docker_client = get_docker_client()
     container_id = docker_client.containers.run(tag, detach=True, init=True, name=tag,
-                                                environment=env_var, volumes=volumes_dict, **resource_args).id
+                                                environment=env_var, volumes=volumes_dict,
+                                                **resource_args).id
 
     labmanager_ip = ""
     try:
