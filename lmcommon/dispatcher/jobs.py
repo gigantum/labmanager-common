@@ -272,9 +272,9 @@ def start_labbook_container(root: str, config_path:str, username: Optional[str] 
                 f"override_image_id={override_image_id}) in pid {os.getpid()}")
 
     try:
-        c_id, pmap = start_container(labbook_root=root, config_path=config_path,
-                                    override_image_id=override_image_id, username=username)
-        logger.info(f"Completed start_labbook_container in pid {os.getpid()}: {c_id}, port mapping={str(pmap)}")
+        c_id = start_container(labbook_root=root, config_path=config_path,
+                               override_image_id=override_image_id, username=username)
+        logger.info(f"Completed start_labbook_container in pid {os.getpid()}: {c_id}")
         return c_id
     except Exception as e:
         logger.error("Error on launch_docker_container in pid {}: {}".format(os.getpid(), e))

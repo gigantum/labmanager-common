@@ -128,7 +128,7 @@ def build_docker_image(root_dir: str, override_image_tag: Optional[str], nocache
 
 def start_labbook_container(labbook_root: str, config_path: str,
                             override_image_id: Optional[str] = None,
-                            username: Optional[str] = None) -> Tuple[str, Dict[str, Any]]:
+                            username: Optional[str] = None) -> str:
     """ Start a Docker container from a given image_name.
 
     Args:
@@ -151,13 +151,6 @@ def start_labbook_container(labbook_root: str, config_path: str,
         tag = infer_docker_image_name(lb.name, lb.owner['username'], username)
     else:
         tag = override_image_id
-
-    # List of tuples where the first entry is the CONTAINER port and second is the desired HOST port
-    # TODO - This is the hard-coded ports for JupyterLab. This method should be parameterized
-    # with port tuples in the future. (It cannot directly query other top-level modules otherwise
-    # a circular dependency will occur)
-    opened_ports: List[int] = [8888]
-    exposed_ports = {f"{port}/tcp": port for port in opened_ports}
 
     mnt_point = labbook_root.replace('/mnt/gigantum', os.environ['HOST_WORK_DIR'])
     volumes_dict = {
@@ -184,8 +177,9 @@ def start_labbook_container(labbook_root: str, config_path: str,
         resource_args["nano_cpus"] = round(cpu_limit * 1e9)
 
     docker_client = get_docker_client()
-    container_id = docker_client.containers.run(tag, detach=True, init=True, name=tag, ports=exposed_ports,
-                                                environment=env_var, volumes=volumes_dict, **resource_args).id
+    container_id = docker_client.containers.run(tag, detach=True, init=True, name=tag,
+                                                environment=env_var, volumes=volumes_dict,
+                                                **resource_args).id
 
     labmanager_ip = ""
     try:
@@ -204,7 +198,7 @@ def start_labbook_container(labbook_root: str, config_path: str,
     else:
         logger.error("After 10 seconds could not write IP to labmanager container."
                      f" Container status = {docker_client.containers.get(container_id).status}")
-    return container_id, exposed_ports
+    return container_id
 
 
 def stop_labbook_container(container_id: str) -> bool:
