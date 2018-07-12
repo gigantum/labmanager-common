@@ -105,7 +105,9 @@ def import_labboook_from_zip(archive_path: str, username: str, owner: str,
         job = get_current_job()
         if not job:
             return
-        job.meta['feedback'] = msg
+        m = job.meta
+        m['feedback'] = msg
+        job.meta = m
         job.save_meta()
 
     p = os.getpid()
@@ -238,7 +240,9 @@ def build_labbook_image(path: str, username: Optional[str] = None,
             try:
                 if not line:
                     return
-                job.meta['feedback'] = (job.meta.get('feedback') or '') + line + '\n'
+                m = job.meta
+                m['feedback'] = (job.meta.get('feedback') or '') + line + '\n'
+                job.meta = m
                 job.save_meta()
             except Exception as e:
                 logger.error(e)
