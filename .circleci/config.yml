@@ -2,7 +2,7 @@ version: 2
 jobs:
   build:
     docker:
-      - image: gigantum/circleci-common:df4dbd9a-2018-07-02
+      - image: gigantum/circleci-common:5d0beda2-2018-07-13
     steps:
       - checkout
       - setup_remote_docker

@@ -55,7 +55,7 @@ class TestPipPackageManager(object):
         username = build_lb_image_for_env[1]
         result = mrg.latest_version("gigantum", lb, username)
 
-        assert result == "0.10"
+        assert result == "0.11"
 
     def test_latest_versions(self, build_lb_image_for_env):
         """Test latest_version command"""
@@ -64,7 +64,7 @@ class TestPipPackageManager(object):
         username = build_lb_image_for_env[1]
         gig_res, req_res = mrg.latest_versions(["gigantum", "requests"], lb, username)
 
-        assert gig_res == "0.10"
+        assert gig_res == "0.11"
         assert req_res.startswith('2.')
 
     def test_list_installed_packages(self, build_lb_image_for_env):

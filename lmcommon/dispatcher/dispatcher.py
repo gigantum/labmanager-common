@@ -288,13 +288,11 @@ class Dispatcher(object):
         try:
             dep_job_str = dependent_job.key_str.split(':')[-1] if dependent_job else None
             rq_job_ref = self._job_queue.enqueue(method_reference, args=args, kwargs=kwargs, timeout=timeout,
-                                                 depends_on=dep_job_str)
+                                                 depends_on=dep_job_str, meta=metadata)
         except Exception as e:
             logger.error("Cannot enqueue job `{}`: {}".format(method_reference.__name__, e))
             raise
 
-        rq_job_ref.meta = metadata
-        rq_job_ref.save_meta()
         rq_job_key_str = rq_job_ref.key.decode()
         logger.info(
             "Dispatched job `{}` to queue '{}', job={}".format(method_reference.__name__, self._job_queue.name,
