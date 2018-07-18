@@ -20,6 +20,7 @@ container:
 
 # Authentication Configuration
 auth:
+  client_id: 0Ajo8Ov6Qriafo0xVpSyejWy1pwNWdhk
   provider_domain: gigantum.auth0.com
   audience: api.gigantum.io
   signing_algorithm: RS256

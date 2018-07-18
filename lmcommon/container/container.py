@@ -31,7 +31,6 @@ import confhttpproxy
 from lmcommon.configuration import get_docker_client, Configuration
 from lmcommon.logging import LMLogger
 from lmcommon.labbook import LabBook, LabbookException
-from lmcommon.portmap import PortMap
 
 from lmcommon.container.utils import infer_docker_image_name
 from lmcommon.container.exceptions import ContainerException
@@ -160,12 +159,9 @@ class ContainerOperations(object):
 
     @classmethod
     def start_container(cls, labbook: LabBook, username: Optional[str] = None,
-                        override_image_tag: Optional[str] = None) -> Tuple[LabBook, str, Dict[Any, Any]]:
+                        override_image_tag: Optional[str] = None) -> Tuple[LabBook, str]:
         """ Start a Docker container for a given labbook LabBook. Return the new labbook instances
             and a list of TCP port mappings.
-
-            Return list of [(9999, 8888), (7777, 1234)] implies port 9999 on the HOST machine maps
-            to 8888 of the labbook container, etc.
 
         Args:
             labbook: Subject labbook
@@ -173,16 +169,15 @@ class ContainerOperations(object):
             override_image_tag: If set, does not automatically infer container name.
 
         Returns:
-            A tuple containing the labbook, Docker container id, and port mapping.
+            A tuple containing the labbook, Docker container id
         """
         if not os.environ.get('HOST_WORK_DIR'):
             raise ValueError("Environment variable HOST_WORK_DIR must be set")
 
-        container_id, pmap = start_labbook_container(labbook_root=labbook.root_dir,
-                                                     config_path=labbook.labmanager_config.config_file,
-                                                     override_image_id=override_image_tag,
-                                                     username=username)
-        return labbook, container_id, pmap
+        container_id = start_labbook_container(labbook_root=labbook.root_dir,
+                                               config_path=labbook.labmanager_config.config_file,
+                                               override_image_id=override_image_tag, username=username)
+        return labbook, container_id
 
     @classmethod
     def stop_container(cls, labbook: LabBook, username: Optional[str] = None) -> Tuple[LabBook, bool]:
@@ -200,9 +195,6 @@ class ContainerOperations(object):
         n = infer_docker_image_name(labbook_name=labbook.name, owner=labbook.owner['username'], username=username)
         logger.info(f"Stopping {str(labbook)} ({n})")
 
-        pm = PortMap(labbook.labmanager_config)
-        pm.release(labbook.key)
-
         try:
             stopped = stop_labbook_container(n)
         finally:
@@ -213,7 +205,7 @@ class ContainerOperations(object):
         return labbook, stopped
 
     @classmethod
-    def get_labbook_ip(cls, labbook: LabBook, username: str) -> Tuple[str, int]:
+    def get_labbook_ip(cls, labbook: LabBook, username: str) -> str:
         """Return the IP on the docker network of the LabBook container
 
         Args:
@@ -221,13 +213,12 @@ class ContainerOperations(object):
             username: Username of active user
 
         Returns:
-            Tuple of externally facing IP and port
+            Externally facing IP
         """
         docker_key = infer_docker_image_name(labbook_name=labbook.name,
                                              owner=labbook.owner['username'],
                                              username=username)
-        extport = PortMap(labbook.labmanager_config).lookup(labbook.key)[1]
-        return get_container_ip(docker_key), extport
+        return get_container_ip(docker_key)
 
     @classmethod
     def start_dev_tool(

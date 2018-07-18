@@ -38,7 +38,7 @@ class BrowserIdentityManager(IdentityManager):
         IdentityManager.__init__(self, config_obj=config_obj)
         self.auth_dir = os.path.join(self.config.config['git']['working_directory'], '.labmanager', 'identity')
 
-    def is_authenticated(self, access_token: Optional[str] = None) -> bool:
+    def is_authenticated(self, access_token: Optional[str] = None, id_token: Optional[str] = None) -> bool:
         """Method to check if the user is currently authenticated in the context of this identity manager
 
         Returns:
@@ -47,7 +47,7 @@ class BrowserIdentityManager(IdentityManager):
         return self.is_token_valid(access_token)
 
     def is_token_valid(self, access_token: Optional[str] = None) -> bool:
-        """Method to check if the user's Auth0 session is still valid
+        """Method to check if the user's access token session is still valid
 
         Returns:
             bool
@@ -56,44 +56,38 @@ class BrowserIdentityManager(IdentityManager):
             return False
         else:
             try:
-                _ = self.validate_access_token(access_token)
+                _ = self.validate_jwt_token(access_token, self.config.config['auth']['audience'])
             except AuthenticationError:
                 return False
 
             return True
 
-    def get_user_profile(self, access_token: Optional[str] = None) -> Optional[User]:
-        """Method to authenticate a user by verifying the jwt signiture OR loading from backend storage
+    def get_user_profile(self, access_token: Optional[str] = None, id_token: Optional[str] = None) -> Optional[User]:
+        """Method to get the current logged in user profile info
 
         Args:
-            access_token(str): JSON web token from Auth0
+            access_token(str): API JSON web token from Auth0
+            id_token(str): ID JSON web token from Auth0
 
         Returns:
             User
         """
-        if not access_token:
+        if access_token is None or id_token is None:
             err_dict = {"code": "missing_token",
                         "description": "JWT must be provided to authenticate user if no local "
                                        "stored identity is available"}
             raise AuthenticationError(err_dict, 401)
 
-        # Validate JWT signature
-        _ = self.validate_access_token(access_token)
+        # Validate JWT token
+        token_payload = self.validate_jwt_token(id_token, self.config.config['auth']['client_id'],
+                                                access_token=access_token)
 
-        # Go get the user profile data
-        url = "https://" + self.config.config['auth']['provider_domain'] + "/userinfo"
-        response = requests.get(url, headers={'Authorization': f'Bearer {access_token}'})
-        if response.status_code != 200:
-            AuthenticationError({"code": "profile_unauthorized",
-                                 "description": "Failed to get user profile data"}, 401)
-        user_profile = response.json()
-
-        # Create user identity
+        # Create user identity instance
         self.user = User()
-        self.user.email = self._get_profile_attribute(user_profile, "email", required=True)
-        self.user.username = self._get_profile_attribute(user_profile, "nickname", required=True)
-        self.user.given_name = self._get_profile_attribute(user_profile, "given_name", required=False)
-        self.user.family_name = self._get_profile_attribute(user_profile, "family_name", required=False)
+        self.user.email = self._get_profile_attribute(token_payload, "email", required=True)
+        self.user.username = self._get_profile_attribute(token_payload, "nickname", required=True)
+        self.user.given_name = self._get_profile_attribute(token_payload, "given_name", required=False)
+        self.user.family_name = self._get_profile_attribute(token_payload, "family_name", required=False)
 
         # Check if it's the first time this user has logged into this instance
         self._check_first_login(self.user.username, access_token)
@@ -108,4 +102,4 @@ class BrowserIdentityManager(IdentityManager):
         """
         self.user = None
         self.rsa_key = None
-        logger.info("Logout No-Op.")
+        logger.info("Logout complete.")

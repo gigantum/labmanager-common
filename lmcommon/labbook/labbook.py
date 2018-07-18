@@ -1611,7 +1611,7 @@ class LabBook(object):
         self.from_directory(est_root_dir)
 
     def list_local_labbooks(self, username: str,
-                            sort_mode: str = "az",
+                            sort_mode: str = "name",
                             reverse: bool = False) -> List[Dict[str, str]]:
         """Method to list available LabBooks
 
@@ -1621,7 +1621,7 @@ class LabBook(object):
             reverse(bool): Reverse sorting if True
 
         Supported sorting modes:
-            - az: naturally sort
+            - name: naturally sort
             - created_on: sort by creation date, newest first
             - modified_on: sort by modification date, newest first
 
@@ -1649,7 +1649,7 @@ class LabBook(object):
 
                 lb_item = {"owner": owner, "name": labbook}
 
-                if sort_mode == 'az':
+                if sort_mode == 'name':
                     lb_item['sort_val'] = labbook
                 elif sort_mode == 'created_on':
                     # get create data from yaml file

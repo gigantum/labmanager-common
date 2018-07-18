@@ -30,10 +30,10 @@ from lmcommon.auth import User
 
 
 class TestIdentityBrowser(object):
+    # TODO: Possibly move to integration tests or fully mock since these tests make a call out to Auth0
 
     def test_is_session_valid(self, mock_config_file_with_auth_browser):
         """test check for valid session"""
-        # TODO: Possibly move to integration tests or fully mock since this makes a call out to Auth0
         config = Configuration(mock_config_file_with_auth_browser[0])
         mgr = get_identity_manager(config)
         assert type(mgr) == BrowserIdentityManager
@@ -43,11 +43,7 @@ class TestIdentityBrowser(object):
         assert mgr.is_token_valid(None) is False
         assert mgr.is_token_valid("asdfasdfasdf") is False
 
-        # Go get a JWT for the test user from the dev auth client (real users are not in this DB)
-        response = requests.post("https://gigantum.auth0.com/oauth/token", json=mock_config_file_with_auth_browser[2])
-        token_data = response.json()
-
-        assert mgr.is_token_valid(token_data['access_token']) is True
+        assert mgr.is_token_valid(mock_config_file_with_auth_browser[2]['access_token']) is True
         assert mgr.rsa_key is not None
 
     def test_is_authenticated_token(self, mock_config_file_with_auth_browser):
@@ -62,11 +58,7 @@ class TestIdentityBrowser(object):
         assert mgr.is_authenticated(None) is False
         assert mgr.is_authenticated("asdfasdfa") is False
 
-        # Go get a JWT for the test user from the dev auth client (real users are not in this DB)
-        response = requests.post("https://gigantum.auth0.com/oauth/token", json=mock_config_file_with_auth_browser[2])
-        token_data = response.json()
-
-        assert mgr.is_authenticated(token_data['access_token']) is True
+        assert mgr.is_authenticated(mock_config_file_with_auth_browser[2]['access_token']) is True
 
         # Second access should fail since not cached
         mgr2 = get_identity_manager(config)
@@ -75,22 +67,20 @@ class TestIdentityBrowser(object):
 
     def test_get_user_profile(self, mock_config_file_with_auth_browser):
         """test getting a user profile from Auth0"""
-        # TODO: Possibly move to integration tests or fully mock since this makes a call out to Auth0
         config = Configuration(mock_config_file_with_auth_browser[0])
         mgr = get_identity_manager(config)
         assert type(mgr) == BrowserIdentityManager
+        # Don't check at_hash claim due to password grant not setting it in the token
+        mgr.validate_at_hash_claim = False
 
         # Load User
         with pytest.raises(AuthenticationError):
             # Should fail without a token
             mgr.get_user_profile()
 
-        # Go get a JWT for the test user from the dev auth client (real users are not in this DB)
-        response = requests.post("https://gigantum.auth0.com/oauth/token", json=mock_config_file_with_auth_browser[2])
-        token_data = response.json()
-
         # Load User
-        u = mgr.get_user_profile(token_data['access_token'])
+        u = mgr.get_user_profile(mock_config_file_with_auth_browser[2]['access_token'],
+                                 mock_config_file_with_auth_browser[2]['id_token'])
         assert type(u) == User
         assert u.username == "johndoe"
         assert u.email == "john.doe@gmail.com"

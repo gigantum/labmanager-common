@@ -5,5 +5,5 @@
   "audience": "TEST_API_AUDIENCE",
   "client_id": "CLIENT_ID",
   "client_secret": "CLIENT_SECRET",
-  "scope": "openid"
+  "scope": "openid profile email user_metadata"
 }

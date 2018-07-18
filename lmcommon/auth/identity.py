@@ -64,6 +64,11 @@ class IdentityManager(metaclass=abc.ABCMeta):
         # The User instance containing user details
         self._user: Optional[User] = None
 
+        # Always validate the at_hash claim, except when testing due to the password grant not returning the at_hash
+        # claim in Auth0 (which is used during testing)
+        # TODO: This should be able to be removed once jose merges #76
+        self.validate_at_hash_claim = True
+
     @property
     def user(self) -> Optional[User]:
         if self._user:
@@ -75,7 +80,7 @@ class IdentityManager(metaclass=abc.ABCMeta):
     def user(self, value: User) -> None:
         self._user = value
 
-    def _check_first_login(self, username: Optional[str], access_token: str) -> None:
+    def _check_first_login(self, username: Optional[str], access_token: Optional[str]) -> None:
         """Method to check if this is the first time a user has logged in. If so, import the demo labbook
 
         All child classes should place this method at the end of their `get_user_profile()` implementation
@@ -88,6 +93,9 @@ class IdentityManager(metaclass=abc.ABCMeta):
 
         if not username:
             raise ValueError("Cannot check first login without a username set")
+
+        if not access_token:
+            raise ValueError("Cannot check first login without a valid access_token")
 
         if self.config.config['core']['import_demo_on_first_login']:
             user_dir = os.path.join(working_directory, username)
@@ -143,7 +151,7 @@ class IdentityManager(metaclass=abc.ABCMeta):
         """Method to get the public key for JWT signing
 
         Args:
-            id_token(str): The JSON Web Token recieved from the identity provider
+            id_token(str): The JSON Web Token received from the identity provider
 
         Returns:
             dict
@@ -191,7 +199,7 @@ class IdentityManager(metaclass=abc.ABCMeta):
         return rsa_key
 
     @staticmethod
-    def _get_profile_attribute(profile_data: Dict[str, str], attribute: str,
+    def _get_profile_attribute(profile_data: Optional[Dict[str, str]], attribute: str,
                                required: bool = True) -> Optional[str]:
         """Method to get a profile attribute, and if required, raise exception if missing.
 
@@ -203,49 +211,67 @@ class IdentityManager(metaclass=abc.ABCMeta):
         Returns:
             str
         """
-        if attribute in profile_data.keys():
-            if profile_data[attribute]:
-                return profile_data[attribute]
+        if profile_data is not None:
+            if attribute in profile_data.keys():
+                if profile_data[attribute]:
+                    return profile_data[attribute]
+                else:
+                    if required:
+                        raise AuthenticationError({"code": "missing_data",
+                                    "description": f"The required field `{attribute}` was missing from the user profile"},
+                                            401)
+                    else:
+                        return None
             else:
                 if required:
                     raise AuthenticationError({"code": "missing_data",
-                                "description": f"The required field `{attribute}` was missing from the user profile"},
-                                        401)
+                              "description": f"The required field `{attribute}` was missing from the user profile"}, 401)
                 else:
                     return None
         else:
-            if required:
-                raise AuthenticationError({"code": "missing_data",
-                          "description": f"The required field `{attribute}` was missing from the user profile"}, 401)
-            else:
-                return None
+            return None
 
-    def validate_access_token(self, access_token: str) -> Optional[Dict[str, str]]:
-        """Method to parse and validate an access token
+    def validate_jwt_token(self, token: str, audience: str,
+                           access_token: Optional[str] = None,
+                           limited_validation=False) -> Optional[Dict[str, str]]:
+        """Method to parse and validate an json web token
 
         Args:
-            access_token(str):
+            token(str): A JWT (id or access)
+            audience(str): The OAuth audience
+            access_token(str): JWT access token required to validate an ID token. OK to omit if token == access_token
+            limited_validation(bool): USE WITH CAUTION - If true skip some claims so cached ID tokens will still work.
 
         Returns:
             User
         """
         # Get public RSA key
         if not self.rsa_key:
-            self.rsa_key = self._get_jwt_public_key(access_token)
+            self.rsa_key = self._get_jwt_public_key(token)
 
         if self.rsa_key:
             try:
-                payload = jwt.decode(access_token, self.rsa_key,
-                                     algorithms=self.config.config['auth']['signing_algorithm'],
-                                     audience=self.config.config['auth']['audience'],
-                                     issuer="https://" + self.config.config['auth']['provider_domain'] + "/")
+                if limited_validation is False:
+                    payload = jwt.decode(token, self.rsa_key,
+                                         algorithms=self.config.config['auth']['signing_algorithm'],
+                                         audience=audience,
+                                         issuer="https://" + self.config.config['auth']['provider_domain'] + "/",
+                                         access_token=access_token,
+                                         options={"verify_at_hash": self.validate_at_hash_claim})
+                else:
+                    payload = jwt.decode(token, self.rsa_key,
+                                         algorithms=self.config.config['auth']['signing_algorithm'],
+                                         audience=audience,
+                                         issuer="https://" + self.config.config['auth']['provider_domain'] + "/",
+                                         options={"verify_exp": False,
+                                                  "verify_at_hash": False})
 
                 return payload
 
             except jwt.ExpiredSignatureError:
                 raise AuthenticationError({"code": "token_expired",
                                            "description": "token is expired"}, 401)
-            except jwt.JWTClaimsError:
+            except jwt.JWTClaimsError as err:
                 raise AuthenticationError({"code": "invalid_claims",
                                            "description":
                                                "incorrect claims, please check the audience and issuer"}, 401)
@@ -256,8 +282,12 @@ class IdentityManager(metaclass=abc.ABCMeta):
             raise AuthenticationError({"code": "invalid_header", "description": "Unable to find appropriate key"}, 400)
 
     @abc.abstractmethod
-    def is_authenticated(self, access_token: Optional[str] = None) -> bool:
+    def is_authenticated(self, access_token: Optional[str] = None, id_token: Optional[str] = None) -> bool:
         """Method to check if the user is currently authenticated in the context of this identity manager
+
+        Args:
+            access_token(str): (Optional) API access JSON web token from Auth0
+            id_token(str): (Optional) ID JSON web token from Auth0
 
         Returns:
             bool
@@ -274,11 +304,12 @@ class IdentityManager(metaclass=abc.ABCMeta):
         raise NotImplemented
 
     @abc.abstractmethod
-    def get_user_profile(self, access_token: Optional[str] = None) -> Optional[User]:
-        """Method to authenticate a user
+    def get_user_profile(self,  access_token: Optional[str] = None, id_token: Optional[str] = None) -> Optional[User]:
+        """Method to get the current logged in user profile info
 
         Args:
-            access_token(str):
+            access_token(str): API access JSON web token from Auth0
+            id_token(str): ID JSON web token from Auth0
 
         Returns:
             User

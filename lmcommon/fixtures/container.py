@@ -56,10 +56,10 @@ def build_lb_image_for_jupyterlab(mock_config_with_repo):
 
     try:
         lb, docker_image_id = ContainerOperations.build_image(labbook=lb, username="unittester")
-        lb, container_id, port_maps = ContainerOperations.start_container(lb, username="unittester")
+        lb, container_id = ContainerOperations.start_container(lb, username="unittester")
 
         assert isinstance(container_id, str)
-        yield lb, ib, client, docker_image_id, container_id, port_maps, 'unittester'
+        yield lb, ib, client, docker_image_id, container_id, None, 'unittester'
 
         try:
             _, s = ContainerOperations.stop_container(labbook=lb, username="unittester")

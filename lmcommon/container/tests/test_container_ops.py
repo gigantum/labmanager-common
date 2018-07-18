@@ -79,14 +79,6 @@ class TestContainerOps(object):
         result = ContainerOperations.run_command("/bin/false", my_lb, username="unittester")
         assert result.decode().strip() == ""
 
-    def test_start_container(self, build_lb_image_for_jupyterlab):
-        # Check the resulting port mapping to confirm there are some mapped ports in there.
-        # At the moment, I don't know how to connect to these from the driver container.
-        # Maybe randal can figure it out.
-        r = build_lb_image_for_jupyterlab[5]
-        pprint.pprint(f'{r} ({type(r)})')
-        assert any(k == '8888/tcp' and r[k] for k in r.keys())
-
     def test_old_dockerfile_removed_when_new_build_fails(self, build_lb_image_for_jupyterlab):
         # Test that when a new build fails, old images are removed so they cannot be launched.
         my_lb = build_lb_image_for_jupyterlab[0]

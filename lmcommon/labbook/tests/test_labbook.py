@@ -52,7 +52,6 @@ class TestLabBook(object):
         assert os.path.isdir(os.path.join(labbook_dir, ".gigantum", "activity", "index")) is True
         assert os.path.isfile(os.path.join(labbook_dir, ".gigantum", "buildinfo")) is True
 
-
         # Validate labbook data file
         with open(os.path.join(labbook_dir, ".gigantum", "labbook.yaml"), "rt") as data_file:
             data = yaml.load(data_file)
@@ -255,7 +254,7 @@ class TestLabBook(object):
         with pytest.raises(ValueError):
             lb1.list_local_labbooks(username="user1", sort_mode='asdf')
 
-        labbooks = lb1.list_local_labbooks(username="user1", reverse=True, sort_mode='az')
+        labbooks = lb1.list_local_labbooks(username="user1", reverse=True, sort_mode='name')
 
         assert len(labbooks) == 3
         assert labbooks[0]['name'] == 'labbook3'

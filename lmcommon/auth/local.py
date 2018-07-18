@@ -21,9 +21,9 @@ from lmcommon.auth.identity import IdentityManager, User, AuthenticationError
 from lmcommon.configuration import Configuration
 import os
 import json
-import requests
+import jose
 
-from typing import Optional, Dict
+from typing import Optional
 
 from lmcommon.logging import LMLogger
 logger = LMLogger.get_logger()
@@ -45,26 +45,26 @@ class LocalIdentityManager(IdentityManager):
         if self._user:
             return self._user
         else:
-            return self._load_user()
+            return self._load_user(None)
 
     @user.setter
     def user(self, value: User) -> None:
         self._user = value
 
-    def is_authenticated(self, access_token: Optional[str] = None) -> bool:
+    def is_authenticated(self, access_token: Optional[str] = None, id_token: Optional[str] = None) -> bool:
         """Method to check if the user is currently authenticated in the context of this identity manager
 
         Returns:
             bool
         """
-        user = self._load_user()
+        user = self._load_user(id_token)
         if user:
             return True
         else:
             is_valid = self.is_token_valid(access_token)
             if is_valid:
                 # Load the user profile now so the user doesn't have to log in again later
-                self.get_user_profile(access_token)
+                self.get_user_profile(access_token, id_token)
 
             return is_valid
 
@@ -78,52 +78,45 @@ class LocalIdentityManager(IdentityManager):
             return False
         else:
             try:
-                _ = self.validate_access_token(access_token)
+                _ = self.validate_jwt_token(access_token, self.config.config['auth']['audience'])
             except AuthenticationError:
                 return False
 
             return True
 
-    def get_user_profile(self, access_token: Optional[str] = None) -> Optional[User]:
-        """Method to authenticate a user by verifying the jwt signature OR loading from backend storage
+    def get_user_profile(self, access_token: Optional[str] = None, id_token: Optional[str] = None) -> Optional[User]:
+        """Method to get the current logged in user profile info
 
         Args:
-            access_token(str): JSON web token from Auth0
+            access_token(str): API JSON web token from Auth0
+            id_token(str): ID JSON web token from Auth0
 
         Returns:
             User
         """
         # Check if user is already loaded or stored locally
-        user = self._load_user()
+        user = self._load_user(id_token)
         if user:
             return user
         else:
-            if not access_token:
+            if not id_token:
                 err_dict = {"code": "missing_token",
-                            "description": "JWT must be provided to authenticate user if no local "
-                                           "stored identity is available"}
+                            "description": "JWT must be provided if no locally stored identity is available"}
                 raise AuthenticationError(err_dict, 401)
 
             # Validate JWT token
-            _ = self.validate_access_token(access_token)
+            token_payload = self.validate_jwt_token(id_token, self.config.config['auth']['client_id'],
+                                                    access_token=access_token)
 
-            # Go get the user profile data
-            url = "https://" + self.config.config['auth']['provider_domain'] + "/userinfo"
-            response = requests.get(url, headers={'Authorization': f'Bearer {access_token}'})
-            if response.status_code != 200:
-                AuthenticationError({"code": "profile_unauthorized",
-                                     "description": "Failed to get user profile data"}, 401)
-            user_profile = response.json()
-
-            # Create user identity
+            # Create user identity instance
             self.user = User()
-            self.user.email = self._get_profile_attribute(user_profile, "email", required=True)
-            self.user.username = self._get_profile_attribute(user_profile, "nickname", required=True)
-            self.user.given_name = self._get_profile_attribute(user_profile, "given_name", required=False)
-            self.user.family_name = self._get_profile_attribute(user_profile, "family_name", required=False)
+            self.user.email = self._get_profile_attribute(token_payload, "email", required=True)
+            self.user.username = self._get_profile_attribute(token_payload, "nickname", required=True)
+            self.user.given_name = self._get_profile_attribute(token_payload, "given_name", required=False)
+            self.user.family_name = self._get_profile_attribute(token_payload, "family_name", required=False)
 
             # Save User to local storage
-            self._save_user()
+            self._save_user(id_token)
 
             # Check if it's the first time this user has logged into this instance
             self._check_first_login(self.user.username, access_token)
@@ -136,7 +129,7 @@ class LocalIdentityManager(IdentityManager):
         Returns:
             None
         """
-        data_file = os.path.join(self.auth_dir, 'user.json')
+        data_file = os.path.join(self.auth_dir, 'cached_id_jwt')
         if os.path.exists(data_file):
             os.remove(data_file)
 
@@ -144,50 +137,62 @@ class LocalIdentityManager(IdentityManager):
         self.rsa_key = None
         logger.info("Removed user identity from local storage.")
 
-    def _save_user(self) -> None:
-        """Method to save a User props to disk
+    def _save_user(self, id_token: str) -> None:
+        """Method to save the current logged in user's ID token to disk
 
         Returns:
             None
         """
-        if self.user:
-            data = {'username': self.user.username,
-                    'email': self.user.email,
-                    'given_name': self.user.given_name,
-                    'family_name': self.user.family_name,
-                    }
-        else:
-            raise ValueError("No User Identity is loaded. Cannot save identity.")
-
         # Create directory to store user info if it doesn't exist
         if not os.path.exists(self.auth_dir):
             os.makedirs(self.auth_dir)
 
         # If user data exists, remove it first
-        data_file = os.path.join(self.auth_dir, 'user.json')
+        data_file = os.path.join(self.auth_dir, 'cached_id_jwt')
         if os.path.exists(data_file):
             os.remove(data_file)
-            logger.warning(f"User identity data already exists. Overwriting with {data['username']}")
+            logger.warning(f"User identity data already exists. Overwriting")
 
         with open(data_file, 'wt') as user_file:
-            json.dump(data, user_file)
+            json.dump(id_token, user_file)
 
-    def _load_user(self) -> Optional[User]:
-        """Method to load a User from disk if it exists
+    def _load_user(self, id_token: Optional[str]) -> Optional[User]:
+        """Method to load a users's ID token to disk
 
         Returns:
             None
         """
-        data_file = os.path.join(self.auth_dir, 'user.json')
+        data_file = os.path.join(self.auth_dir, 'cached_id_jwt')
         if os.path.exists(data_file):
             with open(data_file, 'rt') as user_file:
                 data = json.load(user_file)
 
+                if id_token is not None and id_token != data:
+                    old_user = jose.jwt.get_unverified_claims(data)['nickname']
+                    new_user = jose.jwt.get_unverified_claims(id_token)['nickname']
+                    print(old_user)
+                    print(new_user)
+                    if old_user == new_user:
+                        logger.info("ID Token has been updated.")
+                        self._save_user(id_token)
+
+                        data = id_token
+                    else:
+                        logger.warning("ID Token user does not match locally cached identity!")
+                        data_file = os.path.join(self.auth_dir, 'cached_id_jwt')
+                        os.remove(data_file)
+                        return None
+
+                # Load data from JWT with limited checks due to possible timeout and lack of access token
+                token_payload = self.validate_jwt_token(data, self.config.config['auth']['client_id'],
+                                                        limited_validation=True)
+
+                # Create user identity instance
                 user_obj = User()
-                user_obj.username = data.get('username')
-                user_obj.email = data.get('email')
-                user_obj.given_name = data.get('given_name')
-                user_obj.family_name = data.get('family_name')
+                user_obj.email = self._get_profile_attribute(token_payload, "email", required=True)
+                user_obj.username = self._get_profile_attribute(token_payload, "nickname", required=True)
+                user_obj.given_name = self._get_profile_attribute(token_payload, "given_name", required=False)
+                user_obj.family_name = self._get_profile_attribute(token_payload, "family_name", required=False)
 
                 return user_obj
         else:
