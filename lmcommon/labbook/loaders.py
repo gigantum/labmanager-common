@@ -1,7 +1,12 @@
+from typing import Optional
+import subprocess
+import shutil
 import time
 import os
 
+from lmcommon.configuration.utils import call_subprocess
 from lmcommon.labbook import LabBook
+from lmcommon.gitlib.gitlab import GitLabManager
 from lmcommon.logging import LMLogger
 
 logger = LMLogger.get_logger()
@@ -10,32 +15,30 @@ logger = LMLogger.get_logger()
 class Loader(object):
     pass
 
-def from_remote(self, remote_url: str, username: str, owner: str, labbook_name: str):
+
+def from_remote(remote_url: str, username: str, owner: str,
+                labbook_name: str, labbook: Optional[LabBook] = None,
+                make_owner: bool = False):
     """Clone a labbook from a remote Git repository.
 
     Args:
-        remote_url(str): URL or path of remote repo
-        username(str): Username of logged in user
-        owner(str): Owner/namespace of labbook
-        labbook_name(str): Name of labbook
+        remote_url: URL or path of remote repo
+        username: Username of logged in user
+        owner: Owner/namespace of labbook
+        labbook_name: Name of labbook
+        labbook: Optional labbook instance with config
+        make_owner: After cloning, make the owner the "username"
 
     Returns:
-        None
+        LabBook
     """
 
-    if not remote_url:
-        raise ValueError("remote_url cannot be None or empty")
+    if labbook is None:
+        # If labbook instance is not passed in, make a new one with blank conf
+        labbook = LabBook()
 
-    if not username:
-        raise ValueError("username cannot be None or empty")
-
-    if not owner:
-        raise ValueError("owner cannot be None or empty")
-
-    if not labbook_name:
-        raise ValueError("labbook_name cannot be None or empty")
-
-    starting_dir = os.path.expanduser(self.labmanager_config.config["git"]["working_directory"])
+    lbconf = labbook.labmanager_config.config["git"]["working_directory"]
+    starting_dir = os.path.expanduser(lbconf)
 
     # Expected full path of the newly imported labbook.
     lb_dir = os.path.join(starting_dir, username, owner, 'labbooks')
@@ -47,13 +50,13 @@ def from_remote(self, remote_url: str, username: str, owner: str, labbook_name: 
 
     os.makedirs(lb_dir, exist_ok=True)
 
-    if self.labmanager_config.config["git"]["lfs_enabled"] is True:
+    if labbook.labmanager_config.config["git"]["lfs_enabled"] is True:
         logger.info(f"Cloning labbook with `git lfs clone ...` from remote `{remote_url}` into `{est_root_dir}...")
 
         t0 = time.time()
         try:
             call_subprocess(['git', 'lfs', 'clone', remote_url], cwd=lb_dir)
-            self.git.set_working_directory(est_root_dir)
+            labbook.git.set_working_directory(est_root_dir)
         except subprocess.CalledProcessError as e:
             logger.error(e)
             logger.error(f'git lfs clone: stderr={e.stderr.decode()}, stdout={e.stdout.decode()}')
@@ -61,18 +64,28 @@ def from_remote(self, remote_url: str, username: str, owner: str, labbook_name: 
             raise
         logger.info(f"Git LFS cloned from `{remote_url}` in {time.time()-t0}s")
     else:
-        self.git.clone(remote_url, directory=est_root_dir)
-        self.git.fetch()
+        labbook.git.clone(remote_url, directory=est_root_dir)
+        labbook.git.fetch()
 
     logger.info(f"Checking out gm.workspace")
-    # NOTE!! using self.checkout_branch fails w/Git error: "Ref 'HEAD' did not resolve to an object"
-    self.git.checkout("gm.workspace")
+    # NOTE!! using self.checkout_branch fails w/Git error:
+    # "Ref 'HEAD' did not resolve to an object"
+    labbook.git.checkout("gm.workspace")
 
     logger.info(f"Checking out gm.workspace-{username}")
-    if f'origin/gm.workspace-{username}' in self.get_branches()['remote']:
-        self.checkout_branch(f"gm.workspace-{username}")
+    if f'origin/gm.workspace-{username}' in labbook.get_branches()['remote']:
+        labbook.checkout_branch(f"gm.workspace-{username}")
     else:
-        self.checkout_branch(f"gm.workspace-{username}", new=True)
+        labbook.checkout_branch(f"gm.workspace-{username}", new=True)
 
     # Once the git repo is cloned, the problem just becomes a regular import from file system.
-    self.from_directory(est_root_dir)
+    labbook.from_directory(est_root_dir)
+
+    if make_owner:
+        labbook.data['owner'] = username
+        labbook.remove_remote('origin')
+        labbook._save_labbook_data()
+        msg = f"Imported and changed owner to {username}"
+        labbook.sweep_uncommitted_changes(msg)
+
+    return labbook
