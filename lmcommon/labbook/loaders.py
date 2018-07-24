@@ -5,7 +5,7 @@ import time
 import os
 
 from lmcommon.configuration.utils import call_subprocess
-from lmcommon.labbook import LabBook
+from lmcommon.labbook.labbook import LabBook, LabbookException
 from lmcommon.gitlib.gitlab import GitLabManager
 from lmcommon.logging import LMLogger
 
@@ -32,6 +32,9 @@ def from_remote(remote_url: str, username: str, owner: str,
     Returns:
         LabBook
     """
+
+    if make_owner and username != owner:
+        raise Exception
 
     if labbook is None:
         # If labbook instance is not passed in, make a new one with blank conf
@@ -82,10 +85,13 @@ def from_remote(remote_url: str, username: str, owner: str,
     labbook.from_directory(est_root_dir)
 
     if make_owner:
-        labbook.data['owner'] = username
+        if labbook._data:
+            labbook._data['owner'] = username
+        else:
+            raise LabbookException("LabBook _data not defined")
         labbook.remove_remote('origin')
         labbook._save_labbook_data()
         msg = f"Imported and changed owner to {username}"
-        labbook.sweep_uncommitted_changes(msg)
+        labbook.sweep_uncommitted_changes(extra_msg=msg)
 
     return labbook

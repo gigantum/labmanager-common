@@ -1433,11 +1433,6 @@ class LabBook(object):
         user_key, owner_key, lb_name_key = key.split("|")
         self.from_name(user_key, owner_key, lb_name_key)
 
-    def from_remote(remote_url: str, username: str, owner: str,
-                    labbook_name: str, labbook: Optional[LabBook] = None,
-                    make_owner: bool = False):
-        pass
-
     def from_directory(self, root_dir: str) -> None:
         """Method to populate a LabBook instance from a directory
 
