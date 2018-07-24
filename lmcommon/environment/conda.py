@@ -183,7 +183,6 @@ class CondaPackageManagerBase(PackageManager):
             list: latest version strings
         """
         cmd = ['conda', 'install', '--dry-run', '--no-deps', '--json', *package_names]
-
         try:
             result = ContainerOperations.run_command(
                 ' '.join(cmd), labbook, username, fallback_image=self.fallback_image(labbook)
@@ -193,38 +192,47 @@ class CondaPackageManagerBase(PackageManager):
             pkgs = ", ".join(package_names)
             raise ValueError(f"Could not retrieve latest versions due to invalid package name in list: {pkgs}")
 
-        output_versions: List[str] = list()
+        versions = {pn: "" for pn in package_names}
         if result:
             data = json.loads(result)
-
             if data.get('exception_name') == "PackagesNotFoundError":
                 # Conda failed because of invalid packages. indicate failure
                 err_pkgs = [x for x in data.get('packages')]
                 raise ValueError(f"Could not retrieve latest versions due to invalid package name in list: {err_pkgs}")
 
-            versions = {pn: "" for pn in package_names}
-            for package_name in package_names:
-                if isinstance(data.get('actions'), dict) is True:
-                    # New method - added when bases updated to conda 4.5.1
-                    for p in data.get('actions').get('LINK'):
-                        if p.get('name') == package_name:
-                            versions[package_name] = p.get("version")
-                else:
-                    # legacy methods to handle older bases built on conda 4.3.31
-                    try:
-                        for p in [x.get('LINK')[0] for x in data.get('actions') if x]:
+            if data.get('actions') is not None:
+                for package_name in package_names:
+                    if isinstance(data.get('actions'), dict) is True:
+                        # New method - added when bases updated to conda 4.5.1
+                        for p in data.get('actions').get('LINK'):
                             if p.get('name') == package_name:
                                 versions[package_name] = p.get("version")
-                    except:
-                        for p in [x.get('LINK') for x in data.get('actions') if x]:
-                            if p.get('name') == package_name:
-                                versions[package_name] = p.get("version")
+                    else:
+                        # legacy methods to handle older bases built on conda 4.3.31
+                        try:
+                            for p in [x.get('LINK')[0] for x in data.get('actions') if x]:
+                                if p.get('name') == package_name:
+                                    versions[package_name] = p.get("version")
+                        except:
+                            for p in [x.get('LINK') for x in data.get('actions') if x]:
+                                if p.get('name') == package_name:
+                                    versions[package_name] = p.get("version")
 
-        # Now, for any packages whose versions could not be found (because they are installed)...
-        # ... just look them up manually. This will add some time, but there's no way around it.
+        # For any packages whose versions could not be found (because they are installed and latest)
+        # just look up the installed versions
         missing_keys = [k for k in versions.keys() if versions[k] == ""]
-        for pn in missing_keys:
-            versions[pn] = self.latest_version(pn, labbook, username)
+        if missing_keys:
+            cmd = ['conda', 'list', '--no-pip', '--json']
+            result = ContainerOperations.run_command(
+                ' '.join(cmd), labbook, username, fallback_image=self.fallback_image(labbook)).decode().strip()
+            installed_info = json.loads(result)
+
+            installed_versions = {pkg['name']: pkg['version'] for pkg in installed_info}
+
+            for pn in missing_keys:
+                versions[pn] = installed_versions[pn]
+
+        # Reformat into list and return
         output_versions = [versions[p] for p in package_names]
         return output_versions
 
