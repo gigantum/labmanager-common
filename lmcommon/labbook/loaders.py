@@ -33,8 +33,8 @@ def from_remote(remote_url: str, username: str, owner: str,
         LabBook
     """
 
-    if make_owner and username != owner:
-        raise Exception
+    if make_owner:
+        owner = username
 
     if labbook is None:
         # If labbook instance is not passed in, make a new one with blank conf
@@ -70,6 +70,9 @@ def from_remote(remote_url: str, username: str, owner: str,
         labbook.git.clone(remote_url, directory=est_root_dir)
         labbook.git.fetch()
 
+    labbook._set_root_dir(est_root_dir)
+    labbook._load_labbook_data()
+
     logger.info(f"Checking out gm.workspace")
     # NOTE!! using self.checkout_branch fails w/Git error:
     # "Ref 'HEAD' did not resolve to an object"
@@ -81,17 +84,17 @@ def from_remote(remote_url: str, username: str, owner: str,
     else:
         labbook.checkout_branch(f"gm.workspace-{username}", new=True)
 
-    # Once the git repo is cloned, the problem just becomes a regular import from file system.
-    labbook.from_directory(est_root_dir)
-
     if make_owner:
+        logger.info(f"Cloning public repo; changing owner to {username}")
+        labbook._load_labbook_data()
         if labbook._data:
-            labbook._data['owner'] = username
+            labbook._data['owner']['username'] = username
         else:
             raise LabbookException("LabBook _data not defined")
-        labbook.remove_remote('origin')
         labbook._save_labbook_data()
+        labbook.remove_remote('origin')
+        logger.warning('1')
         msg = f"Imported and changed owner to {username}"
         labbook.sweep_uncommitted_changes(extra_msg=msg)
-
+        logger.warning('2')
     return labbook
