@@ -71,30 +71,30 @@ def from_remote(remote_url: str, username: str, owner: str,
         labbook.git.fetch()
 
     labbook._set_root_dir(est_root_dir)
-    labbook._load_labbook_data()
-
-    logger.info(f"Checking out gm.workspace")
-    # NOTE!! using self.checkout_branch fails w/Git error:
-    # "Ref 'HEAD' did not resolve to an object"
-    labbook.git.checkout("gm.workspace")
-
-    logger.info(f"Checking out gm.workspace-{username}")
-    if f'origin/gm.workspace-{username}' in labbook.get_branches()['remote']:
-        labbook.checkout_branch(f"gm.workspace-{username}")
-    else:
-        labbook.checkout_branch(f"gm.workspace-{username}", new=True)
+    with labbook.lock_labbook():
+        labbook._load_labbook_data()
+        logger.info(f"Checking out gm.workspace")
+        # NOTE!! using self.checkout_branch fails w/Git error:
+        # "Ref 'HEAD' did not resolve to an object"
+        labbook.git.checkout("gm.workspace")
+        logger.info(f"Checking out gm.workspace-{username}")
+        if f'origin/gm.workspace-{username}' in labbook.get_branches()['remote']:
+            labbook.checkout_branch(f"gm.workspace-{username}")
+        else:
+            labbook.checkout_branch(f"gm.workspace-{username}", new=True)
 
     if make_owner:
-        logger.info(f"Cloning public repo; changing owner to {username}")
-        labbook._load_labbook_data()
-        if labbook._data:
-            labbook._data['owner']['username'] = username
-        else:
-            raise LabbookException("LabBook _data not defined")
+        with labbook.lock_labbook():
+            logger.info(f"Cloning public repo; changing owner to {username}")
+            labbook._load_labbook_data()
+            if labbook._data:
+                labbook._data['owner']['username'] = username
+                logger.error(f'xxxx xxx xxx xxxxxxx {labbook._data}')
+            else:
+                raise LabbookException("LabBook _data not defined")
         labbook._save_labbook_data()
-        labbook.remove_remote('origin')
-        logger.warning('1')
-        msg = f"Imported and changed owner to {username}"
-        labbook.sweep_uncommitted_changes(extra_msg=msg)
-        logger.warning('2')
+        with labbook.lock_labbook():
+            labbook.remove_remote('origin')
+            msg = f"Imported and changed owner to {username}"
+            labbook.sweep_uncommitted_changes(extra_msg=msg)
     return labbook
