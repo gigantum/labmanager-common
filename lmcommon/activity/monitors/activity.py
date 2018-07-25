@@ -20,6 +20,7 @@
 import abc
 from lmcommon.logging import LMLogger
 from typing import (Any, Dict, List, Optional)
+import redis
 
 from lmcommon.activity import ActivityRecord, ActivityStore, ActivityType
 from lmcommon.activity.processors.processor import ActivityProcessor, ExecutionData
@@ -159,6 +160,28 @@ class ActivityMonitor(metaclass=abc.ABCMeta):
         logger.info("container {} IP: {}".format(container.name, ip))
 
         return ip
+
+    def set_busy_state(self, is_busy: bool) -> None:
+        """Method to set the busy state of the dev env being monitored. If busy, some actions (e.g. auto-save hooks)
+        may be disabled depending on the dev env. This method sets or deletes a key in redis that other processes can
+        check
+
+        Args:
+            is_busy(bool): True if busy, false if idle
+
+        Returns:
+
+        """
+        try:
+            client = redis.StrictRedis(db=1)
+            key = f"{self.labbook.key}&is-busy&{self.monitor_key}"
+            if is_busy:
+                client.set(key, True)
+            else:
+                client.delete(key)
+        except Exception as err:
+            # This should never stop more important operations
+            logger.warning(f"An error occurred while setting the monitor busy state for {str(self.labbook )}: {err}")
 
     def start(self, data: Dict[str, Any]) -> None:
         """Method called in a long running scheduled async worker that should monitor for activity, committing files

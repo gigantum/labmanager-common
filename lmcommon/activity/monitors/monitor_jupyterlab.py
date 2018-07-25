@@ -216,6 +216,8 @@ class JupyterLabNotebookMonitor(ActivityMonitor):
         if msg['msg_type'] == 'status':
             # If status was busy and transitions to idle store cell since execution has completed
             if self.kernel_status == 'busy' and msg['content']['execution_state'] == 'idle':
+                self.set_busy_state(False)
+
                 if self.current_cell.cell_error is False and self.current_cell.is_empty() is False:
                     # Current cell did not error and has content
                     # Add current cell to collection of cells ready to process
@@ -229,6 +231,7 @@ class JupyterLabNotebookMonitor(ActivityMonitor):
 
             elif self.kernel_status == 'idle' and msg['content']['execution_state'] == 'busy':
                 # Starting to process new cell execution
+                self.set_busy_state(True)
                 self.can_store_activity_record = False
 
             # Update status
