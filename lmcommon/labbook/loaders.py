@@ -55,7 +55,6 @@ def from_remote(remote_url: str, username: str, owner: str,
 
     if labbook.labmanager_config.config["git"]["lfs_enabled"] is True:
         logger.info(f"Cloning labbook with `git lfs clone ...` from remote `{remote_url}` into `{est_root_dir}...")
-
         t0 = time.time()
         try:
             call_subprocess(['git', 'lfs', 'clone', remote_url], cwd=lb_dir)
@@ -70,13 +69,15 @@ def from_remote(remote_url: str, username: str, owner: str,
         labbook.git.clone(remote_url, directory=est_root_dir)
         labbook.git.fetch()
 
+    # NOTE!! using self.checkout_branch fails w/Git error:
+    # "Ref 'HEAD' did not resolve to an object"
+    logger.info(f"Checking out gm.workspace")
+    labbook.git.checkout("gm.workspace")
+
     labbook._set_root_dir(est_root_dir)
+    labbook._load_labbook_data()
+
     with labbook.lock_labbook():
-        labbook._load_labbook_data()
-        logger.info(f"Checking out gm.workspace")
-        # NOTE!! using self.checkout_branch fails w/Git error:
-        # "Ref 'HEAD' did not resolve to an object"
-        labbook.git.checkout("gm.workspace")
         logger.info(f"Checking out gm.workspace-{username}")
         if f'origin/gm.workspace-{username}' in labbook.get_branches()['remote']:
             labbook.checkout_branch(f"gm.workspace-{username}")

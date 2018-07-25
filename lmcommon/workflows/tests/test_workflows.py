@@ -96,7 +96,7 @@ class TestLabbookShareProtocol(object):
 
         ## "home_lb" represents the user's home computer -- same Labbook, just in a different LM instance.
         home_lb = LabBook(mock_config_lfs_disabled[0])
-        from_remote(repo_location, username="test", owner="test", labbook_name="labbook1",labbook=home_lb)
+        from_remote(repo_location, username="test", owner="test", labbook_name="labbook1", labbook=home_lb)
         assert home_lb.active_branch == "gm.workspace-test"
         assert os.path.exists(os.path.join(home_lb.root_dir, 'code', 'testy-tracked-dir'))
         assert os.path.exists(os.path.join(home_lb.root_dir, 'code', 'dir-created-after-publish'))
