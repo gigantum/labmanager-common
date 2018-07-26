@@ -12,13 +12,9 @@ from lmcommon.logging import LMLogger
 logger = LMLogger.get_logger()
 
 
-class Loader(object):
-    pass
-
-
 def from_remote(remote_url: str, username: str, owner: str,
                 labbook_name: str, labbook: Optional[LabBook] = None,
-                make_owner: bool = False):
+                make_owner: bool = False) -> LabBook:
     """Clone a labbook from a remote Git repository.
 
     Args:

@@ -253,8 +253,8 @@ class GitLabManager(object):
 
         if response.status_code != 201:
             msg = f"Failed to fork {namespace}/{labbook_name} for user {username} ({response.status_code})"
-            logger.error(re)
-            raise GitLabException
+            logger.error(msg)
+            raise GitLabException(f'Failed to fork: {msg}')
 
     def create_labbook(self, namespace: str, labbook_name: str) -> None:
         """Method to create the remote repository
