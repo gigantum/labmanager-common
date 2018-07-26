@@ -70,9 +70,6 @@ def validate_labbook_schema(schema_version: int, lb_data: Optional[Dict[str, Any
         return False
 
     schema = Schema(LABBOOK_SCHEMA_VERSIONS[schema_version])
-    import json
-    logger.warning(json.dumps(lb_data))
-    logger.warning(LABBOOK_SCHEMA_VERSIONS[CURRENT_SCHEMA])
     try:
         schema.validate(lb_data)
         return True

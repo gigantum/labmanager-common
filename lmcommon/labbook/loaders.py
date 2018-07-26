@@ -90,7 +90,6 @@ def from_remote(remote_url: str, username: str, owner: str,
             labbook._load_labbook_data()
             if labbook._data:
                 labbook._data['owner']['username'] = username
-                logger.error(f'xxxx xxx xxx xxxxxxx {labbook._data}')
             else:
                 raise LabbookException("LabBook _data not defined")
         labbook._save_labbook_data()
