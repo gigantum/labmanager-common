@@ -37,7 +37,7 @@ def start_jupyter(labbook: LabBook, username: str, tag: Optional[str] = None,
         raise LabbookException(f"{str(labbook)} container is not running")
 
     search_sh = f'sh -c "ps aux | grep \'jupyter lab\' | grep -v \' grep \'"'
-    jupyter_tokens = lb_container.exec_run(search_sh)
+    ec, jupyter_tokens = lb_container.exec_run(search_sh)
     jupyter_ps = [l for l in jupyter_tokens.decode().split('\n') if l]
 
     if len(jupyter_ps) == 1:
@@ -94,8 +94,9 @@ def _start_jupyter_process(labbook: LabBook, lb_container,
     # Pause briefly to avoid race conditions
     for timeout in range(10):
         time.sleep(1)
-        new_ps_list = lb_container.exec_run(
-            f'sh -c "ps aux | grep jupyter | grep -v \' grep \'"').decode().split('\n')
+        ec, new_ps_list = lb_container.exec_run(
+            f'sh -c "ps aux | grep jupyter | grep -v \' grep \'"')
+        new_ps_list = new_ps_list.decode().split('\n')
         if any(['jupyter lab' in l or 'jupyter-lab' in l for l in new_ps_list]):
             logger.info(f"JupyterLab started within {timeout + 1} seconds")
             break

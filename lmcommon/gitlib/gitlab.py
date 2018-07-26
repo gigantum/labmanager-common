@@ -65,6 +65,10 @@ def check_and_add_user(admin_service: str, access_token: str, username: str) -> 
         raise ValueError("Failed to check for user in repository")
 
 
+class GitLabException(Exception):
+    pass
+
+
 class GitLabManager(object):
     """Class to manage administrative operations to a remote GitLab server"""
     def __init__(self, remote_host: str, admin_service: str, access_token: str) -> None:
@@ -234,6 +238,23 @@ class GitLabManager(object):
             logger.error(msg)
             logger.error(response.json())
             raise ValueError(msg)
+
+    def fork_labbook(self, username: str, namespace: str, labbook_name: str):
+        if self.labbook_exists(namespace, labbook_name):
+            raise ValueError(f"Remote repository {namespace}/{labbook_name}")
+
+        repo_id = self.get_repository_id(namespace, labbook_name)
+        data = {"id": repo_id,
+                "namespace": username}
+        response = requests.post(f"https://{self.remote_host}/api/v4/projects/{repo_id}/fork",
+                                 headers={"PRIVATE-TOKEN": self.user_token},
+                                 json=data,
+                                 timeout=10)
+
+        if response.status_code != 201:
+            msg = f"Failed to fork {namespace}/{labbook_name} for user {username} ({response.status_code})"
+            logger.error(msg)
+            raise GitLabException(f'Failed to fork: {msg}')
 
     def create_labbook(self, namespace: str, labbook_name: str) -> None:
         """Method to create the remote repository

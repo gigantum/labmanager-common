@@ -73,5 +73,6 @@ def validate_labbook_schema(schema_version: int, lb_data: Optional[Dict[str, Any
     try:
         schema.validate(lb_data)
         return True
-    except SchemaError:
+    except SchemaError as e:
+        logger.error(e)
         return False
