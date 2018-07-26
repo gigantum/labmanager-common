@@ -41,8 +41,7 @@ def get_labmanager_ip() -> Optional[str]:
         str of IP address
     """
     client = get_docker_client()
-    container = [c for c in client.containers.list()
-                 if 'labmanager' in c.name and 'gigantum' in c.name and 'gmlb-' not in c.name][0]
+    container = [c for c in client.containers.list() if 'gigantum.labmanager' in c.name and 'gmlb-' not in c.name][0]
     ip = container.attrs['NetworkSettings']['Networks']['bridge']['IPAddress']
     logger.info("container {} IP: {}".format(container.name, ip))
     return ip
