@@ -477,16 +477,27 @@ class LabBook(object):
         return ''.join(c for c in value if c not in '\<>?/;"`\'')
 
     def sweep_uncommitted_changes(self, upload: bool = False,
-                                  extra_msg: Optional[str] = None) -> None:
+                                  extra_msg: Optional[str] = None,
+                                  show: bool = False) -> None:
         """ Sweep all changes into a commit, and create activity record.
-            NOTE: This method MUST be called inside a lock. """
+            NOTE: This method MUST be called inside a lock.
+
+        Args:
+            upload(bool): Flag indicating if this was from a batch upload
+            extra_msg(str): Optional string used to augment the activity message
+            show(bool): Optional flag indicating if the result of this sweep is important enough to be shown in the feed
+
+        Returns:
+
+        """
         result_status = self.git.status()
-        self.git.add_all()
-        self.git.commit("Sweep of uncommitted changes")
         if any([result_status[k] for k in result_status.keys()]):
+            self.git.add_all()
+            self.git.commit("Sweep of uncommitted changes")
+
             ar = ActivityRecord(ActivityType.LABBOOK,
                                 message="--overwritten--",
-                                show=True,
+                                show=show,
                                 importance=255,
                                 linked_commit=self.git.commit_hash,
                                 tags=['save'])
@@ -497,7 +508,7 @@ class LabBook(object):
             nmsg = f"{newcnt} new file(s). " if newcnt > 0 else ""
             mmsg = f"{modcnt} modified file(s). " if modcnt > 0 else ""
             ar.message = f"{extra_msg or ''}" \
-                         f"{'Uploaded new file(s). ' if upload else ''}" \
+                         f"{'Uploaded ' if upload else ''}" \
                          f"{nmsg}{mmsg}"
             ars = ActivityStore(self)
             ars.create_activity_record(ar)

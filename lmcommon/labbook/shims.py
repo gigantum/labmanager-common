@@ -48,12 +48,13 @@ def process_sweep_status(result_obj: ActivityRecord, status: Dict[str, Any],
         ncnt += 1
 
     # If all modifications were of same section
-    if ncnt > 0 and len(set(sections)) == 1:
-        if sections[0] == 'code':
+    new_section_set = set(sections)
+    if ncnt > 0 and len(new_section_set) == 1:
+        if "Code" in new_section_set:
             result_obj.type = ActivityType.CODE
-        elif sections[0] == 'input':
+        elif "Input Data" in new_section_set:
             result_obj.type = ActivityType.INPUT_DATA
-        elif sections[0] == 'output':
+        elif "Output Data" in new_section_set:
             result_obj.type = ActivityType.OUTPUT_DATA
 
     mcnt = 0
@@ -82,22 +83,25 @@ def process_sweep_status(result_obj: ActivityRecord, status: Dict[str, Any],
         result_obj.add_detail_object(adr)
         mcnt += 1
 
-    # If modifications were of different type than before, just make type as LABBOOK catchall.
-
+    modified_section_set = set(msections)
     if result_obj.type == ActivityType.LABBOOK:
-        if mcnt > 0 and len(set(msections)) == 1:
-            if msections[0] == 'code':
-                result_obj.type = ActivityType.CODE
-            elif msections[0] == 'input':
-                result_obj.type = ActivityType.INPUT_DATA
-            elif msections[0] == 'output':
-                result_obj.type = ActivityType.OUTPUT_DATA
-    elif not(mcnt > 0 and len(set(msections)) == 1 and msections[0] == sections[0]):
-        # Mismatch, just use catchall LABBOOK
-        result_obj.type = ActivityType.LABBOOK
+        # If new files are from different sections or no new files, you'll still be LABBOOK type
+        if mcnt > 0 and len(modified_section_set) == 1:
+            # If there have been modified files and they are all from the same section
+            if len(new_section_set) == 0 or new_section_set == modified_section_set:
+                # If there have been only modified files from a single section, or new files are from the same section
+                if "Code" in modified_section_set:
+                    result_obj.type = ActivityType.CODE
+                elif "Input Data" in modified_section_set:
+                    result_obj.type = ActivityType.INPUT_DATA
+                elif "Output Data" in modified_section_set:
+                    result_obj.type = ActivityType.OUTPUT_DATA
+    elif mcnt > 0:
+        if len(modified_section_set) > 1 or new_section_set != modified_section_set:
+            # Mismatch between new and modify or within modify, just use catchall LABBOOK
+            result_obj.type = ActivityType.LABBOOK
 
-
-    # Return additionally new file cnt (ncnt) and modifified (mcnt)
+    # Return additionally new file cnt (ncnt) and modified (mcnt)
     return result_obj, ncnt, mcnt
 
 
