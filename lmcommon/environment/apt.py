@@ -64,7 +64,7 @@ class AptPackageManager(PackageManager):
             list(str): Version strings
         """
         result = ContainerOperations.run_command(f"apt-cache madison {package_name}", labbook, username,
-                                                 fallback_image=self.fallback_image(labbook))
+                                                 override_image_tag=self.fallback_image(labbook))
 
         package_versions: List[str] = []
         if result:
@@ -116,7 +116,8 @@ class AptPackageManager(PackageManager):
         Returns:
             list
         """
-        result = ContainerOperations.run_command("apt list --installed", labbook, username)
+        result = ContainerOperations.run_command("apt list --installed", labbook, username,
+                                                 fallback_image=self.fallback_image(labbook))
 
         packages = []
         if result:
@@ -142,7 +143,8 @@ class AptPackageManager(PackageManager):
         Returns:
             list
         """
-        result = ContainerOperations.run_command("apt list --upgradable", labbook, username)
+        result = ContainerOperations.run_command("apt list --upgradable", labbook, username,
+                                                 fallback_image=self.fallback_image(labbook))
 
         packages = []
         if result:

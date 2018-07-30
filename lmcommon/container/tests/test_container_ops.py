@@ -44,23 +44,26 @@ class TestContainerOps(object):
         ib = build_lb_image_for_jupyterlab[1]
         lb = build_lb_image_for_jupyterlab[0]
 
-        l = [a for a in client.containers.get(container_id=container_id).exec_run(
-            'sh -c "ps aux | grep jupyter | grep -v \' grep \'"', user='giguser').decode().split('\n') if a]
+        ec, stdo = client.containers.get(container_id=container_id).exec_run(
+            'sh -c "ps aux | grep jupyter | grep -v \' grep \'"', user='giguser')
+        l = [a for a in stdo.decode().split('\n') if a]
         assert len(l) == 0
 
         lb, info = ContainerOperations.start_dev_tool(labbook=lb, dev_tool_name='jupyterlab', username='unittester',
                                                       check_reachable=not (getpass.getuser() == 'circleci'))
 
-        l = [a for a in client.containers.get(container_id=container_id).exec_run(
-            'sh -c "ps aux | grep jupyter-lab | grep -v \' grep \'"', user='giguser').decode().split('\n') if a]
+        ec, stdo = client.containers.get(container_id=container_id).exec_run(
+            'sh -c "ps aux | grep jupyter-lab | grep -v \' grep \'"', user='giguser')
+        l = [a for a in stdo.decode().split('\n') if a]
         assert len(l) == 1
 
         # Now, we test the second path through, start jupyterlab when it's already running.
         lb, info = ContainerOperations.start_dev_tool(labbook=lb, dev_tool_name='jupyterlab', username='unittester')
 
         # Validate there is only one instance running.
-        l = [a for a in client.containers.get(container_id=container_id).exec_run(
-            'sh -c "ps aux | grep jupyter-lab | grep -v \' grep \'"', user='giguser').decode().split('\n') if a]
+        ec, stdo = client.containers.get(container_id=container_id).exec_run(
+            'sh -c "ps aux | grep jupyter-lab | grep -v \' grep \'"', user='giguser')
+        l = [a for a in stdo.decode().split('\n') if a]
         assert len(l) == 1
 
     def test_run_command(self, build_lb_image_for_jupyterlab):

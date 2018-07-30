@@ -18,10 +18,9 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 import pytest
-import getpass
-import pprint
 
-from lmcommon.fixtures.container import mock_config_with_repo, build_lb_image_for_env
+from lmcommon.fixtures.container import mock_config_with_repo, build_lb_image_for_env, build_lb_image_for_env_conda, \
+    REQUESTS_LATEST_VERSION
 from lmcommon.environment.conda import Conda3PackageManager, Conda2PackageManager
 
 
@@ -86,22 +85,23 @@ class TestConda3PackageManager(object):
 
         # Note, "requests" is an installed package
         result = mrg.latest_version("requests", lb, username)
-        assert result == "2.19.1"
+        assert result == REQUESTS_LATEST_VERSION
 
         # numpy is a non-installed package
         result = mrg.latest_version("numpy", lb, username)
         assert result == '1.14.5'
 
-    def test_latest_versions(self, build_lb_image_for_env):
+    def test_latest_versions(self, build_lb_image_for_env_conda):
         """Test latest_version command"""
         mrg = Conda3PackageManager()
-        lb = build_lb_image_for_env[0]
-        username = build_lb_image_for_env[1]
-        pkgs = ["numpy", "requests"]
+        lb = build_lb_image_for_env_conda[0]
+        username = build_lb_image_for_env_conda[1]
+        pkgs = ["numpy", "requests", "matplotlib"]
         result = mrg.latest_versions(pkgs, lb, username)
 
         assert result[0] == '1.14.5'  # Numpy
-        assert result[1] == '2.19.1'  # Requests
+        assert result[1] == REQUESTS_LATEST_VERSION  # Requests
+        assert result[2] == '2.2.2'  # Matplotlib
 
     def test_latest_versions_bad_pkg(self, build_lb_image_for_env):
         """Test latest_version command"""
@@ -220,7 +220,7 @@ class TestConda3PackageManager(object):
         assert result[0].error is False
 
         assert result[1].package == "plotly"
-        assert result[1].version == "3.0.0"
+        assert result[1].version == "3.1.0"
         assert result[1].error is False
 
 
@@ -279,5 +279,5 @@ class TestConda2PackageManager(object):
         assert result[0].error is False
 
         assert result[1].package == "plotly"
-        assert result[1].version == "3.0.0"
+        assert result[1].version == "3.1.0"
         assert result[1].error is False

@@ -30,6 +30,9 @@ from lmcommon.labbook import LabBook
 from lmcommon.imagebuilder import ImageBuilder
 from lmcommon.fixtures.fixtures import mock_config_with_repo, ENV_UNIT_TEST_REPO, ENV_UNIT_TEST_BASE, ENV_UNIT_TEST_REV
 
+# TODO: This should be update to the latest version of requests, and probably automated in the future
+REQUESTS_LATEST_VERSION = "2.19.1"
+
 
 @pytest.fixture(scope='function')
 def build_lb_image_for_jupyterlab(mock_config_with_repo):
@@ -88,7 +91,7 @@ def build_lb_image_for_jupyterlab(mock_config_with_repo):
             pass
 
 
-@pytest.fixture
+@pytest.fixture(scope='class')
 def build_lb_image_for_env(mock_config_with_repo):
     # Create a labook
     lb = LabBook(mock_config_with_repo[0])
@@ -118,3 +121,36 @@ def build_lb_image_for_env(mock_config_with_repo):
         except:
             pass
 
+
+@pytest.fixture(scope='class')
+def build_lb_image_for_env_conda(mock_config_with_repo):
+    """A fixture that installs an old version of matplotlib and latest version of requests to increase code coverage"""
+    # Create a labook
+    lb = LabBook(mock_config_with_repo[0])
+    labbook_dir = lb.new(name="containerunittestbookenvconda", description="Testing environment functions.",
+                         owner={"username": "unittester"})
+    # Create Component Manager
+    cm = ComponentManager(lb)
+    # Add a component
+    cm.add_component("base", ENV_UNIT_TEST_REPO, ENV_UNIT_TEST_BASE, ENV_UNIT_TEST_REV)
+    cm.add_packages('conda3', [{'package': 'matplotlib', 'version': '2.0.0'},
+                               {'package': 'requests', 'version': REQUESTS_LATEST_VERSION}])
+
+    ib = ImageBuilder(lb)
+    ib.assemble_dockerfile(write=True)
+    client = get_docker_client()
+    client.containers.prune()
+
+    try:
+        lb, docker_image_id = ContainerOperations.build_image(labbook=lb, username="unittester")
+
+        yield lb, 'unittester'
+
+    finally:
+        shutil.rmtree(lb.root_dir)
+
+        # Remove image if it's still there
+        try:
+            client.images.remove(docker_image_id, force=True, noprune=False)
+        except:
+            pass

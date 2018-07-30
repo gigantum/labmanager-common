@@ -477,16 +477,27 @@ class LabBook(object):
         return ''.join(c for c in value if c not in '\<>?/;"`\'')
 
     def sweep_uncommitted_changes(self, upload: bool = False,
-                                  extra_msg: Optional[str] = None) -> None:
+                                  extra_msg: Optional[str] = None,
+                                  show: bool = False) -> None:
         """ Sweep all changes into a commit, and create activity record.
-            NOTE: This method MUST be called inside a lock. """
+            NOTE: This method MUST be called inside a lock.
+
+        Args:
+            upload(bool): Flag indicating if this was from a batch upload
+            extra_msg(str): Optional string used to augment the activity message
+            show(bool): Optional flag indicating if the result of this sweep is important enough to be shown in the feed
+
+        Returns:
+
+        """
         result_status = self.git.status()
-        self.git.add_all()
-        self.git.commit("Sweep of uncommitted changes")
         if any([result_status[k] for k in result_status.keys()]):
+            self.git.add_all()
+            self.git.commit("Sweep of uncommitted changes")
+
             ar = ActivityRecord(ActivityType.LABBOOK,
                                 message="--overwritten--",
-                                show=True,
+                                show=show,
                                 importance=255,
                                 linked_commit=self.git.commit_hash,
                                 tags=['save'])
@@ -497,7 +508,7 @@ class LabBook(object):
             nmsg = f"{newcnt} new file(s). " if newcnt > 0 else ""
             mmsg = f"{modcnt} modified file(s). " if modcnt > 0 else ""
             ar.message = f"{extra_msg or ''}" \
-                         f"{'Uploaded new file(s). ' if upload else ''}" \
+                         f"{'Uploaded ' if upload else ''}" \
                          f"{nmsg}{mmsg}"
             ars = ActivityStore(self)
             ars.create_activity_record(ar)
@@ -1433,50 +1444,6 @@ class LabBook(object):
         user_key, owner_key, lb_name_key = key.split("|")
         self.from_name(user_key, owner_key, lb_name_key)
 
-    def rename(self, new_name: str) -> None:
-        """Method to rename a labbook
-
-        Args:
-            new_name(str): New desired labbook name
-
-        Returns:
-            None
-        """
-        old_name = self.name
-        with self.lock_labbook(lock_key=f"rename_lock|{old_name}|{new_name}"):
-            # Make sure name does not already exist
-            labbooks_dir = self.root_dir.rsplit(os.path.sep, 1)[0]
-            if os.path.exists(os.path.join(labbooks_dir, new_name)):
-                raise ValueError(f"New LabBook name '{new_name}' already exists")
-
-            # Rename labbook directory to new directory and update YAML file
-            self.name = new_name
-
-            # Remove the .checkout file, as you should create a new checkout context due to the labbook renaming
-            if os.path.exists(os.path.join(self.root_dir, ".gigantum", ".checkout")):
-                os.remove(os.path.join(self.root_dir, ".gigantum", ".checkout"))
-
-            # Commit Change
-            self.git.add(os.path.join(self.root_dir, ".gigantum", "labbook.yaml"))
-            commit_msg = f"Renamed LabBook '{old_name}' to '{new_name}'"
-            commit = self.git.commit(commit_msg)
-
-            # Create detail record
-            adr = ActivityDetailRecord(ActivityDetailType.LABBOOK, show=False, importance=0, action=ActivityAction.EDIT)
-            adr.add_value('text/plain', commit_msg)
-
-            # Create activity record
-            ar = ActivityRecord(ActivityType.LABBOOK,
-                                message=commit_msg,
-                                show=True,
-                                importance=255,
-                                linked_commit=commit.hexsha)
-            ar.add_detail_object(adr)
-
-            # Store
-            ars = ActivityStore(self)
-            ars.create_activity_record(ar)
-
     def from_directory(self, root_dir: str) -> None:
         """Method to populate a LabBook instance from a directory
 
@@ -1486,20 +1453,9 @@ class LabBook(object):
         Returns:
             None
         """
-
-        logger.debug(f"Populating LabBook from directory {root_dir}")
-
-        # Update root dir
         self._set_root_dir(root_dir)
-
-        # Load LabBook data file
         self._load_labbook_data()
         self._validate_labbook_data()
-
-        # If an old labbook that still uses master branch
-        # Eventually, this clause will be removed.
-        if self.active_branch == 'master':
-            shims.to_workspace_branch(self)
 
     def from_name(self, username: str, owner: str, labbook_name: str):
         """Method to populate a LabBook instance based on the user and name of the labbook
@@ -1542,73 +1498,6 @@ class LabBook(object):
         dname = [t for t in self.root_dir.split(os.sep) if t][-1]
         if self.name != dname:
             raise ValueError(f"Labbook name {self.name} does not match directory name {dname}")
-
-    def from_remote(self, remote_url: str, username: str, owner: str, labbook_name: str):
-        """Clone a labbook from a remote Git repository.
-
-        Args:
-            remote_url(str): URL or path of remote repo
-            username(str): Username of logged in user
-            owner(str): Owner/namespace of labbook
-            labbook_name(str): Name of labbook
-
-        Returns:
-            None
-        """
-
-        if not remote_url:
-            raise ValueError("remote_url cannot be None or empty")
-
-        if not username:
-            raise ValueError("username cannot be None or empty")
-
-        if not owner:
-            raise ValueError("owner cannot be None or empty")
-
-        if not labbook_name:
-            raise ValueError("labbook_name cannot be None or empty")
-
-        starting_dir = os.path.expanduser(self.labmanager_config.config["git"]["working_directory"])
-
-        # Expected full path of the newly imported labbook.
-        lb_dir = os.path.join(starting_dir, username, owner, 'labbooks')
-        est_root_dir = os.path.join(starting_dir, username, owner, 'labbooks', labbook_name)
-        if os.path.exists(est_root_dir):
-            errmsg = f"Cannot clone labbook, path already exists at `{est_root_dir}`"
-            logger.error(errmsg)
-            raise ValueError(errmsg)
-
-        os.makedirs(lb_dir, exist_ok=True)
-
-        if self.labmanager_config.config["git"]["lfs_enabled"] is True:
-            logger.info(f"Cloning labbook with `git lfs clone ...` from remote `{remote_url}` into `{est_root_dir}...")
-
-            t0 = time.time()
-            try:
-                call_subprocess(['git', 'lfs', 'clone', remote_url], cwd=lb_dir)
-                self.git.set_working_directory(est_root_dir)
-            except subprocess.CalledProcessError as e:
-                logger.error(e)
-                logger.error(f'git lfs clone: stderr={e.stderr.decode()}, stdout={e.stdout.decode()}')
-                shutil.rmtree(est_root_dir, ignore_errors=True)
-                raise
-            logger.info(f"Git LFS cloned from `{remote_url}` in {time.time()-t0}s")
-        else:
-            self.git.clone(remote_url, directory=est_root_dir)
-            self.git.fetch()
-
-        logger.info(f"Checking out gm.workspace")
-        # NOTE!! using self.checkout_branch fails w/Git error: "Ref 'HEAD' did not resolve to an object"
-        self.git.checkout("gm.workspace")
-
-        logger.info(f"Checking out gm.workspace-{username}")
-        if f'origin/gm.workspace-{username}' in self.get_branches()['remote']:
-            self.checkout_branch(f"gm.workspace-{username}")
-        else:
-            self.checkout_branch(f"gm.workspace-{username}", new=True)
-
-        # Once the git repo is cloned, the problem just becomes a regular import from file system.
-        self.from_directory(est_root_dir)
 
     def list_local_labbooks(self, username: str,
                             sort_mode: str = "name",
