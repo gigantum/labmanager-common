@@ -17,6 +17,9 @@ container:
   # If null, no limit
   # To set enter a float for the CPU allocation desired. e.g. 4 CPUs available, 1.5 limits container to 1.5 CPUs
   cpu: null
+  # if null, no CUDA/cuDNN support
+  # To set enter true
+  cuda: null
 
 # Authentication Configuration
 auth:

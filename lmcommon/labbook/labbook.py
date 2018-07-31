@@ -396,6 +396,13 @@ class LabBook(object):
         else:
             return None
 
+    @property
+    def cuda(self) -> bool:
+        if self._data and self._data["cuda"]:
+            return self._data["cuda"]
+        else:
+            return False
+
     def _set_root_dir(self, new_root_dir: str) -> None:
         """Update the root directory and also reconfigure the git instance
 
@@ -1266,7 +1273,7 @@ class LabBook(object):
         return favorite_data
 
     def new(self, owner: Dict[str, str], name: str, username: Optional[str] = None,
-            description: Optional[str] = None, bypass_lfs: bool = False) -> str:
+            description: Optional[str] = None, bypass_lfs: bool = False, cuda: bool = False) -> str:
         """Method to create a new minimal LabBook instance on disk
 
         /[LabBook name]
@@ -1308,6 +1315,7 @@ class LabBook(object):
 
         # Build data file contents
         self._data = {
+            "cuda": False,
             "labbook": {"id": uuid.uuid4().hex,
                         "name": name,
                         "description": self._santize_input(description or '')},

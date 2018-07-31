@@ -25,7 +25,7 @@ from lmcommon.logging import LMLogger
 logger = LMLogger.get_logger()
 
 # The current LabBook schema version
-CURRENT_SCHEMA = 1
+CURRENT_SCHEMA = 2
 
 LABBOOK_SCHEMA_VERSIONS = {
     # Note: Each time a new schema version is needed, add it into this dictionary
@@ -42,7 +42,19 @@ LABBOOK_SCHEMA_VERSIONS = {
             'username': str
         },
         'schema': int
-    }
+    },
+    2: {
+        'cuda': bool,
+        'labbook': {
+            'id': str,
+            'name': str,
+            'description': str
+        },
+        'owner': {
+            'username': str
+        },
+        'schema': int
+    },
 }
 
 # TODO: Add validation methods and formalized schemas for Environment Component Definitions
@@ -60,7 +72,6 @@ def validate_labbook_schema(schema_version: int, lb_data: Optional[Dict[str, Any
         bool: True if schema validates, False otherwise.
 
     """
-
     if not schema_version or schema_version not in LABBOOK_SCHEMA_VERSIONS.keys():
         logger.error(f"schema_version {schema_version} not found in schema versions")
         return False
