@@ -73,7 +73,11 @@ def _get_cached_image(env_dir: str, image_name: str) -> Optional[str]:
         docker image id (Optional)
     """
     # Determine if we need to rebuild by testing if the environment changed
-    env_cache_path = os.path.join('/mnt/gigantum', f"{image_name}.cache")
+    cache_dir = '/mnt/gigantum/.labmanager/image-cache'
+    if not os.path.exists(cache_dir):
+        logger.info(f"Making environment cache at {cache_dir}")
+        os.makedirs(cache_dir, exist_ok=True)
+    env_cache_path = os.path.join(cache_dir, f"{image_name}.cache")
 
     # Find all files, sort them alphabetically, get their checksums, then
     # obtain the cumulative checksum-of-checksums (the final cksum call).

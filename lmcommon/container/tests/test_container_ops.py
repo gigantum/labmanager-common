@@ -28,6 +28,7 @@ from lmcommon.configuration import get_docker_client
 
 from lmcommon.container.container import ContainerOperations
 from lmcommon.container.utils import infer_docker_image_name
+from lmcommon.fixtures import remove_image_cache_data
 from lmcommon.fixtures.container import build_lb_image_for_jupyterlab, mock_config_with_repo
 from lmcommon.container.exceptions import ContainerBuildException, ContainerException
 
@@ -82,6 +83,7 @@ class TestContainerOps(object):
         result = ContainerOperations.run_command("/bin/false", my_lb, username="unittester")
         assert result.decode().strip() == ""
 
+    @remove_image_cache_data
     def test_old_dockerfile_removed_when_new_build_fails(self, build_lb_image_for_jupyterlab):
         # Test that when a new build fails, old images are removed so they cannot be launched.
         my_lb = build_lb_image_for_jupyterlab[0]

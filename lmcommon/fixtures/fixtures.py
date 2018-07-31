@@ -443,3 +443,12 @@ def get_jwt():
         os.remove(sample_f.name)
     except:
         pass
+
+
+@pytest.fixture()
+def remove_image_cache_data():
+    yield
+    try:
+        shutil.rmtree('/mnt/gigantum/.labmanager/image-cache', ignore_errors=True)
+    except:
+        pass
