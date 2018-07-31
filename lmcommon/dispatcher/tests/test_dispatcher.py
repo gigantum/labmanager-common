@@ -168,8 +168,7 @@ class TestDispatcher(object):
         assert d.query_task(job_ref_1).status == 'failed'
         assert d.query_task(job_ref_2).status == 'deferred'
 
-    @remove_image_cache_data
-    def test_build_docker_image(self, temporary_worker, mock_config_file):
+    def test_build_docker_image(self, temporary_worker, mock_config_file, remove_image_cache_data):
         w, d = temporary_worker
         erm = RepositoryManager(mock_config_file[0])
         erm.update_repositories()
@@ -212,8 +211,7 @@ class TestDispatcher(object):
         assert res
         assert res.status == 'finished'
 
-    @remove_image_cache_data
-    def test_start_and_stop_docker_container(self, temporary_worker, mock_config_file):
+    def test_start_and_stop_docker_container(self, temporary_worker, mock_config_file, remove_image_cache_data):
         # start_docker_container(docker_image_id, exposed_ports, volumes_dict) -> str:
         w, d = temporary_worker
 

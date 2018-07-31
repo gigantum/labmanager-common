@@ -83,8 +83,7 @@ class TestContainerOps(object):
         result = ContainerOperations.run_command("/bin/false", my_lb, username="unittester")
         assert result.decode().strip() == ""
 
-    @remove_image_cache_data
-    def test_old_dockerfile_removed_when_new_build_fails(self, build_lb_image_for_jupyterlab):
+    def test_old_dockerfile_removed_when_new_build_fails(self, build_lb_image_for_jupyterlab, remove_image_cache_data):
         # Test that when a new build fails, old images are removed so they cannot be launched.
         my_lb = build_lb_image_for_jupyterlab[0]
         docker_image_id = build_lb_image_for_jupyterlab[3]
