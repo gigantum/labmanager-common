@@ -74,9 +74,13 @@ def _get_cached_image(env_dir: str, image_name: str) -> Optional[str]:
     """
     # Determine if we need to rebuild by testing if the environment changed
     env_cache_path = os.path.join('/mnt/gigantum', f"{image_name}.cache")
-    yamllist_cmds = f'find -s {env_dir} -name "*.yaml" -type f -exec {{}} \\;'.split()
-    yamllist_cmds.extend(['|', 'sort', '|', 'cksum'])
-    env_cksum = call_subprocess(yamllist_cmds, cwd=env_dir)
+
+    # Find all files, sort them alphabetically, get their checksums, then
+    # obtain the cumulative checksum-of-checksums (the final cksum call).
+    # Note: We use shell=True in order to support piping (the | character)
+    yamllist_cmds = (f'find {env_dir} -name *.yaml -type f '
+                     f'| sort | xargs cksum | cksum').split()
+    env_cksum = call_subprocess(yamllist_cmds, cwd=env_dir, shell=True)
 
     if os.path.exists(env_cache_path):
         old_env_cksum = open(env_cache_path).read()
@@ -91,6 +95,9 @@ def _get_cached_image(env_dir: str, image_name: str) -> Optional[str]:
             return i.id
         except docker.errors.ImageNotFound:
             pass
+    else:
+        # Env checksum hash is outdated. Remove it.
+        os.remove(env_cache_path)
     return None
 
 
