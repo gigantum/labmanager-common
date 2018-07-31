@@ -83,7 +83,7 @@ class TestContainerOps(object):
         result = ContainerOperations.run_command("/bin/false", my_lb, username="unittester")
         assert result.decode().strip() == ""
 
-    def test_old_dockerfile_removed_when_new_build_fails(self, build_lb_image_for_jupyterlab, remove_image_cache_data):
+    def test_old_dockerfile_removed_when_new_build_fails(self, build_lb_image_for_jupyterlab):
         # Test that when a new build fails, old images are removed so they cannot be launched.
         my_lb = build_lb_image_for_jupyterlab[0]
         docker_image_id = build_lb_image_for_jupyterlab[3]
@@ -96,6 +96,8 @@ class TestContainerOps(object):
         with open(os.path.join(my_lb.root_dir, '.gigantum/env/Dockerfile'), 'w') as dockerfile:
             dockerfile.write('\n'.join(olines))
             dockerfile.write('\nRUN /bin/false')
+
+        [_ for _ in remove_image_cache_data()]
 
         with pytest.raises(ContainerBuildException):
             ContainerOperations.build_image(labbook=my_lb, username="unittester")
