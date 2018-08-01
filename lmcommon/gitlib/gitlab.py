@@ -292,6 +292,9 @@ class GitLabManager(object):
                 "wiki_enabled": False,
                 "snippets_enabled": False,
                 "shared_runners_enabled": False,
+                # See: https://docs.gitlab.com/ee/api/projects.html#project-merge-method
+                # We want all deconfliction done on client-side.
+                "merge_method": "ff",
                 "visibility": visibility,
                 "public_jobs": False,
                 "request_access_enabled": False
