@@ -37,7 +37,7 @@ import rq
 from lmcommon.imagebuilder import ImageBuilder
 from lmcommon.configuration import get_docker_client
 from lmcommon.environment import ComponentManager, RepositoryManager
-from lmcommon.fixtures import mock_config_file, remove_image_cache_data
+from lmcommon.fixtures import mock_config_file
 import lmcommon.fixtures
 from lmcommon.dispatcher import Dispatcher
 from lmcommon.labbook import LabBook
