@@ -34,7 +34,6 @@ from lmcommon.container.exceptions import ContainerBuildException, ContainerExce
 
 
 def remove_image_cache_data():
-    yield
     try:
         shutil.rmtree('/mnt/gigantum/.labmanager/image-cache', ignore_errors=True)
     except:
@@ -100,13 +99,13 @@ class TestContainerOps(object):
 
         assert stopped
 
-        # We need to remove cache data otherwise the following tests won't work
-        remove_image_cache_data()
-
         olines = open(os.path.join(my_lb.root_dir, '.gigantum/env/Dockerfile')).readlines()[:6]
         with open(os.path.join(my_lb.root_dir, '.gigantum/env/Dockerfile'), 'w') as dockerfile:
             dockerfile.write('\n'.join(olines))
             dockerfile.write('\nRUN /bin/false')
+
+        # We need to remove cache data otherwise the following tests won't work
+        remove_image_cache_data()
 
         with pytest.raises(ContainerBuildException):
             ContainerOperations.build_image(labbook=my_lb, username="unittester")
