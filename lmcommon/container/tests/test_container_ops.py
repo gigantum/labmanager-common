@@ -23,6 +23,7 @@ import pprint
 import getpass
 import docker
 import requests
+import shutil
 
 from lmcommon.configuration import get_docker_client
 
@@ -31,6 +32,14 @@ from lmcommon.container.utils import infer_docker_image_name
 from lmcommon.fixtures import remove_image_cache_data
 from lmcommon.fixtures.container import build_lb_image_for_jupyterlab, mock_config_with_repo
 from lmcommon.container.exceptions import ContainerBuildException, ContainerException
+
+
+def remove_image_cache_data():
+    yield
+    try:
+        shutil.rmtree('/mnt/gigantum/.labmanager/image-cache', ignore_errors=True)
+    except:
+        pass
 
 
 class TestContainerOps(object):
@@ -92,12 +101,13 @@ class TestContainerOps(object):
 
         assert stopped
 
+        # We need to remove cache data otherwise the following tests won't work
+        remove_image_cache_data()
+
         olines = open(os.path.join(my_lb.root_dir, '.gigantum/env/Dockerfile')).readlines()[:6]
         with open(os.path.join(my_lb.root_dir, '.gigantum/env/Dockerfile'), 'w') as dockerfile:
             dockerfile.write('\n'.join(olines))
             dockerfile.write('\nRUN /bin/false')
-
-        [_ for _ in remove_image_cache_data()]
 
         with pytest.raises(ContainerBuildException):
             ContainerOperations.build_image(labbook=my_lb, username="unittester")
