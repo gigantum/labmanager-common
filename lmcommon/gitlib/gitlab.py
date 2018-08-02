@@ -18,6 +18,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 import requests
+from enum import Enum
 from typing import List, Optional, Tuple, Dict, Any
 import subprocess
 import pexpect
@@ -67,6 +68,18 @@ def check_and_add_user(admin_service: str, access_token: str, username: str) -> 
 
 class GitLabException(Exception):
     pass
+
+
+class Visibility(Enum):
+    """ Represents access to remote GitLab project"""
+    # Available only to owner and collaborators
+    PRIVATE = "private"
+
+    # Available to anyone via link (even non-users)
+    PUBLIC = "public"
+
+    # Available to any user registered in GitLab
+    INTERNAL = "internal"
 
 
 class GitLabManager(object):
@@ -256,12 +269,13 @@ class GitLabManager(object):
             logger.error(msg)
             raise GitLabException(f'Failed to fork: {msg}')
 
-    def create_labbook(self, namespace: str, labbook_name: str) -> None:
+    def create_labbook(self, namespace: str, labbook_name: str, visibility: str) -> None:
         """Method to create the remote repository
 
         Args:
             namespace(str): Namespace in gitlab, currently the "owner"
             labbook_name(str): LabBook name (i.e. project name in gitlab)
+            visibility(str): public, private (default), or internal.
 
         Returns:
 
@@ -269,13 +283,19 @@ class GitLabManager(object):
         if self.labbook_exists(namespace, labbook_name):
             raise ValueError("Cannot create remote repository that already exists")
 
+        # Raises ValueError if given visibility is not valid
+        Visibility(visibility)
+
         data = {"name": labbook_name,
                 "issues_enabled": False,
                 "jobs_enabled": False,
                 "wiki_enabled": False,
                 "snippets_enabled": False,
                 "shared_runners_enabled": False,
-                "visibility": "private",
+                # See: https://docs.gitlab.com/ee/api/projects.html#project-merge-method
+                # We want all deconfliction done on client-side.
+                "merge_method": "ff",
+                "visibility": visibility,
                 "public_jobs": False,
                 "request_access_enabled": False
                 }
