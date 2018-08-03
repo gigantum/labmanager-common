@@ -44,7 +44,7 @@ LABBOOK_SCHEMA_VERSIONS = {
         'schema': int
     },
     2: {
-        'cuda': bool,
+        'cuda_version': str,
         'labbook': {
             'id': str,
             'name': str,

@@ -178,7 +178,8 @@ def start_labbook_container(labbook_root: str, config_path: str,
     docker_client = get_docker_client()
 
     # run with nvidia if we have GPU support in the labmanager 
-    if lb.labmanager_config.config["container"]["cuda"] == True and lb.cuda == True:
+    # CUDA must be set (not None) and version must match between labbook and labmanager
+    if lb.labmanager_config.config["container"]["cuda_version"] and lb.cuda_version == lb.labmanager_config.config["container"]["cuda_version"]:
         container_id = docker_client.containers.run(tag, detach=True, init=True, name=tag,
                                                 environment=env_var, volumes=volumes_dict,
                                                 runtime='nvidia',

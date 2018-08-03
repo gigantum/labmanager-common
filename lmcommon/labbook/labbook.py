@@ -397,9 +397,9 @@ class LabBook(object):
             return None
 
     @property
-    def cuda(self) -> bool:
-        if self._data and self._data["cuda"]:
-            return self._data["cuda"]
+    def cuda_version(self) -> bool:
+        if self._data and self._data["cuda_version"]:
+            return self._data["cuda_version"]
         else:
             return False
 
