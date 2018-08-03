@@ -20,10 +20,10 @@
 import os
 import docker
 import docker.errors
+import hashlib
 import time
 import json
 from typing import Callable, Optional, List, Tuple, Any, Dict
-from docker import APIClient
 
 from lmcommon.configuration import get_docker_client
 from lmcommon.configuration.utils import call_subprocess
@@ -79,12 +79,12 @@ def _get_cached_image(env_dir: str, image_name: str) -> Optional[str]:
         os.makedirs(cache_dir, exist_ok=True)
     env_cache_path = os.path.join(cache_dir, f"{image_name}.cache")
 
-    # Find all files, sort them alphabetically, get their checksums, then
-    # obtain the cumulative checksum-of-checksums (the final cksum call).
-    # Note: We use shell=True in order to support piping (the | character)
-    yamllist_cmds = (f'find {env_dir} -name *.yaml -type f '
-                     f'| sort | xargs cksum | cksum').split()
-    env_cksum = call_subprocess(yamllist_cmds, cwd=env_dir, shell=True)
+    m = hashlib.sha256()
+    for root, dirs, files in os.walk(env_dir):
+        for f in [n for n in files if '.yaml' in n]:
+            m.update(os.path.join(root, f).encode())
+            m.update(open(os.path.join(root, f)).read().encode())
+    env_cksum = m.hexdigest()
 
     if os.path.exists(env_cache_path):
         old_env_cksum = open(env_cache_path).read()
