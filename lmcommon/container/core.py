@@ -102,6 +102,8 @@ def _get_cached_image(env_dir: str, image_name: str) -> Optional[str]:
     else:
         # Env checksum hash is outdated. Remove it.
         os.remove(env_cache_path)
+        with open(env_cache_path, 'w') as cfile:
+            cfile.write(env_cksum)
     return None
 
 
