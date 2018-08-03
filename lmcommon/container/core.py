@@ -145,7 +145,7 @@ def build_docker_image(root_dir: str, override_image_tag: Optional[str], nocache
 
     reuse_image_id = _get_cached_image(env_dir, image_name)
     if reuse_image_id:
-        logger.warning(f"Reusing Docker image for {str(lb)}")
+        logger.info(f"Reusing Docker image for {str(lb)}")
         if feedback_callback:
             feedback_callback(f"Using cached image {reuse_image_id}")
         return reuse_image_id
