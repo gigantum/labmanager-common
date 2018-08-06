@@ -26,13 +26,15 @@ from lmcommon.logging import LMLogger
 logger = LMLogger.get_logger()
 
 
-def call_subprocess(cmd_tokens: List[str], cwd: str, check: bool = True) -> str:
+def call_subprocess(cmd_tokens: List[str], cwd: str, check: bool = True,
+                    shell: bool = False) -> str:
     """Execute a subprocess call and properly benchmark and log
 
     Args:
         cmd_tokens: List of command tokens, e.g., ['ls', '-la']
         cwd: Current working directory
         check: Raise exception if command fails
+        shell: Run as shell command (not recommended)
 
     Returns:
         Decoded stdout of called process after completing
@@ -43,7 +45,8 @@ def call_subprocess(cmd_tokens: List[str], cwd: str, check: bool = True) -> str:
     logger.debug(f"Executing `{' '.join(cmd_tokens)}` in {cwd}")
     start_time = time.time()
     try:
-        r = subprocess.run(cmd_tokens, cwd=cwd, stderr=subprocess.PIPE, stdout=subprocess.PIPE, check=check)
+        r = subprocess.run(cmd_tokens, cwd=cwd, stderr=subprocess.PIPE, stdout=subprocess.PIPE, check=check,
+                           shell=shell)
         finish_time = time.time()
         elapsed_time = finish_time - start_time
         logger.debug(f"Finished command `{' '.join(cmd_tokens)}` in {elapsed_time}s")
