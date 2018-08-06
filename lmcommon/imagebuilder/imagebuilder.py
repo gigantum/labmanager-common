@@ -200,10 +200,10 @@ class ImageBuilder(object):
             str - Content of Dockerfile in single string using os.linesep as line separator.
         """
         assembly_pipeline = [self._load_baseimage,
-                             self._post_image_hook,
                              self._load_custom,
                              self._load_packages,
                              self._load_docker_snippets,
+                             self._post_image_hook,
                              self._entrypoint_hooks]
 
         # flat map the results of executing the pipeline.
