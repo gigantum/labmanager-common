@@ -107,6 +107,14 @@ def _get_cached_image(env_dir: str, image_name: str) -> Optional[str]:
     return None
 
 
+def _remove_docker_image(image_name: str) -> None:
+    try:
+        get_docker_client().images.get(name=image_name)
+        get_docker_client().images.remove(image_name)
+    except docker.errors.ImageNotFound:
+        logger.warning(f"Attempted to delete Docker image {image_name}, but not found")
+
+
 def build_docker_image(root_dir: str, override_image_tag: Optional[str], nocache: bool = False,
                        username: Optional[str] = None, feedback_callback: Optional[Callable] = None) -> str:
     """
@@ -152,13 +160,6 @@ def build_docker_image(root_dir: str, override_image_tag: Optional[str], nocache
             feedback_callback(f"Using cached image {reuse_image_id}")
         return reuse_image_id
 
-    # We need to remove any images pertaining to this labbook before triggering a build.
-    try:
-        get_docker_client().images.get(name=image_name)
-        get_docker_client().images.remove(image_name)
-    except docker.errors.ImageNotFound:
-        pass
-
     try:
         image_id = None
         # From: https://docker-py.readthedocs.io/en/stable/api.html#docker.api.build.BuildApiMixin.build
@@ -177,9 +178,11 @@ def build_docker_image(root_dir: str, override_image_tag: Optional[str], nocache
                 # There is no other (simple) way to grab the image ID
                 image_id = stream.split(' ')[-1]
     except docker.errors.BuildError as e:
+        _remove_docker_image(image_name)
         raise ContainerBuildException(e)
 
     if not image_id:
+        _remove_docker_image(image_name)
         raise ContainerBuildException(f"Cannot determine docker image on LabBook from {root_dir}")
 
     return image_id
