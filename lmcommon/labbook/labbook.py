@@ -1507,7 +1507,7 @@ class LabBook(object):
         Args:
             username(str): Username to filter the query on
             sort_mode(sort_mode): String specifying how labbooks should be sorted
-            reverse(bool): Reverse sorting if True
+            reverse(bool): Reverse sorting if True. Default is ascending (a-z, oldest-newest)
 
         Supported sorting modes:
             - name: naturally sort
@@ -1575,7 +1575,7 @@ class LabBook(object):
         # Apply sort
         if sort_mode in ['created_on', 'modified_on']:
             # Sort on datetime objects, flipping the reverse state to match default sort behavior
-            result = sorted(result, key=lambda x: x['sort_val'], reverse=not reverse)
+            result = sorted(result, key=lambda x: x['sort_val'], reverse=reverse)
         else:
             # Use natural sort for labbook names
             result = natsorted(result, key=lambda x: x['sort_val'], reverse=reverse)

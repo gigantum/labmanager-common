@@ -216,9 +216,9 @@ class TestLabBook(object):
         labbooks = lb1.list_local_labbooks(username="user1", sort_mode="created_on")
 
         assert len(labbooks) == 3
-        assert labbooks[0]['name'] == 'labbook1'
+        assert labbooks[0]['name'] == 'labbook3'
         assert labbooks[1]['name'] == 'asdf'
-        assert labbooks[2]['name'] == 'labbook3'
+        assert labbooks[2]['name'] == 'labbook1'
 
     def test_list_labbooks_create_date_no_metadata(self, mock_config_file):
         """Test list create dated sorted labbooks"""
@@ -237,9 +237,9 @@ class TestLabBook(object):
         labbooks = lb1.list_local_labbooks(username="user1", sort_mode="created_on")
 
         assert len(labbooks) == 3
-        assert labbooks[0]['name'] == 'labbook1'
+        assert labbooks[0]['name'] == 'labbook3'
         assert labbooks[1]['name'] == 'asdf'
-        assert labbooks[2]['name'] == 'labbook3'
+        assert labbooks[2]['name'] == 'labbook1'
 
         os.remove(os.path.join(lb1.root_dir, '.gigantum', 'buildinfo'))
         os.remove(os.path.join(lb3.root_dir, '.gigantum', 'buildinfo'))
@@ -247,9 +247,9 @@ class TestLabBook(object):
         labbooks = lb1.list_local_labbooks(username="user1", sort_mode="created_on")
 
         assert len(labbooks) == 3
-        assert labbooks[0]['name'] == 'labbook1'
+        assert labbooks[0]['name'] == 'labbook3'
         assert labbooks[1]['name'] == 'asdf'
-        assert labbooks[2]['name'] == 'labbook3'
+        assert labbooks[2]['name'] == 'labbook1'
 
         os.remove(os.path.join(lb2.root_dir, '.gigantum', 'labbook.yaml'))
         labbooks = lb1.list_local_labbooks(username="user1", sort_mode='modified_on')
@@ -272,10 +272,10 @@ class TestLabBook(object):
         labbooks = lb1.list_local_labbooks(username="user1", sort_mode="created_on", reverse=True)
 
         assert len(labbooks) == 4
-        assert labbooks[0]['name'] == 'labbook3'
-        assert labbooks[1]['name'] == 'asdf'
-        assert labbooks[2]['name'] == 'labbook1'
-        assert labbooks[3]['name'] == 'labbook4'
+        assert labbooks[0]['name'] == 'labbook4'
+        assert labbooks[1]['name'] == 'labbook1'
+        assert labbooks[2]['name'] == 'asdf'
+        assert labbooks[3]['name'] == 'labbook3'
 
     def test_list_labbooks_modified_date(self, mock_config_file):
         """Test list modified dated sorted labbooks"""
@@ -284,26 +284,26 @@ class TestLabBook(object):
 
         lb1.new(username="user1", owner={"username": "user1"},
                 name="labbook3", description="my first labbook")
-        time.sleep(2)
+        time.sleep(1.2)
         lb2.new(username="user1", owner={"username": "user1"},
                 name="asdf", description="my second labbook")
-        time.sleep(2)
+        time.sleep(1.2)
         lb3.new(username="user1", owner={"username": "user2"},
                 name="labbook1", description="my other labbook")
-        time.sleep(2)
+        time.sleep(1.2)
         lb4.new(username="user1", owner={"username": "user1"},
                 name="hhghg", description="my other labbook")
         
         labbooks = lb1.list_local_labbooks(username="user1", sort_mode="modified_on")
 
         assert len(labbooks) == 4
-        assert labbooks[0]['name'] == 'hhghg'
-        assert labbooks[1]['name'] == 'labbook1'
-        assert labbooks[2]['name'] == 'asdf'
-        assert labbooks[3]['name'] == 'labbook3'
+        assert labbooks[0]['name'] == 'labbook3'
+        assert labbooks[1]['name'] == 'asdf'
+        assert labbooks[2]['name'] == 'labbook1'
+        assert labbooks[3]['name'] == 'hhghg'
 
         # modify a repo
-        time.sleep(2)
+        time.sleep(1.2)
         with open(os.path.join(lb2.root_dir, "code", "test.txt"), 'wt') as tf:
             tf.write("asdfasdf")
 
@@ -313,10 +313,10 @@ class TestLabBook(object):
         labbooks = lb1.list_local_labbooks(username="user1", sort_mode="modified_on")
 
         assert len(labbooks) == 4
-        assert labbooks[0]['name'] == 'asdf'
-        assert labbooks[1]['name'] == 'hhghg'
-        assert labbooks[2]['name'] == 'labbook1'
-        assert labbooks[3]['name'] == 'labbook3'
+        assert labbooks[0]['name'] == 'labbook3'
+        assert labbooks[1]['name'] == 'labbook1'
+        assert labbooks[2]['name'] == 'hhghg'
+        assert labbooks[3]['name'] == 'asdf'
 
     def test_list_labbooks_modified_date_reversed(self, mock_config_file):
         """Test list modified dated sorted labbooks"""
@@ -325,26 +325,26 @@ class TestLabBook(object):
 
         lb1.new(username="user1", owner={"username": "user1"},
                 name="labbook3", description="my first labbook")
-        time.sleep(2)
+        time.sleep(1.2)
         lb2.new(username="user1", owner={"username": "user1"},
                 name="asdf", description="my second labbook")
-        time.sleep(2)
+        time.sleep(1.2)
         lb3.new(username="user1", owner={"username": "user2"},
                 name="labbook1", description="my other labbook")
-        time.sleep(2)
+        time.sleep(1.2)
         lb4.new(username="user1", owner={"username": "user1"},
                 name="hhghg", description="my other labbook")
 
         labbooks = lb1.list_local_labbooks(username="user1", sort_mode="modified_on", reverse=True)
 
         assert len(labbooks) == 4
-        assert labbooks[3]['name'] == 'hhghg'
-        assert labbooks[2]['name'] == 'labbook1'
-        assert labbooks[1]['name'] == 'asdf'
-        assert labbooks[0]['name'] == 'labbook3'
+        assert labbooks[0]['name'] == 'hhghg'
+        assert labbooks[1]['name'] == 'labbook1'
+        assert labbooks[2]['name'] == 'asdf'
+        assert labbooks[3]['name'] == 'labbook3'
 
         # modify a repo
-        time.sleep(2)
+        time.sleep(1.2)
         with open(os.path.join(lb2.root_dir, "code", "test.txt"), 'wt') as tf:
             tf.write("asdfasdf")
 
@@ -354,10 +354,10 @@ class TestLabBook(object):
         labbooks = lb1.list_local_labbooks(username="user1", sort_mode="modified_on", reverse=True)
 
         assert len(labbooks) == 4
-        assert labbooks[3]['name'] == 'asdf'
-        assert labbooks[2]['name'] == 'hhghg'
-        assert labbooks[1]['name'] == 'labbook1'
-        assert labbooks[0]['name'] == 'labbook3'
+        assert labbooks[0]['name'] == 'asdf'
+        assert labbooks[1]['name'] == 'hhghg'
+        assert labbooks[2]['name'] == 'labbook1'
+        assert labbooks[3]['name'] == 'labbook3'
 
     def test_load_from_directory(self, mock_config_file):
         """Test loading a labbook from a directory"""
