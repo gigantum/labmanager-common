@@ -393,6 +393,7 @@ exec gosu giguser "$@"
             cf.write(yaml.dump(component_data, default_flow_style=False))
 
         if component_class == 'base':
+            self.labbook.cuda_version = component_data.get('cuda_version')
             for manager in component_data['package_managers']:
                 packages = list()
                 # Build dictionary of packages

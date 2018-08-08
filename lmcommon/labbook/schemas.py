@@ -18,7 +18,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 from typing import Any, Dict, Optional
-from schema import Schema, SchemaError, Optional as SchemaOptional
+from schema import Schema, SchemaError, Optional as SchemaOptional, Or as SchemaOr
 
 from lmcommon.logging import LMLogger
 
@@ -33,7 +33,7 @@ LABBOOK_SCHEMA_VERSIONS = {
     #
     # These are all the supported schemas
     1: {
-        SchemaOptional('cuda_version'): str,
+        SchemaOptional('cuda_version'): SchemaOr(str, None),
         'labbook': {
             'id': str,
             'name': str,

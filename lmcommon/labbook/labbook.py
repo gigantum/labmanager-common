@@ -397,11 +397,19 @@ class LabBook(object):
             return None
 
     @property
-    def cuda_version(self) -> bool:
+    def cuda_version(self) -> Optional[str]:
         if self._data and self._data["cuda_version"]:
             return self._data["cuda_version"]
         else:
-            return False
+            return None
+
+    @cuda_version.setter
+    def cuda_version(self, cuda_version: Optional[str] = None) -> None:
+        if self._data:
+            self._data['cuda_version'] = cuda_version
+            self._save_labbook_data()
+        else:
+            raise RuntimeError("LabBook _data cannot be None")
 
     def _set_root_dir(self, new_root_dir: str) -> None:
         """Update the root directory and also reconfigure the git instance
@@ -1315,7 +1323,7 @@ class LabBook(object):
 
         # Build data file contents
         self._data = {
-            "cuda": False,
+            "cuda_version": None,
             "labbook": {"id": uuid.uuid4().hex,
                         "name": name,
                         "description": self._santize_input(description or '')},
