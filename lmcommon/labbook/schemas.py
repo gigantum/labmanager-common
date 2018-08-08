@@ -18,14 +18,14 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 from typing import Any, Dict, Optional
-from schema import Schema, SchemaError
+from schema import Schema, SchemaError, Optional as SchemaOptional
 
 from lmcommon.logging import LMLogger
 
 logger = LMLogger.get_logger()
 
 # The current LabBook schema version
-CURRENT_SCHEMA = 2
+CURRENT_SCHEMA = 1
 
 LABBOOK_SCHEMA_VERSIONS = {
     # Note: Each time a new schema version is needed, add it into this dictionary
@@ -33,6 +33,7 @@ LABBOOK_SCHEMA_VERSIONS = {
     #
     # These are all the supported schemas
     1: {
+        SchemaOptional('cuda_version'): str,
         'labbook': {
             'id': str,
             'name': str,
@@ -42,19 +43,7 @@ LABBOOK_SCHEMA_VERSIONS = {
             'username': str
         },
         'schema': int
-    },
-    2: {
-        'cuda_version': str,
-        'labbook': {
-            'id': str,
-            'name': str,
-            'description': str
-        },
-        'owner': {
-            'username': str
-        },
-        'schema': int
-    },
+    }
 }
 
 # TODO: Add validation methods and formalized schemas for Environment Component Definitions
