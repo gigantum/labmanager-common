@@ -298,7 +298,8 @@ class CondaPackageManagerBase(PackageManager):
         cmd = ['conda', 'install', '--dry-run', '--no-deps', '--json', *pkgs]
 
         try:
-            container_result = ContainerOperations.run_command(' '.join(cmd), labbook, username).decode().strip()
+            container_result = ContainerOperations.run_command(' '.join(cmd), labbook, username,
+                                                               override_image_tag=self.fallback_image(labbook)).decode().strip()
         except Exception as e:
             logger.error(e)
             raise ValueError(f"An error occured while validating packages")
