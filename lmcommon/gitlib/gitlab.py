@@ -252,6 +252,20 @@ class GitLabManager(object):
             logger.error(response.json())
             raise ValueError(msg)
 
+    def repo_details(self, namespace: str, labbook_name: str) -> Dict[str, Any]:
+        repo_id = self.get_repository_id(namespace, labbook_name)
+        response = requests.get(f"https://{self.remote_host}/api/v4/projects/{repo_id}",
+                                headers={"PRIVATE-TOKEN": self.user_token}, timeout=10)
+        if response.status_code == 200:
+            return response.json()
+        elif response.status_code == 404:
+            raise ValueError(f"Remote GitLab repo {namespace}/{labbook_name} not found")
+        else:
+            msg = f"Failed to check if {namespace}/{labbook_name} exists. Status Code: {response.status_code}"
+            logger.error(msg)
+            logger.error(response.json())
+            raise ValueError(msg)
+
     def fork_labbook(self, username: str, namespace: str, labbook_name: str):
         if self.labbook_exists(namespace, labbook_name):
             raise ValueError(f"Remote repository {namespace}/{labbook_name}")
