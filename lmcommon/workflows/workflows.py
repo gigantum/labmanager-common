@@ -47,16 +47,14 @@ class GitWorkflow(object):
         """
         try:
             logger.info(f"Publishing {str(self.labbook)} for user {username} to remote {remote}")
-            
+            if self.labbook.has_remote:
+                raise ValueError("Cannot publish Labbook when remote already set.")
+
             if self.labbook.active_branch != f'gm.workspace-{username}':
                 raise ValueError(f"Must be on user workspace (gm.workspace-{username}) to sync")
 
             with self.labbook.lock_labbook():
                 self.labbook.sweep_uncommitted_changes()
-
-            if self.labbook.has_remote:
-                raise ValueError("Cannot publish Labbook when remote already set.")
-            with self.labbook.lock_labbook():
                 core.create_remote_gitlab_repo(labbook=self.labbook, username=username, access_token=access_token)
                 core.publish_to_remote(labbook=self.labbook, username=username, remote=remote)
         except Exception as e:

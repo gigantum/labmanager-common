@@ -82,7 +82,7 @@ def push(labbook: LabBook, remote: str) -> None:
         logger.info(f"Fetching from remote {remote}")
         labbook.git.fetch(remote=remote)
 
-        if not labbook.active_branch in labbook.get_branches()['remote']:
+        if labbook.active_branch not in labbook.get_branches()['remote']:
             logger.info(f"Pushing and setting upstream branch {labbook.active_branch}")
             labbook.git.repo.git.push("--set-upstream", remote, labbook.active_branch)
         else:
@@ -92,27 +92,7 @@ def push(labbook: LabBook, remote: str) -> None:
         raise GitLabRemoteError(e)
 
 
-def pull(labbook: LabBook, remote: str) -> None:
-    """Pull and update from a remote git repository
 
-    Args:
-        labbook: Subject labbook
-        remote: Remote Git repository to pull from. Default is "origin"
-
-    Returns:
-        None
-    """
-
-    try:
-        logger.info(f"{str(labbook)} pulling from remote {remote}")
-        start = datetime.datetime.now()
-        labbook.git.pull(remote=remote)
-        end = datetime.datetime.now()
-        delta = (end - start).total_seconds()
-        method = logger.info if delta < 2.0 else logger.warning
-        method(f'Pulled {str(labbook)} from {remote} in {delta} sec')
-    except Exception as e:
-        raise GitLabRemoteError(e)
 
 
 def create_remote_gitlab_repo(labbook: LabBook, username: str, access_token: Optional[str] = None) -> None:
