@@ -17,10 +17,8 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-
-from typing import Optional, Tuple
-from lmcommon.configuration.utils import call_subprocess
-from lmcommon.labbook import LabBook, LabbookException, LabbookMergeException
+from typing import Optional
+from lmcommon.labbook import LabBook
 from lmcommon.logging import LMLogger
 from lmcommon.workflows import core
 

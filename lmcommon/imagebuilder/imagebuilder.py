@@ -21,14 +21,12 @@ import datetime
 import functools
 import glob
 import os
-import time
 
 from typing import (Any, Dict, List)
 import yaml
 
 from lmcommon.labbook import LabBook
 from lmcommon.logging import LMLogger
-from lmcommon.activity import ActivityDetailType, ActivityType, ActivityRecord, ActivityDetailRecord, ActivityStore
 from lmcommon.environment.utils import get_package_manager
 
 
@@ -42,7 +40,7 @@ class ImageBuilder(object):
         """Create a new image builder given the path to labbook.
 
         Args:
-            labbook_directory(str): Directory path to labook
+            labbook: Subject LabBook
         """
         self.labbook = labbook
         if not os.path.exists(self.labbook.root_dir):

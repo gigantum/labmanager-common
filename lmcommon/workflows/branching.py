@@ -27,6 +27,7 @@ from lmcommon.workflows.core import call_subprocess
 
 logger = LMLogger.get_logger()
 
+
 class BranchException(Exception):
     pass
 

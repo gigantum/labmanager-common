@@ -19,17 +19,12 @@
 # SOFTWARE.
 from typing import (Any, List, Dict, Optional)
 from collections import OrderedDict
-
-
-from io import StringIO
-import requests
 import json
 from natsort import natsorted
 
 from distutils.version import StrictVersion
 from distutils.version import LooseVersion
 
-from contextlib import redirect_stdout
 from lmcommon.environment.packagemanager import PackageManager, PackageResult
 from lmcommon.container.container import ContainerOperations
 from lmcommon.container.exceptions import ContainerException
@@ -273,7 +268,8 @@ class CondaPackageManagerBase(PackageManager):
         # packages = [x for x in data if data.get(x)]
         # return packages
 
-    def validate_packages(self, package_list: List[Dict[str, str]], labbook: LabBook, username: str) -> List[PackageResult]:
+    def validate_packages(self, package_list: List[Dict[str, str]], labbook: LabBook, username: str) \
+            -> List[PackageResult]:
         """Method to validate a list of packages, and if needed fill in any missing versions
 
         Should check both the provided package name and version. If the version is omitted, it should be generated
@@ -298,8 +294,9 @@ class CondaPackageManagerBase(PackageManager):
         cmd = ['conda', 'install', '--dry-run', '--no-deps', '--json', *pkgs]
 
         try:
-            container_result = ContainerOperations.run_command(' '.join(cmd), labbook, username,
-                                                               override_image_tag=self.fallback_image(labbook)).decode().strip()
+            cmd_result = ContainerOperations.run_command(' '.join(cmd), labbook, username,
+                                                         override_image_tag=self.fallback_image(labbook))
+            container_result = cmd_result.decode().strip()
         except Exception as e:
             logger.error(e)
             raise ValueError(f"An error occured while validating packages")

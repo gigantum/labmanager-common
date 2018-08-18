@@ -27,13 +27,10 @@ import yaml
 import json
 import time
 import datetime
-import subprocess
 from contextlib import contextmanager
 from pkg_resources import resource_filename
 import gitdb
 from collections import OrderedDict
-
-from git.exc import GitCommandError
 from natsort import natsorted
 
 from lmcommon.configuration import Configuration

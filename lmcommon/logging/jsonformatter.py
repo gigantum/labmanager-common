@@ -49,5 +49,3 @@ class JsonFormatter(Formatter):
             'lineno': record.lineno
         }
         return json.dumps(d)
-
-

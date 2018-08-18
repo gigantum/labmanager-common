@@ -17,7 +17,6 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-
 import subprocess
 import datetime
 import time
@@ -248,7 +247,7 @@ def sync_with_remote(labbook: LabBook, username: str, remote: str, force: bool) 
     except Exception as e:
         raise WorkflowsException(e)
     finally:
-        ## We should (almost) always have the user's personal workspace checked out.
+        # We should (almost) always have the user's personal workspace checked out.
         labbook.checkout_branch(f"gm.workspace-{username}")
 
 

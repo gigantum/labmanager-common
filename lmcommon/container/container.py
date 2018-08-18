@@ -18,17 +18,13 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 import os
-import re
 import time
-import uuid
-from typing import Any, List, Optional, Tuple, Dict
-import redis
-import requests
+from typing import Optional, Tuple
+
 import docker
 import docker.errors
-import confhttpproxy
 
-from lmcommon.configuration import get_docker_client, Configuration
+from lmcommon.configuration import get_docker_client
 from lmcommon.logging import LMLogger
 from lmcommon.labbook import LabBook, LabbookException
 
@@ -59,7 +55,7 @@ class ContainerOperations(object):
             A tuple containing the labbook, docker image id.
 
         Raises:
-            Todo.
+            ContainerBuildException if container build fails.
         """
         logger.info(f"Building docker image for {str(labbook)}, "
                     f"using override name `{override_image_tag}`")
@@ -71,7 +67,7 @@ class ContainerOperations(object):
 
     @classmethod
     def delete_image(cls, labbook: LabBook, override_image_tag: Optional[str] = None,
-                    username: Optional[str] = None) -> Tuple[LabBook, bool]:
+                     username: Optional[str] = None) -> Tuple[LabBook, bool]:
         """ Delete the Docker image for the given LabBook
 
         Args:
@@ -81,9 +77,6 @@ class ContainerOperations(object):
 
         Returns:
             A tuple containing the labbook, docker image id.
-
-        Raises:
-            Todo.
         """
         image_name = override_image_tag or infer_docker_image_name(labbook_name=labbook.name,
                                                                    owner=labbook.owner['username'],
@@ -191,7 +184,6 @@ class ContainerOperations(object):
         Returns:
             A tuple of (Labbook, boolean indicating whether a container was successfully stopped).
         """
-        # TODO - Potentially make container_id optional and query for id of container.
         n = infer_docker_image_name(labbook_name=labbook.name, owner=labbook.owner['username'], username=username)
         logger.info(f"Stopping {str(labbook)} ({n})")
 

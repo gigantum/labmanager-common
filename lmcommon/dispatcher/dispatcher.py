@@ -119,7 +119,7 @@ class Dispatcher(object):
         redis_keys = [x for x in redis_keys if "dependents" not in x.decode()]
 
         # Ignore type checking on the following line cause we filter out None-results.
-        return [self.query_task(JobKey(q.decode())) for q in redis_keys if q] # type: ignore
+        return [self.query_task(JobKey(q.decode())) for q in redis_keys if q]  # type: ignore
 
     @property
     def failed_jobs(self) -> List[JobStatus]:
@@ -297,7 +297,6 @@ class Dispatcher(object):
         logger.info(
             "Dispatched job `{}` to queue '{}', job={}".format(method_reference.__name__, self._job_queue.name,
                                                                rq_job_key_str))
-
         try:
             assert rq_job_key_str
             jk = JobKey(rq_job_key_str)
