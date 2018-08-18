@@ -206,7 +206,7 @@ class TestLabbookFileOperations(object):
                 if f == '.gitkeep':
                     score += 1
         # Ensure that count of .gitkeep files equals the number of subdirs, excluding the code dir.
-        assert score == len(LabBook._make_path_relative(long_dir).split(os.sep)) - 1
+        assert score == len(LabBook.make_path_relative(long_dir).split(os.sep)) - 1
 
     def test_makedir_record(self, mock_config_file):
         # Note that "score" refers to the count of .gitkeep files.

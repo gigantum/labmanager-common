@@ -17,9 +17,9 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-from typing import Any, Dict, List, Optional
 import shutil
 import os
+from typing import Any, Dict, List, Optional
 
 from lmcommon.labbook import LabBook
 from lmcommon.labbook import shims
@@ -147,7 +147,7 @@ class FileOperations(object):
         if not os.path.isfile(src_file):
             raise ValueError(f"Source file does not exist at `{src_file}`")
 
-        labbook._validate_section(section)
+        labbook.validate_section(section)
         r = call_subprocess(['git', 'check-ignore', os.path.basename(dst_path)],
                             cwd=labbook.root_dir, check=False)
         if dst_path and r and os.path.basename(dst_path) in r:
@@ -260,7 +260,7 @@ class FileOperations(object):
                                                   show=True)
 
     @classmethod
-    def delete_file(cls, labbook: LabBook, section: str, relative_path: str, directory: bool = False) -> bool:
+    def delete_file(cls, labbook: LabBook, section: str, relative_path: str) -> bool:
         """Delete file (or directory) from inside lb section.
 
 
@@ -273,14 +273,13 @@ class FileOperations(object):
             labbook: Subject LabBook
             section: Section name (code, input, output)
             relative_path: Relative path from labbook root to target
-            directory: True if relative_path is a directory
 
         Returns:
             None
         """
-        labbook._validate_section(section)
+        labbook.validate_section(section)
         with labbook.lock_labbook():
-            relative_path = LabBook._make_path_relative(relative_path)
+            relative_path = LabBook.make_path_relative(relative_path)
             target_path = os.path.join(labbook.root_dir, section, relative_path)
             if not os.path.exists(target_path):
                 raise ValueError(f"Attempted to delete non-existent path at `{target_path}`")
@@ -340,11 +339,12 @@ class FileOperations(object):
         underlying "mv" call.
 
         Args:
+            labbook: Subject LabBook
             section(str): Section name (code, input, output)
             src_rel_path(str): Source file or directory
             dst_rel_path(str): Target file name and/or directory
         """
-        labbook._validate_section(section)
+        labbook.validate_section(section)
         # Start with Validations
         if not src_rel_path:
             raise ValueError("src_rel_path cannot be None or empty")
@@ -354,8 +354,8 @@ class FileOperations(object):
 
         is_untracked = shims.in_untracked(labbook.root_dir, section)
         with labbook.lock_labbook():
-            src_rel_path = LabBook._make_path_relative(src_rel_path)
-            dst_rel_path = LabBook._make_path_relative(dst_rel_path)
+            src_rel_path = LabBook.make_path_relative(src_rel_path)
+            dst_rel_path = LabBook.make_path_relative(dst_rel_path)
 
             src_abs_path = os.path.join(labbook.root_dir, section, src_rel_path.replace('..', ''))
             dst_abs_path = os.path.join(labbook.root_dir, section, dst_rel_path.replace('..', ''))
@@ -415,6 +415,7 @@ class FileOperations(object):
         """Make a new directory inside the labbook directory.
 
         Args:
+            labbook: Subject LabBook
             relative_path(str): Path within the labbook to make directory
             make_parents(bool): If true, create intermediary directories
             create_activity_record(bool): If true, create commit and activity record
@@ -426,7 +427,7 @@ class FileOperations(object):
             raise ValueError("relative_path argument cannot be None or empty")
 
         with labbook.lock_labbook():
-            relative_path = LabBook._make_path_relative(relative_path)
+            relative_path = LabBook.make_path_relative(relative_path)
             new_directory_path = os.path.join(labbook.root_dir, relative_path)
             section = relative_path.split(os.sep)[0]
             git_untracked = shims.in_untracked(labbook.root_dir, section)
@@ -475,18 +476,19 @@ class FileOperations(object):
                     ars.create_activity_record(ar)
 
     @classmethod
-    def walkdir(cls, labbook, section: str, show_hidden: bool = False) -> List[Dict[str, Any]]:
+    def walkdir(cls, labbook: LabBook, section: str, show_hidden: bool = False) -> List[Dict[str, Any]]:
         """Return a list of all files and directories in a section of the labbook. Never includes the .git or
          .gigantum directory.
 
         Args:
+            labbook: Subject LabBook
             section(str): The labbook section (code, input, output) to walk
             show_hidden(bool): If True, include hidden directories (EXCLUDING .git and .gigantum)
 
         Returns:
             List[Dict[str, str]]: List of dictionaries containing file and directory metadata
         """
-        labbook._validate_section(section)
+        labbook.validate_section(section)
 
         keys: List[str] = list()
         # base_dir is the root directory to search, to account for relative paths inside labbook.
@@ -517,11 +519,13 @@ class FileOperations(object):
         return stats
 
     @classmethod
-    def listdir(cls, labbook: LabBook, section: str, base_path: Optional[str] = None, show_hidden: bool = False) -> List[Dict[str, Any]]:
+    def listdir(cls, labbook: LabBook, section: str, base_path: Optional[str] = None,
+                show_hidden: bool = False) -> List[Dict[str, Any]]:
         """Return a list of all files and directories in a directory. Never includes the .git or
          .gigantum directory.
 
         Args:
+            labbook: Subject labbook
             section(str): the labbook section to start from
             base_path(str): Relative base path, if not listing from labbook's root.
             show_hidden(bool): If True, include hidden directories (EXCLUDING .git and .gigantum)
@@ -529,7 +533,7 @@ class FileOperations(object):
         Returns:
             List[Dict[str, str]]: List of dictionaries containing file and directory metadata
         """
-        labbook._validate_section(section)
+        labbook.validate_section(section)
         # base_dir is the root directory to search, to account for relative paths inside labbook.
         base_dir = os.path.join(labbook.root_dir, section, base_path or '')
         if not os.path.isdir(base_dir):

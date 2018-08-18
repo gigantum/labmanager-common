@@ -296,7 +296,7 @@ class LabBook(object):
             raise ValueError("No owner assigned to Lab Book.")
 
     @staticmethod
-    def _make_path_relative(path_str: str) -> str:
+    def make_path_relative(path_str: str) -> str:
         while len(path_str or '') >= 1 and path_str[0] == os.path.sep:
             path_str = path_str[1:]
         return path_str
@@ -448,7 +448,7 @@ class LabBook(object):
             logger.error(errmsg)
             raise ValueError(errmsg)
 
-    def _validate_section(self, section: str) -> None:
+    def validate_section(self, section: str) -> None:
         """Simple method to validate a user provided section name
 
         Args:
@@ -763,7 +763,7 @@ class LabBook(object):
             target_path_rel = os.path.join(section, relative_path)
 
             # Remove any leading "/" -- without doing so os.path.join will break.
-            target_path_rel = LabBook._make_path_relative(target_path_rel)
+            target_path_rel = LabBook.make_path_relative(target_path_rel)
             target_path = os.path.join(self.root_dir, target_path_rel.replace('..', ''))
 
             if not os.path.exists(target_path):

@@ -503,7 +503,7 @@ class TestLabBook(object):
             ('//complex/.path/.like/this', 'complex/.path/.like/this')
         ]
         for sample_input, expected_output in vectors:
-            assert LabBook._make_path_relative(sample_input) == expected_output
+            assert LabBook.make_path_relative(sample_input) == expected_output
 
     def test_labbook_key(self, mock_config_file):
         lb = LabBook(mock_config_file[0])
