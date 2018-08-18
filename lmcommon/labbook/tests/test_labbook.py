@@ -549,7 +549,7 @@ class TestLabBook(object):
         lb.new(owner={"username": "test"}, name="test-insert-files-1", description="validate tests.")
         dirs = ["code/cat_dir", "code/dog_dir"]
         for d in dirs:
-            lb.makedir(d)
+            FileOperations.makedir(lb, d)
 
         open('/tmp/dogfile', 'w').write('ddd')
         open('/tmp/catfile', 'w').write('ccc')

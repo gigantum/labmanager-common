@@ -101,8 +101,8 @@ class TestLabbookShareProtocol(object):
         assert os.path.exists(os.path.join(home_lb.root_dir, 'code', 'testy-tracked-dir'))
         assert os.path.exists(os.path.join(home_lb.root_dir, 'code', 'dir-created-after-publish'))
 
-        home_lb.makedir(relative_path='output/sample-output-dir', create_activity_record=True)
-        home_lb.makedir(relative_path='input/stuff-for-inputs', create_activity_record=True)
+        FileOperations.makedir(home_lb, relative_path='output/sample-output-dir', create_activity_record=True)
+        FileOperations.makedir(home_lb, relative_path='input/stuff-for-inputs', create_activity_record=True)
         home_wf = GitWorkflow(home_lb)
         home_wf.sync('test')
 
@@ -126,8 +126,8 @@ class TestLabbookShareProtocol(object):
         loaders.from_remote(remote_repo, username="bob", owner="test", labbook_name="labbook1", labbook=bob_user_lb)
         bob_wf = GitWorkflow(bob_user_lb)
         assert bob_user_lb.active_branch == "gm.workspace-bob"
-        bob_user_lb.makedir(relative_path='output/sample-output-dir-xxx', create_activity_record=True)
-        bob_user_lb.makedir(relative_path='input/stuff-for-inputs-yyy', create_activity_record=True)
+        FileOperations.makedir(bob_user_lb, relative_path='output/sample-output-dir-xxx', create_activity_record=True)
+        FileOperations.makedir(bob_user_lb, relative_path='input/stuff-for-inputs-yyy', create_activity_record=True)
         bob_wf.sync('bob')
 
         test_wf.sync('test')
@@ -149,9 +149,9 @@ class TestLabbookShareProtocol(object):
         bob_wf = GitWorkflow(bob_user_lb)
         loaders.from_remote(remote_repo, username="bob", owner="test", labbook_name="labbook1", labbook=bob_user_lb)
         assert bob_user_lb.active_branch == "gm.workspace-bob"
-        bob_user_lb.makedir(relative_path='output/sample-output-dir-xxx', create_activity_record=True)
-        bob_user_lb.makedir(relative_path='input/stuff-for-inputs-yyy', create_activity_record=True)
-        bob_user_lb.delete_file(section="code", relative_path='testy-tracked-dir', directory=True)
+        FileOperations.makedir(bob_user_lb, relative_path='output/sample-output-dir-xxx', create_activity_record=True)
+        FileOperations.makedir(relative_path='input/stuff-for-inputs-yyy', create_activity_record=True)
+        FileOperations.delete_file(bob_user_lb, section="code", relative_path='testy-tracked-dir', directory=True)
         assert not os.path.exists(os.path.join(bob_user_lb.root_dir, 'code', 'testy-tracked-dir'))
         bob_wf.sync('bob')
 
@@ -224,7 +224,7 @@ class TestLabbookShareProtocol(object):
         assert bob_user_lb.active_branch == "gm.workspace-bob"
         bob_user_lb.delete_file(section='code', relative_path='testy-tracked-dir', directory=True)
         assert not os.path.exists(os.path.join(bob_user_lb.root_dir, 'code', 'testy-tracked-dir'))
-        bob_user_lb.makedir(relative_path='input/stuff-for-inputs-yyy', create_activity_record=True)
+        FileOperations.makedir(bob_user_lb, relative_path='input/stuff-for-inputs-yyy', create_activity_record=True)
         bob_wf.sync('bob')
 
         test_wf.sync('test')

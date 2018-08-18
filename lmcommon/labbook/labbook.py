@@ -1225,7 +1225,7 @@ class LabBook(object):
             ]
 
             for d in dirs:
-                self.makedir(d, make_parents=True)
+                self.makedir(d)
 
             # Create labbook.yaml file
             self._save_labbook_data()

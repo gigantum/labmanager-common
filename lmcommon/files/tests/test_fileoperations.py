@@ -139,7 +139,7 @@ class TestFileOps(object):
         hash_5 = lb.git.commit_hash
         assert hash_4 == hash_5
 
-        lb.move_file(section='input', src_rel_path='sample-untracked-dir/nested-dir/unittestfile', dst_rel_path='unittestfile')
+        FileOperations.move_file(lb, section='input', src_rel_path='sample-untracked-dir/nested-dir/unittestfile', dst_rel_path='unittestfile')
         assert not os.path.exists(os.path.join(lb.root_dir, 'input', 'sample-untracked-dir/nested-dir/unittestfile'))
         assert os.path.exists(os.path.join(lb.root_dir, 'input', 'unittestfile'))
         hash_6 = lb.git.commit_hash
