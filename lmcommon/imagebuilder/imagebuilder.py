@@ -21,9 +21,8 @@ import datetime
 import functools
 import glob
 import os
-
-from typing import (Any, Dict, List)
 import yaml
+from typing import (Any, Dict, List)
 
 from lmcommon.labbook import LabBook
 from lmcommon.logging import LMLogger
@@ -112,7 +111,6 @@ class ImageBuilder(object):
         root_dir = os.path.join(self.labbook.root_dir, '.gigantum', 'env', 'custom')
         custom_dep_files = self._get_yaml_files(root_dir)
 
-
         docker_lines = ['## Adding Custom Packages']
         for custom in sorted(custom_dep_files):
             pkg_fields: Dict[str, Any] = {}
@@ -165,31 +163,31 @@ class ImageBuilder(object):
 
     def _post_image_hook(self) -> List[str]:
         """Contents that must be after baseimages but before development environments. """
-        docker_lines = ["# Post-image creation hooks"]
-        docker_lines.append('COPY entrypoint.sh /usr/local/bin/entrypoint.sh')
-        docker_lines.append('RUN chmod u+x /usr/local/bin/entrypoint.sh')
-        docker_lines.append('')
-
+        docker_lines = ["# Post-image creation hooks",
+                        'COPY entrypoint.sh /usr/local/bin/entrypoint.sh',
+                        'RUN chmod u+x /usr/local/bin/entrypoint.sh',
+                        '']
         return docker_lines
 
     def _entrypoint_hooks(self):
         """ Contents of docker setup that must be at end of Dockerfile. """
-        try:
-            docker_lines = ['## Entrypoint hooks']
-            docker_lines.append('ENV LB_HOME=/mnt/labbook')
-            docker_lines.append('ENV LB_CODE=/mnt/labbook/code')
-            docker_lines.append('ENV LB_INPUT=/mnt/labbook/input')
-            docker_lines.append('ENV LB_OUTPUT=/mnt/labbook/output')
-            docker_lines.append("# Run Environment")
-            docker_lines.append('ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]')
-            docker_lines.append('WORKDIR /mnt/labbook')
-            docker_lines.append('')
-            docker_lines.append('# Use this command to make the container run indefinitely')
-            docker_lines.append('CMD ["tail", "-f", "/dev/null"]')
-            docker_lines.append('')
-        except Exception as e:
-            logger.error(e)
-        return docker_lines
+        return [
+            '## Entrypoint hooks',
+            'ENV LB_HOME=/mnt/labbook',
+            'ENV LB_CODE=/mnt/labbook/code',
+            'ENV LB_INPUT=/mnt/labbook/input',
+            'ENV LB_OUTPUT=/mnt/labbook/output',
+            'ENV PROJECT_ROOT=/mnt/labbook',
+            'ENV PROJECT_CODE=/mnt/labbook/code',
+            'ENV PROJECT_INPUT=/mnt/labbook/input',
+            'ENV PROJECT_OUTPUT=/mnt/labbook/output',
+            "# Run Environment",
+            'ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]',
+            'WORKDIR /mnt/labbook',
+            '',
+            '# Use this command to make the container run indefinitely',
+            'CMD ["tail", "-f", "/dev/null"]',
+            '']
 
     def assemble_dockerfile(self, write: bool = True) -> str:
         """Create the content of a Dockerfile per the fields in the indexed data.

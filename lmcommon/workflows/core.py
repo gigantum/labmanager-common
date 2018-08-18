@@ -18,7 +18,6 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 import subprocess
-import datetime
 import time
 import os
 from typing import Optional
@@ -92,9 +91,6 @@ def push(labbook: LabBook, remote: str) -> None:
         raise GitLabRemoteError(e)
 
 
-
-
-
 def create_remote_gitlab_repo(labbook: LabBook, username: str, access_token: Optional[str] = None) -> None:
     """Create a new repository in GitLab,
 
@@ -121,6 +117,7 @@ def create_remote_gitlab_repo(labbook: LabBook, username: str, access_token: Opt
 
 
 def publish_to_remote(labbook: LabBook, username: str, remote: str) -> None:
+    # TODO - This should be called from the dispatcher
     # Current branch must be the user's workspace.
     if f'gm.workspace-{username}' != labbook.active_branch:
         raise ValueError('User workspace must be active branch to publish')
@@ -143,7 +140,6 @@ def publish_to_remote(labbook: LabBook, username: str, remote: str) -> None:
         raise ValueError(f'Cannot publish since {labbook.active_branch} is not synced')
 
     # Now, it should be safe to pull the user's workspace into the master workspace.
-    #labbook.git.merge(f"gm.workspace-{username}")
     call_subprocess(['git', 'merge', f'gm.workspace-{username}'], cwd=labbook.root_dir)
     labbook.git.add_all(labbook.root_dir)
     labbook.git.commit(f"Merged gm.workspace-{username}")
@@ -208,6 +204,7 @@ def sync_with_remote(labbook: LabBook, username: str, remote: str, force: bool) 
                 raise LabbookMergeException('Merge conflict pulling upstream changes')
 
             checkpoint2 = labbook.git.commit_hash
+            # TODO - A lot of this can be removed
             call_subprocess(['git', 'checkout', 'gm.workspace'], cwd=labbook.root_dir)
             call_subprocess(['git', 'merge', f'gm.workspace-{username}'], cwd=labbook.root_dir)
             call_subprocess(['git', 'push', 'origin', 'gm.workspace'], cwd=labbook.root_dir)

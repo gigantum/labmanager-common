@@ -37,7 +37,9 @@ class AptPackageManager(PackageManager):
         """Method to search a package manager for packages based on a string. The string can be a partial string.
 
         Args:
-            search_str(str): The string to search on
+            search_str: The string to search on
+            labbook: Subject LabBook
+            username: username of current user
 
         Returns:
             list(str): The list of package names that match the search string
@@ -85,7 +87,9 @@ class AptPackageManager(PackageManager):
         """Method to get the latest version string for a package
 
         Args:
-            package_name(str): Name of the package to query
+            package_name: Name of the package to query
+            labbook: Subject LabBook
+            username: username of current user
 
         Returns:
             str: latest version string
@@ -100,7 +104,9 @@ class AptPackageManager(PackageManager):
         """Method to get the latest version string for a list of packages
 
         Args:
-            package_names(list): list of names of the packages to query
+            package_names: list of names of the packages to query
+            labbook: Subject LabBook
+            username: username of current user
 
         Returns:
             list: latest version strings

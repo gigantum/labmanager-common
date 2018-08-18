@@ -21,17 +21,19 @@ import glob
 import os
 import re
 import shutil
-from typing import (Any, Dict, List, Optional, Tuple)
 import uuid
 import yaml
 import json
 import time
 import datetime
+import gitdb
+import redis_lock
 from contextlib import contextmanager
 from pkg_resources import resource_filename
-import gitdb
 from collections import OrderedDict
+from redis import StrictRedis
 from natsort import natsorted
+from typing import (Any, Dict, List, Optional, Tuple)
 
 from lmcommon.configuration import Configuration
 from lmcommon.configuration.utils import call_subprocess
@@ -42,9 +44,6 @@ from lmcommon.labbook import shims
 from lmcommon.activity import ActivityStore, ActivityType, ActivityRecord, ActivityDetailType, ActivityDetailRecord, \
     ActivityAction
 from lmcommon.labbook.schemas import CURRENT_SCHEMA
-
-from redis import StrictRedis
-import redis_lock
 
 logger = LMLogger.get_logger()
 
@@ -122,7 +121,7 @@ class LabBook(object):
         else:
             return f'<LabBook UNINITIALIZED>'
 
-    def _validate_git(method_ref): #type: ignore
+    def _validate_git(method_ref):  #type: ignore
         """Definition of decorator that validates git operations.
 
         Note! The approach here is taken from Stack Overflow answer https://stackoverflow.com/a/1263782
@@ -135,7 +134,7 @@ class LabBook(object):
             if kwargs.get('create_activity_record') is True:
                 try:
                     _check_git_tracked(self.git)
-                    n = method_ref(self, *args, **kwargs) #type: ignore
+                    n = method_ref(self, *args, **kwargs)  #type: ignore
                 except ValueError:
                     with self.lock_labbook():
                         self.sweep_uncommitted_changes()
@@ -713,9 +712,6 @@ class LabBook(object):
         In order to get the section name, which is "lfs.https://repo.location.whatever", we need to search
         by all LFS fields and remove them (and in order to get the section need to strip the variables off the end).
 
-        Args:
-            None
-
         Returns:
             None
         """
@@ -914,7 +910,6 @@ class LabBook(object):
             section = relative_path.split(os.sep)[0]
             git_untracked = shims.in_untracked(self.root_dir, section)
             if os.path.exists(new_directory_path):
-                #raise ValueError(f'Directory `{new_directory_path}` already exists')
                 return
             else:
                 logger.info(f"Making new directory in `{new_directory_path}`")
@@ -936,7 +931,8 @@ class LabBook(object):
 
                 if create_activity_record:
                     # Create detail record
-                    activity_type, activity_detail_type, section_str = self.infer_section_from_relative_path(relative_path)
+                    activity_type, activity_detail_type, section_str = self.infer_section_from_relative_path(
+                        relative_path)
                     adr = ActivityDetailRecord(activity_detail_type, show=False, importance=0,
                                                action=ActivityAction.CREATE)
 
@@ -1286,6 +1282,7 @@ class LabBook(object):
             username(str): Username of the logged in user. Used to store the LabBook in the proper location. If omitted
                            the owner username is used
             description(str): A short description of the LabBook
+            bypass_lfs: If True does not use LFS to track input and output dirs.
 
         Returns:
             str: Path to the LabBook contents
@@ -1583,11 +1580,12 @@ class LabBook(object):
 
         return result
 
-    def log(self, username: str = None, max_count: int=10):
+    def log(self, username: str = None, max_count: int = 10):
         """Method to list commit history of a Labbook
 
         Args:
             username(str): Username to filter the query on
+            max_count: Max number of log records to retrieve
 
         Returns:
             dict

@@ -18,6 +18,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 from typing import Optional
+
+from lmcommon.configuration.utils import call_subprocess
 from lmcommon.labbook import LabBook
 from lmcommon.logging import LMLogger
 from lmcommon.workflows import core
@@ -37,6 +39,7 @@ class GitWorkflow(object):
 
     def publish(self, username: str, access_token: Optional[str] = None, remote: str = "origin") -> None:
         """ Publish this labbook to the remote GitLab instance.
+
         Args:
             username: Subject username
             access_token: Temp token/password to gain permissions on GitLab instance
@@ -59,11 +62,10 @@ class GitWorkflow(object):
                 core.publish_to_remote(labbook=self.labbook, username=username, remote=remote)
         except Exception as e:
             # Unsure what specific exception add_remote creates, so make a catchall.
-            logger.error(f"Labbook {str(self.labbook)} may be in corrupted Git state!")
-            # TODO - Rollback to before merge
-            raise e
-        finally:
+            logger.error(f"Caught {e}: {str(self.labbook)} may be in corrupted Git state!")
+            call_subprocess(['git', 'reset', '--hard'], cwd=self.labbook.root_dir)
             self.labbook.checkout_branch(f"gm.workspace-{username}")
+            raise e
 
     def sync(self, username: str, remote: str = "origin", force: bool = False) -> int:
         """ Sync with remote GitLab repo (i.e., pull any upstream changes and push any new changes). Following

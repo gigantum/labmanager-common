@@ -43,7 +43,8 @@ class ContainerOperations(object):
     def build_image(
             cls, labbook: LabBook, override_image_tag: Optional[str] = None,
             username: Optional[str] = None, nocache: bool = False) -> Tuple[LabBook, str]:
-        """ Build docker image according to the Dockerfile just assembled.
+        """ Build docker image according to the Dockerfile just assembled. Does NOT
+            assemble the Dockerfile from environment (See ImageBuilder)
 
         Args:
             labbook: Subject LabBook to build.
