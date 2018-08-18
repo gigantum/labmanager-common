@@ -332,3 +332,79 @@ class FileOperations(object):
                 else:
                     logger.error(f"{target_path} should have been deleted, but remains.")
                     return False
+
+    @classmethod
+    def move_file(cls, labbook: LabBook, section: str, src_rel_path: str, dst_rel_path: str) -> Dict[str, Any]:
+
+        """Move a file or directory within a labbook, but not outside of it. Wraps
+        underlying "mv" call.
+
+        Args:
+            section(str): Section name (code, input, output)
+            src_rel_path(str): Source file or directory
+            dst_rel_path(str): Target file name and/or directory
+        """
+        labbook._validate_section(section)
+        # Start with Validations
+        if not src_rel_path:
+            raise ValueError("src_rel_path cannot be None or empty")
+
+        if not dst_rel_path:
+            raise ValueError("dst_rel_path cannot be None or empty")
+
+        is_untracked = shims.in_untracked(labbook.root_dir, section)
+        with labbook.lock_labbook():
+            src_rel_path = LabBook._make_path_relative(src_rel_path)
+            dst_rel_path = LabBook._make_path_relative(dst_rel_path)
+
+            src_abs_path = os.path.join(labbook.root_dir, section, src_rel_path.replace('..', ''))
+            dst_abs_path = os.path.join(labbook.root_dir, section, dst_rel_path.replace('..', ''))
+
+            if not os.path.exists(src_abs_path):
+                raise ValueError(f"No src file exists at `{src_abs_path}`")
+
+            try:
+                src_type = 'directory' if os.path.isdir(src_abs_path) else 'file'
+                logger.info(f"Moving {src_type} `{src_abs_path}` to `{dst_abs_path}`")
+
+                if not is_untracked:
+                    labbook.git.remove(src_abs_path, keep_file=True)
+
+                shutil.move(src_abs_path, dst_abs_path)
+
+                if not is_untracked:
+                    commit_msg = f"Moved {src_type} `{src_rel_path}` to `{dst_rel_path}`"
+
+                    if os.path.isdir(dst_abs_path):
+                        labbook.git.add_all(dst_abs_path)
+                    else:
+                        labbook.git.add(dst_abs_path)
+
+                    commit = labbook.git.commit(commit_msg)
+
+                    # Get LabBook section
+                    activity_type, activity_detail_type, section_str = labbook.get_activity_type_from_section(section)
+
+                    # Create detail record
+                    adr = ActivityDetailRecord(activity_detail_type, show=False, importance=0,
+                                               action=ActivityAction.EDIT)
+                    adr.add_value('text/markdown', commit_msg)
+
+                    # Create activity record
+                    ar = ActivityRecord(activity_type,
+                                        message=commit_msg,
+                                        linked_commit=commit.hexsha,
+                                        show=True,
+                                        importance=255,
+                                        tags=['file-move'])
+                    ar.add_detail_object(adr)
+
+                    # Store
+                    ars = ActivityStore(labbook)
+                    ars.create_activity_record(ar)
+
+                return labbook.get_file_info(section, dst_rel_path)
+            except Exception as e:
+                logger.critical("Failed moving file in labbook. Repository may be in corrupted state.")
+                logger.exception(e)
+                raise

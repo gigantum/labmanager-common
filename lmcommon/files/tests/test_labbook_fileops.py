@@ -142,7 +142,7 @@ class TestLabbookFileOperations(object):
 
         # move to rename
         moved_rel_path = os.path.join(f'{base_name}.MOVED')
-        lb.move_file('code', new_file_data['key'], moved_rel_path)
+        FO.move_file(lb, 'code', new_file_data['key'], moved_rel_path)
         assert not os.path.exists(os.path.join(lb.root_dir, 'code', base_name))
         assert os.path.exists(os.path.join(lb.root_dir, 'code', f'{base_name}.MOVED'))
         assert os.path.isfile(os.path.join(lb.root_dir, 'code', f'{base_name}.MOVED'))
@@ -157,7 +157,7 @@ class TestLabbookFileOperations(object):
         # make new subdir
         os.makedirs(os.path.join(lb.root_dir, 'code', 'subdir'))
 
-        moved_abs_data = lb.move_file('code',
+        moved_abs_data = FO.move_file(lb, 'code',
                                       base_name,
                                       os.path.join('subdir', base_name))
 
@@ -179,10 +179,10 @@ class TestLabbookFileOperations(object):
 
         # make new subdir with a file in it
         os.makedirs(os.path.join(lb.root_dir, 'code', 'subdir'))
-        lb.move_file("code", base_name, os.path.join('subdir', base_name))
+        FO.move_file(lb, "code", base_name, os.path.join('subdir', base_name))
 
         # Move entire directory
-        lb.move_file("code", 'subdir', 'subdir_moved')
+        FO.move_file(lb, "code", 'subdir', 'subdir_moved')
 
         assert not os.path.exists(os.path.join(lb.root_dir, 'code', 'subdir'))
         assert os.path.exists(os.path.join(lb.root_dir, 'code', 'subdir_moved'))
