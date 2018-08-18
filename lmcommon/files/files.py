@@ -473,3 +473,4 @@ class FileOperations(object):
                     # Store
                     ars = ActivityStore(labbook)
                     ars.create_activity_record(ar)
+
