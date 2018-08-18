@@ -121,7 +121,7 @@ class TestFileOps(object):
         assert os.path.exists(os.path.join(lb.root_dir, 'input', 'unittestfile'))
         hash_2 = lb.git.commit_hash
 
-        deleted = lb.delete_file(section='input', relative_path='unittestfile')
+        deleted = FileOperations.delete_file(lb, section='input', relative_path='unittestfile')
         hash_3 = lb.git.commit_hash
         assert deleted is True
         target_path = os.path.join(lb.root_dir, 'input', 'unittestfile')
@@ -145,7 +145,7 @@ class TestFileOps(object):
         hash_6 = lb.git.commit_hash
         assert hash_5 == hash_6
 
-        lb.delete_file(section='input', relative_path='sample-untracked-dir/nested-dir', directory=True)
+        FileOperations.delete_file(lb, section='input', relative_path='sample-untracked-dir/nested-dir', directory=True)
         hash_7 = lb.git.commit_hash
         assert hash_6 == hash_7
 

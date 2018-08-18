@@ -104,7 +104,7 @@ class TestLabbookFileOperations(object):
         base_name = os.path.basename(new_file_data['key'])
 
         assert os.path.exists(os.path.join(lb.root_dir, 'code', base_name))
-        lb.delete_file('code', base_name)
+        FO.delete_file(lb, 'code', base_name)
         assert not os.path.exists(os.path.join(lb.root_dir, 'code', base_name))
 
     def test_remove_file_fail(self, mock_config_file, sample_src_file):
@@ -113,7 +113,7 @@ class TestLabbookFileOperations(object):
         FO.insert_file(lb, "code", sample_src_file)
         new_file_path = os.path.join('blah', 'invalid.txt')
         with pytest.raises(ValueError):
-            lb.delete_file('code', new_file_path)
+            FO.delete_file(lb, 'code', new_file_path)
 
     def test_remove_dir(self, mock_config_file, sample_src_file):
         lb = LabBook(mock_config_file[0])
@@ -125,7 +125,7 @@ class TestLabbookFileOperations(object):
         assert os.path.exists(os.path.join(lb.root_dir, 'output', 'testdir', base_name))
         # Note! Now that remove() uses force=True, no special action is needed for directories.
         # Delete the directory
-        lb.delete_file("output", "testdir", directory=True)
+        FO.delete_file(lb, "output", "testdir", directory=True)
         assert not os.path.exists(os.path.join(lb.root_dir, 'output', 'testdir', base_name))
         assert not os.path.exists(os.path.join(lb.root_dir, 'output', 'testdir'))
 
