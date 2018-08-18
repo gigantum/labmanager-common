@@ -27,7 +27,8 @@ from lmcommon.environment.conda import Conda3PackageManager, Conda2PackageManage
 
 class TestConda3PackageManager(object):
 
-    @pytest.mark.skipif(os.environ.get('CIRCLE_BRANCH') not in ['integration', 'master'])
+    @pytest.mark.skipif(os.environ.get('CIRCLE_BRANCH') not in ['integration', 'master'],
+                        reason="Skip long Conda tests on circleCI when not on integration")
     def test_search(self, build_lb_image_for_env):
         """Test search command"""
         mrg = Conda3PackageManager()
@@ -44,7 +45,8 @@ class TestConda3PackageManager(object):
         assert len(result) > 2
         assert "numpy" in result
 
-    @pytest.mark.skipif(os.environ.get('CIRCLE_BRANCH') not in ['integration', 'master'])
+    @pytest.mark.skipif(os.environ.get('CIRCLE_BRANCH') not in ['integration', 'master'],
+                        reason="Skip long Conda tests on circleCI when not on integration")
     def test_search_no_wildcard(self, build_lb_image_for_env):
         """Test search command"""
         mrg = Conda3PackageManager()
@@ -56,7 +58,8 @@ class TestConda3PackageManager(object):
         assert len(result) > 6
         assert "requests" in result
 
-    @pytest.mark.skipif(os.environ.get('CIRCLE_BRANCH') not in ['integration', 'master'])
+    @pytest.mark.skipif(os.environ.get('CIRCLE_BRANCH') not in ['integration', 'master'],
+                        reason="Skip long Conda tests on circleCI when not on integration")
     def test_search_empty(self, build_lb_image_for_env):
         """Test search command with no result"""
         mrg = Conda3PackageManager()
@@ -66,7 +69,8 @@ class TestConda3PackageManager(object):
         assert type(result) == list
         assert len(result) == 0
 
-    @pytest.mark.skipif(os.environ.get('CIRCLE_BRANCH') not in ['integration', 'master'])
+    @pytest.mark.skipif(os.environ.get('CIRCLE_BRANCH') not in ['integration', 'master'],
+                        reason="Skip long Conda tests on circleCI when not on integration")
     def test_list_versions(self, build_lb_image_for_env):
         """Test list_versions command"""
         mrg = Conda3PackageManager()
@@ -82,7 +86,8 @@ class TestConda3PackageManager(object):
         assert result[0] == "1.14.2"
         assert result[1] == "1.14.1"
 
-    @pytest.mark.skipif(os.environ.get('CIRCLE_BRANCH') not in ['integration', 'master'])
+    @pytest.mark.skipif(os.environ.get('CIRCLE_BRANCH') not in ['integration', 'master'],
+                        reason="Skip long Conda tests on circleCI when not on integration")
     def test_latest_version(self, build_lb_image_for_env):
         """Test latest_version command"""
         mrg = Conda3PackageManager()
@@ -97,7 +102,8 @@ class TestConda3PackageManager(object):
         result = mrg.latest_version("numpy", lb, username)
         assert result == '1.15.0'
 
-    @pytest.mark.skipif(os.environ.get('CIRCLE_BRANCH') not in ['integration', 'master'])
+    @pytest.mark.skipif(os.environ.get('CIRCLE_BRANCH') not in ['integration', 'master'],
+                        reason="Skip long Conda tests on circleCI when not on integration")
     def test_latest_versions(self, build_lb_image_for_env_conda):
         """Test latest_version command"""
         mrg = Conda3PackageManager()
@@ -110,7 +116,8 @@ class TestConda3PackageManager(object):
         assert result[1] == REQUESTS_LATEST_VERSION  # Requests
         assert result[2] == '2.2.3'  # Matplotlib
 
-    @pytest.mark.skipif(os.environ.get('CIRCLE_BRANCH') not in ['integration', 'master'])
+    @pytest.mark.skipif(os.environ.get('CIRCLE_BRANCH') not in ['integration', 'master'],
+                        reason="Skip long Conda tests on circleCI when not on integration")
     def test_latest_versions_bad_pkg(self, build_lb_image_for_env):
         """Test latest_version command"""
         mrg = Conda3PackageManager()
@@ -119,7 +126,8 @@ class TestConda3PackageManager(object):
         with pytest.raises(ValueError):
             mrg.latest_versions(["asdasdfdasdff", "numpy"], lb, username)
 
-    @pytest.mark.skipif(os.environ.get('CIRCLE_BRANCH') not in ['integration', 'master'])
+    @pytest.mark.skipif(os.environ.get('CIRCLE_BRANCH') not in ['integration', 'master'],
+                        reason="Skip long Conda tests on circleCI when not on integration")
     def test_list_installed_packages(self, build_lb_image_for_env):
         """Test list_installed_packages command
 
@@ -137,7 +145,8 @@ class TestConda3PackageManager(object):
         assert type(result[0]['name']) == str
         assert type(result[0]['version']) == str
 
-    @pytest.mark.skip(reason="Cannot test for updates yet.")
+    @pytest.mark.skipif(os.environ.get('CIRCLE_BRANCH') not in ['integration', 'master'],
+                        reason="Skip long Conda tests on circleCI when not on integration")
     def test_list_available_updates(self, build_lb_image_for_env):
         """Test list_available_updates command
 
@@ -178,7 +187,8 @@ class TestConda3PackageManager(object):
         result = mrg.generate_docker_install_snippet(packages, single_line=True)
         assert result == ['RUN conda install mypackage=3.1.4 yourpackage=2017-54.0']
 
-    @pytest.mark.skipif(os.environ.get('CIRCLE_BRANCH') not in ['integration', 'master'])
+    @pytest.mark.skipif(os.environ.get('CIRCLE_BRANCH') not in ['integration', 'master'],
+                        reason="Skip long Conda tests on circleCI when not on integration")
     def test_list_versions_badpackage(self, build_lb_image_for_env):
         """Test list_versions command"""
         mrg = Conda3PackageManager()
@@ -187,7 +197,8 @@ class TestConda3PackageManager(object):
         with pytest.raises(ValueError):
             mrg.list_versions("gigantumasdfasdfasdf", lb, username)
 
-    @pytest.mark.skipif(os.environ.get('CIRCLE_BRANCH') not in ['integration', 'master'])
+    @pytest.mark.skipif(os.environ.get('CIRCLE_BRANCH') not in ['integration', 'master'],
+                        reason="Skip long Conda tests on circleCI when not on integration")
     def test_is_valid_errors(self, build_lb_image_for_env):
         """Test list_versions command"""
         pkgs = [{"manager": "conda3", "package": "numpy", "version": "1.14.2"},
@@ -216,7 +227,8 @@ class TestConda3PackageManager(object):
         assert result[3].version == ""
         assert result[3].error is True
 
-    @pytest.mark.skipif(os.environ.get('CIRCLE_BRANCH') not in ['integration', 'master'])
+    @pytest.mark.skipif(os.environ.get('CIRCLE_BRANCH') not in ['integration', 'master'],
+                        reason="Skip long Conda tests on circleCI when not on integration")
     def test_is_valid_good(self, build_lb_image_for_env):
         """Test valid packages command"""
         pkgs = [{"manager": "conda3", "package": "numpy", "version": "1.14.2"},
@@ -237,7 +249,8 @@ class TestConda3PackageManager(object):
 
 
 class TestConda2PackageManager(object):
-    @pytest.mark.skipif(os.environ.get('CIRCLE_BRANCH') not in ['integration', 'master'])
+    @pytest.mark.skipif(os.environ.get('CIRCLE_BRANCH') not in ['integration', 'master'],
+                        reason="Skip long Conda tests on circleCI when not on integration")
     def test_latest_versions(self, build_lb_image_for_env):
         """Test latest_version command"""
         mrg = Conda2PackageManager()
@@ -249,7 +262,8 @@ class TestConda2PackageManager(object):
         assert result[0] == '1.15.0'  # Numpy
         assert result[1] == '2.19.1'  # Requests
 
-    @pytest.mark.skipif(os.environ.get('CIRCLE_BRANCH') not in ['integration', 'master'])
+    @pytest.mark.skipif(os.environ.get('CIRCLE_BRANCH') not in ['integration', 'master'],
+                        reason="Skip long Conda tests on circleCI when not on integration")
     def test_is_valid_errors(self, build_lb_image_for_env):
         """Test list_versions command"""
         pkgs = [{"manager": "conda2", "package": "numpy", "version": "1.14.2"},
@@ -278,7 +292,8 @@ class TestConda2PackageManager(object):
         assert result[3].version == ""
         assert result[3].error is True
 
-    @pytest.mark.skipif(os.environ.get('CIRCLE_BRANCH') not in ['integration', 'master'])
+    @pytest.mark.skipif(os.environ.get('CIRCLE_BRANCH') not in ['integration', 'master'],
+                        reason="Skip long Conda tests on circleCI when not on integration")
     def test_is_valid_good(self, build_lb_image_for_env):
         """Test valid packages command"""
         pkgs = [{"manager": "conda2", "package": "numpy", "version": "1.14.2"},
