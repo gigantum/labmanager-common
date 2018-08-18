@@ -235,7 +235,7 @@ class TestLabbookFileOperations(object):
             open('/tmp/myfile.c', 'w').write('data')
             FO.insert_file(lb, 'code', '/tmp/myfile.c', d)
 
-        dir_walks_hidden = lb.walkdir('code', show_hidden=True)
+        dir_walks_hidden = FO.walkdir(lb, 'code', show_hidden=True)
         assert any([os.path.basename('/tmp/myfile.c') in d['key'] for d in dir_walks_hidden])
         assert not any(['.git' in d['key'].split(os.path.sep) for d in dir_walks_hidden])
         assert not any(['.gigantum' in d['key'] for d in dir_walks_hidden])
@@ -253,7 +253,7 @@ class TestLabbookFileOperations(object):
         assert dir_walks_hidden[13]['is_dir'] is False
 
         # Since the file is in a hidden directory, it should not be found.
-        dir_walks = lb.walkdir('code')
+        dir_walks = FO.walkdir(lb, 'code')
         # Spot check some entries
         assert len(dir_walks) == 7
         assert dir_walks[0]['key'] == 'cat_dir/'
@@ -322,7 +322,7 @@ class TestLabbookFileOperations(object):
         sample_filename = os.path.basename(sfile)
 
         # Since the file is in a hidden directory, it should not be found.
-        dir_walks = lb.walkdir('code')
+        dir_walks = FO.walkdir(lb, 'code')
         # Spot check some entries
         assert len(dir_walks) == 5
         assert dir_walks[0]['key'] == 'cat_dir/'
@@ -342,7 +342,7 @@ class TestLabbookFileOperations(object):
         lb.create_favorite("code", f"dog_dir/{sample_filename}", description="Fav 2")
         lb.create_favorite("code", f"cat_dir/", description="Fav 3", is_dir=True)
 
-        dir_walks = lb.walkdir('code')
+        dir_walks = FO.walkdir(lb, 'code')
         # Spot check some entries
         assert len(dir_walks) == 5
         assert dir_walks[0]['key'] == 'cat_dir/'

@@ -804,47 +804,6 @@ class LabBook(object):
                     ars = ActivityStore(self)
                     ars.create_activity_record(ar)
 
-    def walkdir(self, section: str, show_hidden: bool = False) -> List[Dict[str, Any]]:
-        """Return a list of all files and directories in a section of the labbook. Never includes the .git or
-         .gigantum directory.
-
-        Args:
-            section(str): The labbook section (code, input, output) to walk
-            show_hidden(bool): If True, include hidden directories (EXCLUDING .git and .gigantum)
-
-        Returns:
-            List[Dict[str, str]]: List of dictionaries containing file and directory metadata
-        """
-        self._validate_section(section)
-
-        keys: List[str] = list()
-        # base_dir is the root directory to search, to account for relative paths inside labbook.
-        base_dir = os.path.join(self.root_dir, section)
-        if not os.path.isdir(base_dir):
-            raise ValueError(f"Labbook walkdir base_dir {base_dir} not an existing directory")
-
-        for root, dirs, files in os.walk(base_dir):
-            # Remove directories we ignore so os.walk does not traverse into them during future iterations
-            if '.git' in dirs:
-                del dirs[dirs.index('.git')]
-            if '.gigantum' in dirs:
-                del dirs[dirs.index('.gigantum')]
-
-            # For more deterministic responses, sort resulting paths alphabetically.
-            # Store directories then files, so pagination loads things in an intuitive order
-            dirs.sort()
-            keys.extend(sorted([os.path.join(root.replace(base_dir, ''), d) for d in dirs]))
-            keys.extend(sorted([os.path.join(root.replace(base_dir, ''), f) for f in files]))
-
-        # Create stats
-        stats: List[Dict[str, Any]] = list()
-        for f_p in keys:
-            if not show_hidden and any([len(p) and p[0] == '.' for p in f_p.split(os.path.sep)]):
-                continue
-            stats.append(self.get_file_info(section, f_p))
-
-        return stats
-
     def listdir(self, section: str, base_path: Optional[str] = None, show_hidden: bool = False) -> List[Dict[str, Any]]:
         """Return a list of all files and directories in a directory. Never includes the .git or
          .gigantum directory.
