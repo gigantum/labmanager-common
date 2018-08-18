@@ -804,39 +804,6 @@ class LabBook(object):
                     ars = ActivityStore(self)
                     ars.create_activity_record(ar)
 
-    def listdir(self, section: str, base_path: Optional[str] = None, show_hidden: bool = False) -> List[Dict[str, Any]]:
-        """Return a list of all files and directories in a directory. Never includes the .git or
-         .gigantum directory.
-
-        Args:
-            section(str): the labbook section to start from
-            base_path(str): Relative base path, if not listing from labbook's root.
-            show_hidden(bool): If True, include hidden directories (EXCLUDING .git and .gigantum)
-
-        Returns:
-            List[Dict[str, str]]: List of dictionaries containing file and directory metadata
-        """
-        self._validate_section(section)
-        # base_dir is the root directory to search, to account for relative paths inside labbook.
-        base_dir = os.path.join(self.root_dir, section, base_path or '')
-        if not os.path.isdir(base_dir):
-            raise ValueError(f"Labbook listdir base_dir {base_dir} not an existing directory")
-
-        stats: List[Dict[str, Any]] = list()
-        for item in os.listdir(base_dir):
-            if item in ['.git', '.gigantum']:
-                # Never include .git or .gigantum
-                continue
-
-            if not show_hidden and any([len(p) and p[0] == '.' for p in item.split('/')]):
-                continue
-
-            # Create tuple (isDir, key)
-            stats.append(self.get_file_info(section, os.path.join(base_path or "", item)))
-
-        # For more deterministic responses, sort resulting paths alphabetically.
-        return sorted(stats, key=lambda a: a['key'])
-
     def create_favorite(self, section: str, relative_path: str,
                         description: Optional[str] = None, is_dir: bool = False) -> Dict[str, Any]:
         """Mark an existing file as a Favorite

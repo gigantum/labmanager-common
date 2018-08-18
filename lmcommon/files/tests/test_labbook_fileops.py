@@ -286,17 +286,17 @@ class TestLabbookFileOperations(object):
         write_test_file(lb.root_dir, 'code/new_dir/tester.txt')
 
         # List just the code dir
-        data = lb.listdir("code", base_path='')
+        data = FO.listdir(lb, "code", base_path='')
         assert len(data) == 3
         assert data[0]['key'] == 'new_dir/'
         assert data[1]['key'] == 'test_subdir1.txt'
         assert data[2]['key'] == 'test_subdir2.txt'
 
-        data = lb.listdir("input", base_path='')
+        data = FO.listdir(lb, "input", base_path='')
         assert len(data) == 0
 
         # List just the code/subdir dir
-        data = lb.listdir("code", base_path='new_dir')
+        data = FO.listdir(lb, "code", base_path='new_dir')
         assert len(data) == 1
         assert data[0]['key'] == 'new_dir/tester.txt'
 
@@ -305,7 +305,7 @@ class TestLabbookFileOperations(object):
         lb.new(owner={"username": "test"}, name="test-listdir", description="validate tests.")
 
         with pytest.raises(ValueError):
-            lb.listdir("code", base_path='blah')
+            FO.listdir(lb, "code", base_path='blah')
 
     def test_walkdir_with_favorites(self, mock_config_file, sample_src_file):
         lb = LabBook(mock_config_file[0])
