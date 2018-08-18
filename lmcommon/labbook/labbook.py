@@ -740,70 +740,6 @@ class LabBook(object):
             logger.exception(e)
             raise LabbookException(e)
 
-    @_validate_git
-    def makedir(self, relative_path: str, make_parents: bool = True, create_activity_record: bool = False) -> None:
-        """Make a new directory inside the labbook directory.
-
-        Args:
-            relative_path(str): Path within the labbook to make directory
-            make_parents(bool): If true, create intermediary directories
-            create_activity_record(bool): If true, create commit and activity record
-
-        Returns:
-            str: Absolute path of new directory
-        """
-        if not relative_path:
-            raise ValueError("relative_path argument cannot be None or empty")
-
-        with self.lock_labbook():
-            relative_path = LabBook._make_path_relative(relative_path)
-            new_directory_path = os.path.join(self.root_dir, relative_path)
-            section = relative_path.split(os.sep)[0]
-            git_untracked = shims.in_untracked(self.root_dir, section)
-            if os.path.exists(new_directory_path):
-                return
-            else:
-                logger.info(f"Making new directory in `{new_directory_path}`")
-                os.makedirs(new_directory_path, exist_ok=make_parents)
-                if git_untracked:
-                    logger.warning(f'New {str(self)} untracked directory `{new_directory_path}`')
-                    return
-                new_dir = ''
-                for d in relative_path.split(os.sep):
-                    new_dir = os.path.join(new_dir, d)
-                    full_new_dir = os.path.join(self.root_dir, new_dir)
-
-                    gitkeep_path = os.path.join(full_new_dir, '.gitkeep')
-                    if not os.path.exists(gitkeep_path):
-                        with open(gitkeep_path, 'w') as gitkeep:
-                            gitkeep.write("This file is necessary to keep this directory tracked by Git"
-                                          " and archivable by compression tools. Do not delete or modify!")
-                        self.git.add(gitkeep_path)
-
-                if create_activity_record:
-                    # Create detail record
-                    activity_type, activity_detail_type, section_str = self.infer_section_from_relative_path(
-                        relative_path)
-                    adr = ActivityDetailRecord(activity_detail_type, show=False, importance=0,
-                                               action=ActivityAction.CREATE)
-
-                    msg = f"Created new {section_str} directory `{relative_path}`"
-                    commit = self.git.commit(msg)
-                    adr.add_value('text/markdown', msg)
-
-                    # Create activity record
-                    ar = ActivityRecord(activity_type,
-                                        message=msg,
-                                        linked_commit=commit.hexsha,
-                                        show=True,
-                                        importance=255,
-                                        tags=['directory-create'])
-                    ar.add_detail_object(adr)
-
-                    # Store
-                    ars = ActivityStore(self)
-                    ars.create_activity_record(ar)
-
     def create_favorite(self, section: str, relative_path: str,
                         description: Optional[str] = None, is_dir: bool = False) -> Dict[str, Any]:
         """Mark an existing file as a Favorite
@@ -1151,7 +1087,12 @@ class LabBook(object):
             ]
 
             for d in dirs:
-                self.makedir(d)
+                p = os.path.join(self.root_dir, d, '.gitkeep')
+                os.makedirs(os.path.dirname(p), exist_ok=True)
+                with open(p, 'w') as gk:
+                    gk.write("This file is necessary to keep this directory tracked by Git"
+                             " and archivable by compression tools. Do not delete or modify!")
+                self.git.add(p)
 
             # Create labbook.yaml file
             self._save_labbook_data()
