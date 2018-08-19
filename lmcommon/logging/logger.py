@@ -49,10 +49,7 @@ class LMLogger(object):
         self.log_file = data['handlers']['fileHandler']['filename']
         self._make_log_dir(os.path.dirname(self.log_file))
 
-        # Configure logging
         logging.config.dictConfig(data)
-
-        # Get the logger
         self.logger = logging.getLogger('labmanager')
 
     @classmethod
@@ -64,10 +61,10 @@ class LMLogger(object):
 
     @staticmethod
     def _make_log_dir(log_file_dir: str) -> str:
-      """Create directory tree to log file if it does not exist. """
-      if not os.path.exists(log_file_dir):
-        os.makedirs(log_file_dir, exist_ok=True)
-      return log_file_dir
+        """Create directory tree to log file if it does not exist. """
+        if not os.path.exists(log_file_dir):
+            os.makedirs(log_file_dir, exist_ok=True)
+        return log_file_dir
 
     @staticmethod
     def find_default_config() -> Tuple[str, bool]:

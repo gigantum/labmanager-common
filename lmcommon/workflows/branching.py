@@ -27,6 +27,7 @@ from lmcommon.workflows.core import call_subprocess
 
 logger = LMLogger.get_logger()
 
+
 class BranchException(Exception):
     pass
 
@@ -94,7 +95,7 @@ class BranchManager(object):
             if revision:
                 # The following call prints "commit" if {revision} exists in git history.
                 result = subprocess.check_output(f'git cat-file -t {revision} || echo "invalid"',
-                    cwd=self.labbook.root_dir, shell=True)
+                                                 cwd=self.labbook.root_dir, shell=True)
                 if result.decode().strip() != 'commit':
                     logger.error(result.decode().strip())
                     raise InvalidBranchName(f'Revision {revision} does not exist in {str(self.labbook)};'
@@ -148,10 +149,10 @@ class BranchManager(object):
     def merge_from(self, other_branch: str, force: bool = False):
         """Pulls/merges `other_branch` into current branch. """
 
-        if not other_branch in self.branches:
+        if other_branch not in self.branches:
             raise InvalidBranchName(f'Other branch {other_branch} not found')
 
-        if not other_branch in self.mergeable_branches:
+        if other_branch not in self.mergeable_branches:
             raise InvalidBranchName(f'Other branch {other_branch} not mergeable into {self.active_branch}')
 
         logger.info(f"In {str(self.labbook)} merging branch `{other_branch}` into `{self.active_branch}`...")

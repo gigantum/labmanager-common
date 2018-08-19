@@ -17,9 +17,7 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-
 import subprocess
-import datetime
 import time
 import os
 from typing import Optional
@@ -83,7 +81,7 @@ def push(labbook: LabBook, remote: str) -> None:
         logger.info(f"Fetching from remote {remote}")
         labbook.git.fetch(remote=remote)
 
-        if not labbook.active_branch in labbook.get_branches()['remote']:
+        if labbook.active_branch not in labbook.get_branches()['remote']:
             logger.info(f"Pushing and setting upstream branch {labbook.active_branch}")
             labbook.git.repo.git.push("--set-upstream", remote, labbook.active_branch)
         else:
@@ -92,28 +90,6 @@ def push(labbook: LabBook, remote: str) -> None:
     except Exception as e:
         raise GitLabRemoteError(e)
 
-
-def pull(labbook: LabBook, remote: str) -> None:
-    """Pull and update from a remote git repository
-
-    Args:
-        labbook: Subject labbook
-        remote: Remote Git repository to pull from. Default is "origin"
-
-    Returns:
-        None
-    """
-
-    try:
-        logger.info(f"{str(labbook)} pulling from remote {remote}")
-        start = datetime.datetime.now()
-        labbook.git.pull(remote=remote)
-        end = datetime.datetime.now()
-        delta = (end - start).total_seconds()
-        method = logger.info if delta < 2.0 else logger.warning
-        method(f'Pulled {str(labbook)} from {remote} in {delta} sec')
-    except Exception as e:
-        raise GitLabRemoteError(e)
 
 
 def create_remote_gitlab_repo(labbook: LabBook, username: str, visibility: str,
@@ -145,6 +121,7 @@ def create_remote_gitlab_repo(labbook: LabBook, username: str, visibility: str,
 
 
 def publish_to_remote(labbook: LabBook, username: str, remote: str) -> None:
+    # TODO - This should be called from the dispatcher
     # Current branch must be the user's workspace.
     if f'gm.workspace-{username}' != labbook.active_branch:
         raise ValueError('User workspace must be active branch to publish')
@@ -167,7 +144,6 @@ def publish_to_remote(labbook: LabBook, username: str, remote: str) -> None:
         raise ValueError(f'Cannot publish since {labbook.active_branch} is not synced')
 
     # Now, it should be safe to pull the user's workspace into the master workspace.
-    #labbook.git.merge(f"gm.workspace-{username}")
     call_subprocess(['git', 'merge', f'gm.workspace-{username}'], cwd=labbook.root_dir)
     labbook.git.add_all(labbook.root_dir)
     labbook.git.commit(f"Merged gm.workspace-{username}")
@@ -232,6 +208,7 @@ def sync_with_remote(labbook: LabBook, username: str, remote: str, force: bool) 
                 raise LabbookMergeException('Merge conflict pulling upstream changes')
 
             checkpoint2 = labbook.git.commit_hash
+            # TODO - A lot of this can be removed
             call_subprocess(['git', 'checkout', 'gm.workspace'], cwd=labbook.root_dir)
             call_subprocess(['git', 'merge', f'gm.workspace-{username}'], cwd=labbook.root_dir)
             call_subprocess(['git', 'push', 'origin', 'gm.workspace'], cwd=labbook.root_dir)
@@ -251,7 +228,7 @@ def sync_with_remote(labbook: LabBook, username: str, remote: str, force: bool) 
     except Exception as e:
         raise WorkflowsException(e)
     finally:
-        ## We should (almost) always have the user's personal workspace checked out.
+        # We should (almost) always have the user's personal workspace checked out.
         labbook.checkout_branch(f"gm.workspace-{username}")
 
 

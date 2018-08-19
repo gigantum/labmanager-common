@@ -25,8 +25,6 @@ import pexpect
 import re
 import os
 from urllib.parse import quote_plus
-from natsort import natsorted
-
 
 from lmcommon.logging import LMLogger
 
@@ -134,7 +132,8 @@ class GitLabManager(object):
                 if response.status_code == 200:
                     self._gitlab_token = response.json()['key']
                 else:
-                    logger.error("Failed to get user access key from server after creation. Status Code: {response.status_code}")
+                    logger.error("Failed to get user access key from server after creation. "
+                                 "Status Code: {response.status_code}")
                     logger.error(response.json())
                     raise ValueError("Failed to get user access key from server after creation")
             else:
@@ -543,7 +542,7 @@ class GitLabManager(object):
             child.sendline("")
             return None
         elif i == 1:
-            # Possibly configured, verify a valid string
+            # Possibly configured, verify a valid string TODO - Why does pycharm complain about redundant chars?
             matches = re.finditer(r"password=[a-zA-Z0-9\-_\!@\#\$%\^&\*]+", child.after.decode("utf-8"))
 
             token = None

@@ -22,10 +22,8 @@ import importlib
 import requests
 import os
 import pathlib
-import time
 from jose import jwt
 import json
-
 from typing import (Optional, Dict, Any)
 
 from lmcommon.configuration import Configuration
@@ -217,15 +215,20 @@ class IdentityManager(metaclass=abc.ABCMeta):
                     return profile_data[attribute]
                 else:
                     if required:
-                        raise AuthenticationError({"code": "missing_data",
-                                    "description": f"The required field `{attribute}` was missing from the user profile"},
-                                            401)
+                        edetails = {
+                            'code': 'missing_data',
+                            'description': f"The required field `{attribute}` was missing from the user profile"
+                        }
+                        raise AuthenticationError(edetails, 401)
                     else:
                         return None
             else:
                 if required:
-                    raise AuthenticationError({"code": "missing_data",
-                              "description": f"The required field `{attribute}` was missing from the user profile"}, 401)
+                    edetails = {
+                        "code": "missing_data",
+                        "description": f"The required field `{attribute}` was missing from the user profile"
+                    }
+                    raise AuthenticationError(edetails, 401)
                 else:
                     return None
         else:

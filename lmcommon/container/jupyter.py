@@ -2,7 +2,7 @@ import uuid
 import time
 import os
 import re
-from typing import Optional, Tuple, List
+from typing import Optional
 
 import redis
 import requests
@@ -66,8 +66,7 @@ def start_jupyter(labbook: LabBook, username: str, tag: Optional[str] = None,
 
 def _shim_skip_python2_savehook(labbook: LabBook) -> bool:
     """Return True if the LabBook uses a Python 2 base image.
-    If the base is Python 2, we cannot use the save hook.
-    TODO - This should be fixed with upstream JupyterLab fixes. """
+    If the base is Python 2, we cannot use the save hook. There is no upstream fix coming. """
     cm = ComponentManager(labbook)
     return 'python2' in cm.base_fields['id'].lower().replace(' ', '')
 

@@ -17,10 +17,10 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
+from typing import Optional
 
-from typing import Optional, Tuple
 from lmcommon.configuration.utils import call_subprocess
-from lmcommon.labbook import LabBook, LabbookException, LabbookMergeException
+from lmcommon.labbook import LabBook
 from lmcommon.logging import LMLogger
 from lmcommon.workflows import core
 
@@ -40,6 +40,7 @@ class GitWorkflow(object):
     def publish(self, username: str, access_token: Optional[str] = None, remote: str = "origin",
                 public: bool = False) -> None:
         """ Publish this labbook to the remote GitLab instance.
+
         Args:
             username: Subject username
             access_token: Temp token/password to gain permissions on GitLab instance
@@ -51,27 +52,24 @@ class GitWorkflow(object):
         """
         try:
             logger.info(f"Publishing {str(self.labbook)} for user {username} to remote {remote}")
-            
+            if self.labbook.has_remote:
+                raise ValueError("Cannot publish Labbook when remote already set.")
+
             if self.labbook.active_branch != f'gm.workspace-{username}':
                 raise ValueError(f"Must be on user workspace (gm.workspace-{username}) to sync")
 
             with self.labbook.lock_labbook():
                 self.labbook.sweep_uncommitted_changes()
-
-            if self.labbook.has_remote:
-                raise ValueError("Cannot publish Labbook when remote already set.")
-            with self.labbook.lock_labbook():
                 vis = "public" if public is True else "private"
                 core.create_remote_gitlab_repo(labbook=self.labbook, username=username,
                                                access_token=access_token, visibility=vis)
                 core.publish_to_remote(labbook=self.labbook, username=username, remote=remote)
         except Exception as e:
             # Unsure what specific exception add_remote creates, so make a catchall.
-            logger.error(f"Labbook {str(self.labbook)} may be in corrupted Git state!")
-            # TODO - Rollback to before merge
-            raise e
-        finally:
+            logger.error(f"Caught {e}: {str(self.labbook)} may be in corrupted Git state!")
+            call_subprocess(['git', 'reset', '--hard'], cwd=self.labbook.root_dir)
             self.labbook.checkout_branch(f"gm.workspace-{username}")
+            raise e
 
     def sync(self, username: str, remote: str = "origin", force: bool = False) -> int:
         """ Sync with remote GitLab repo (i.e., pull any upstream changes and push any new changes). Following
