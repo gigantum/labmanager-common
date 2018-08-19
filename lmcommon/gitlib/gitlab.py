@@ -252,6 +252,18 @@ class GitLabManager(object):
             raise ValueError(msg)
 
     def repo_details(self, namespace: str, labbook_name: str) -> Dict[str, Any]:
+        """ Get all properties of a given Gitlab Repository, see API documentation
+            at https://docs.gitlab.com/ee/api/projects.html#get-single-project.
+
+            TODO - Find or create a GitLab Python API project to replace (much) of this.
+
+            Args:
+                namespace: Owner or organization
+                labbook_name: Name of labbook
+
+            Returns:
+                Dict of labbook properties, for keys see above link.
+            """
         repo_id = self.get_repository_id(namespace, labbook_name)
         response = requests.get(f"https://{self.remote_host}/api/v4/projects/{repo_id}",
                                 headers={"PRIVATE-TOKEN": self.user_token}, timeout=10)
