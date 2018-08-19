@@ -6,7 +6,6 @@ import os
 
 from lmcommon.configuration.utils import call_subprocess
 from lmcommon.labbook.labbook import LabBook, LabbookException
-from lmcommon.gitlib.gitlab import GitLabManager
 from lmcommon.logging import LMLogger
 
 logger = LMLogger.get_logger()

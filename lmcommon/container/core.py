@@ -23,10 +23,9 @@ import docker.errors
 import hashlib
 import time
 import json
-from typing import Callable, Optional, List, Tuple, Any, Dict
+from typing import Callable, Optional
 
 from lmcommon.configuration import get_docker_client
-from lmcommon.configuration.utils import call_subprocess
 from lmcommon.logging import LMLogger
 from lmcommon.labbook import LabBook
 from lmcommon.container.utils import infer_docker_image_name
@@ -166,10 +165,10 @@ def build_docker_image(root_dir: str, override_image_tag: Optional[str], nocache
         # This builds the image and generates output status text.
         for line in docker.from_env().api.build(path=env_dir, tag=image_name, pull=True, nocache=nocache, forcerm=True):
             ldict = json.loads(line)
-            stream = (json.loads(line).get("stream") or "").strip()
+            stream = (ldict.get("stream") or "").strip()
             if feedback_callback:
                 feedback_callback(stream)
-            status = (json.loads(line).get("status") or "").strip()
+            status = (ldict.get("status") or "").strip()
             if feedback_callback:
                 feedback_callback(status)
 

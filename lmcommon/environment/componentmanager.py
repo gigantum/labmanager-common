@@ -26,7 +26,7 @@ import glob
 from typing import Optional
 
 
-from lmcommon.labbook import LabBook, LabbookException
+from lmcommon.labbook import LabBook
 from lmcommon.environment.repository import ComponentRepository  # type: ignore
 from lmcommon.logging import LMLogger
 from lmcommon.activity import ActivityStore, ActivityType, ActivityRecord, ActivityDetailType, ActivityDetailRecord, \
@@ -214,7 +214,7 @@ exec gosu giguser "$@"
             ars.create_activity_record(ar)
 
     def add_packages(self, package_manager: str, packages: List[dict],
-                    force: bool = False, from_base: bool = False) -> None:
+                     force: bool = False, from_base: bool = False) -> None:
         """Add a new yaml file describing the new package and its context to the labbook.
 
         Args:
@@ -439,10 +439,9 @@ exec gosu giguser "$@"
         """Remove yaml file describing a custom component and its context to the labbook.
 
         Args:
-            component_class(str): The class of component (e.g. "base", "custom", etc)
-            repository(str): The Environment Component repository the component is in
-            component(str): The name of the component
-            revision(int): The revision to use (r_<revision_) in yaml filename.
+            component_class: The class of component (e.g. "base", "custom", etc)
+            repository: The Environment Component repository the component is in
+            component: The name of the component
 
         Returns:
             None
@@ -515,7 +514,7 @@ exec gosu giguser "$@"
             with open(yf, 'rt') as yf_file:
                 yaml_data = yaml.load(yf_file)
                 data.append(yaml_data)
-        return sorted(data, key=lambda elt : elt.get('id') or elt.get('manager'))
+        return sorted(data, key=lambda elt: elt.get('id') or elt.get('manager'))
 
     @property
     def base_fields(self) -> Dict[str, Any]:

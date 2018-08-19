@@ -17,12 +17,9 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-
 import abc
 import importlib
-from typing import Dict, List, Optional
-
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 # Dictionary of supported implementations.
 # Key is the value to put in the config_dict["backend"].

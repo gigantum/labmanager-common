@@ -18,11 +18,9 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 import os
-import requests
-
 from typing import Optional
-from lmcommon.logging import LMLogger
 
+from lmcommon.logging import LMLogger
 from lmcommon.auth.identity import IdentityManager, User, AuthenticationError
 from lmcommon.configuration import Configuration
 

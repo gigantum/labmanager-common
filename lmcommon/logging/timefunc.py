@@ -24,6 +24,7 @@ from .logger import LMLogger
 
 logger = LMLogger.get_logger()
 
+
 def timefunc(method):
     """ Decorator to be used to time functions.  The usage is:
             

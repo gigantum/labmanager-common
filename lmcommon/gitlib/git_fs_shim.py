@@ -38,7 +38,7 @@ class GitFilesystemShimmed(GitFilesystem):
         logger.info("Adding file {} to Git repository in {}".format(filename, self.working_directory))
         try:
             r = subprocess.run(['git', 'add', f'{filename}'], stderr=subprocess.PIPE, stdout=subprocess.PIPE,
-                            check=True, cwd=self.working_directory)
+                               check=True, cwd=self.working_directory)
         except subprocess.CalledProcessError as x:
             logger.error(f'{x.stdout}, {x.stderr}')
             raise
