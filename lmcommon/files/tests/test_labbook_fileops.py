@@ -125,7 +125,7 @@ class TestLabbookFileOperations(object):
         assert os.path.exists(os.path.join(lb.root_dir, 'output', 'testdir', base_name))
         # Note! Now that remove() uses force=True, no special action is needed for directories.
         # Delete the directory
-        FO.delete_file(lb, "output", "testdir", directory=True)
+        FO.delete_file(lb, "output", "testdir")
         assert not os.path.exists(os.path.join(lb.root_dir, 'output', 'testdir', base_name))
         assert not os.path.exists(os.path.join(lb.root_dir, 'output', 'testdir'))
 

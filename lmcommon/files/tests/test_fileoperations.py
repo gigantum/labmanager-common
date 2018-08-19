@@ -130,7 +130,7 @@ class TestFileOps(object):
         # Hash_2 == hash_3 because we delete a file in an UNTRACKED section
         assert hash_2 == hash_3
 
-        lb.makedir('input/sample-untracked-dir/nested-dir')
+        FileOperations.makedir(lb, 'input/sample-untracked-dir/nested-dir')
         hash_4 = lb.git.commit_hash
         assert hash_3 == hash_4
         with open('/tmp/unittestfile', 'wb') as f:
@@ -145,7 +145,7 @@ class TestFileOps(object):
         hash_6 = lb.git.commit_hash
         assert hash_5 == hash_6
 
-        FileOperations.delete_file(lb, section='input', relative_path='sample-untracked-dir/nested-dir', directory=True)
+        FileOperations.delete_file(lb, section='input', relative_path='sample-untracked-dir/nested-dir')
         hash_7 = lb.git.commit_hash
         assert hash_6 == hash_7
 

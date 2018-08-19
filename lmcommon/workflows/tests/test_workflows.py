@@ -49,7 +49,7 @@ class TestLabbookShareProtocol(object):
         lb = mock_labbook_lfs_disabled[2]
 
         assert lb.active_branch == "gm.workspace-test"
-        lb.makedir(relative_path='code/testy-tacked-dir', create_activity_record=True)
+        FileOperations.makedir(lb, relative_path='code/testy-tacked-dir', create_activity_record=True)
 
         wf = GitWorkflow(lb)
         # Now publish to remote (creating it in the process).
@@ -66,7 +66,7 @@ class TestLabbookShareProtocol(object):
         assert not any(['gm.workspace-test' in str(x) for x in b['remote']])
 
         ## 2 - Now make more updates and do it again
-        FileOperations.delete_file(lb, section="code", relative_path="testy-tacked-dir", directory=True)
+        FileOperations.delete_file(lb, section="code", relative_path="testy-tacked-dir")
         assert not os.path.exists(os.path.join(lb.root_dir, 'code', 'testy-tacked-dir'))
         FileOperations.makedir(lb, relative_path='input/new-input-dir', create_activity_record=True)
         assert lb.active_branch == "gm.workspace-test"
@@ -84,11 +84,11 @@ class TestLabbookShareProtocol(object):
 
         ## 1 - Make initial set of contributions to Labbook.
         workplace_lb = mock_labbook_lfs_disabled[2]
-        workplace_lb.makedir(relative_path='code/testy-tracked-dir', create_activity_record=True)
+        FileOperations.makedir(workplace_lb, relative_path='code/testy-tracked-dir', create_activity_record=True)
         wf = GitWorkflow(workplace_lb)
         wf.publish('test')
 
-        workplace_lb.makedir(relative_path='code/dir-created-after-publish', create_activity_record=True)
+        FileOperations.makedir(workplace_lb, relative_path='code/dir-created-after-publish', create_activity_record=True)
         wf.sync('test')
         assert os.path.exists(os.path.join(workplace_lb.root_dir, 'code', 'dir-created-after-publish'))
 
@@ -115,7 +115,7 @@ class TestLabbookShareProtocol(object):
                                          mock_config_file, mock_config_lfs_disabled):
         ## 1 - Make initial set of contributions to Labbook.
         test_user_lb = mock_labbook_lfs_disabled[2]
-        test_user_lb.makedir(relative_path='code/testy-tracked-dir', create_activity_record=True)
+        FileOperations.makedir(test_user_lb, relative_path='code/testy-tracked-dir', create_activity_record=True)
         test_wf = GitWorkflow(test_user_lb)
         test_wf.publish('test')
 
@@ -139,7 +139,7 @@ class TestLabbookShareProtocol(object):
     def test_two_users_attempt_conflict(self, pause_wait_for_redis, mock_labbook_lfs_disabled, mock_config_file,
                                         sample_src_file, mock_config_lfs_disabled):
         test_user_lb = mock_labbook_lfs_disabled[2]
-        test_user_lb.makedir(relative_path='code/testy-tracked-dir', create_activity_record=True)
+        FileOperations.makedir(test_user_lb, relative_path='code/testy-tracked-dir', create_activity_record=True)
         test_wf = GitWorkflow(test_user_lb)
         test_wf.publish('test')
 
@@ -151,7 +151,7 @@ class TestLabbookShareProtocol(object):
         assert bob_user_lb.active_branch == "gm.workspace-bob"
         FileOperations.makedir(bob_user_lb, relative_path='output/sample-output-dir-xxx', create_activity_record=True)
         FileOperations.makedir(bob_user_lb, relative_path='input/stuff-for-inputs-yyy', create_activity_record=True)
-        FileOperations.delete_file(bob_user_lb, section="code", relative_path='testy-tracked-dir', directory=True)
+        FileOperations.delete_file(bob_user_lb, section="code", relative_path='testy-tracked-dir')
         assert not os.path.exists(os.path.join(bob_user_lb.root_dir, 'code', 'testy-tracked-dir'))
         bob_wf.sync('bob')
 
@@ -212,7 +212,7 @@ class TestLabbookShareProtocol(object):
                                          mock_config_file, mock_config_lfs_disabled):
         ## 1 - Make initial set of contributions to Labbook.
         test_user_lb = mock_labbook_lfs_disabled[2]
-        test_user_lb.makedir(relative_path='code/testy-tracked-dir', create_activity_record=True)
+        FileOperations.makedir(test_user_lb, relative_path='code/testy-tracked-dir', create_activity_record=True)
         test_wf = GitWorkflow(test_user_lb)
         test_wf.publish('test')
 
@@ -222,7 +222,7 @@ class TestLabbookShareProtocol(object):
         loaders.from_remote(remote_repo, username="bob", owner="test", labbook_name="labbook1", labbook=bob_user_lb)
         bob_wf = GitWorkflow(bob_user_lb)
         assert bob_user_lb.active_branch == "gm.workspace-bob"
-        FileOperations.delete_file(bob_user_lb, section='code', relative_path='testy-tracked-dir', directory=True)
+        FileOperations.delete_file(bob_user_lb, section='code', relative_path='testy-tracked-dir')
         assert not os.path.exists(os.path.join(bob_user_lb.root_dir, 'code', 'testy-tracked-dir'))
         FileOperations.makedir(bob_user_lb, relative_path='input/stuff-for-inputs-yyy', create_activity_record=True)
         bob_wf.sync('bob')
