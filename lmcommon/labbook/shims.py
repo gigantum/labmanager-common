@@ -132,6 +132,7 @@ def to_workspace_branch(labbook, username: Optional[str] = None) -> str:
 
     return labbook.active_branch
 
+
 def in_untracked(labbook_root: str, section: str) -> bool:
     """ Query whether the given section for a labbook root dir is tracked in Git.
 

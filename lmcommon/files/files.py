@@ -17,7 +17,6 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-
 from typing import Any, Dict, Optional
 import shutil
 import os
@@ -148,6 +147,7 @@ class FileOperations(object):
         if not os.path.isfile(src_file):
             raise ValueError(f"Source file does not exist at `{src_file}`")
 
+        labbook._validate_section(section)
         r = call_subprocess(['git', 'check-ignore', os.path.basename(dst_path)],
                             cwd=labbook.root_dir, check=False)
         if dst_path and r and os.path.basename(dst_path) in r:
@@ -156,7 +156,6 @@ class FileOperations(object):
             raise FileOperationsException(f"`{dst_path}` matches "
                                           f"ignored pattern")
 
-        labbook._validate_section(section)
         mdst_dir = _make_path_relative(dst_path)
         full_dst = os.path.join(labbook.root_dir, section, mdst_dir)
         full_dst = full_dst.replace('..', '')

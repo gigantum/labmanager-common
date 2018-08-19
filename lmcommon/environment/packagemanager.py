@@ -47,7 +47,9 @@ class PackageManager(metaclass=abc.ABCMeta):
         """Method to search a package manager for packages based on a string. The string can be a partial string.
 
         Args:
-            search_str(str): The string to search on
+            search_str: The string to search on
+            labbook: Subject LabBook
+            username: username of current user
 
         Returns:
             list(str): The list of package names that match the search string
@@ -59,7 +61,9 @@ class PackageManager(metaclass=abc.ABCMeta):
         """Method to list all available versions of a package based on the package name with the latest package first
 
         Args:
-            package_name(str): Name of the package to query
+            package_name: Name of the package to query
+            labbook: Subject LabBook
+            username: username of current user
 
         Returns:
             list(str): Version strings
@@ -71,7 +75,9 @@ class PackageManager(metaclass=abc.ABCMeta):
         """Method to get the latest version string for a package
 
         Args:
-            package_name(str): Name of the package to query
+            package_name: Name of the package to query
+            labbook: Subject LabBook
+            username: username of current user
 
         Returns:
             str: latest version string
@@ -84,6 +90,8 @@ class PackageManager(metaclass=abc.ABCMeta):
 
         Args:
             package_names(list): list of names of the packages to query
+            labbook: Subject LabBook
+            username: username of current user
 
         Returns:
             list: latest version strings
@@ -120,7 +128,8 @@ class PackageManager(metaclass=abc.ABCMeta):
         raise NotImplemented
 
     @abc.abstractmethod
-    def validate_packages(self, package_list: List[Dict[str, str]], labbook: LabBook, username: str) -> List[PackageResult]:
+    def validate_packages(self, package_list: List[Dict[str, str]], labbook: LabBook, username: str) \
+            -> List[PackageResult]:
         """Method to validate a list of packages, and if needed fill in any missing versions
 
         Should check both the provided package name and version. If the version is omitted, it should be generated
