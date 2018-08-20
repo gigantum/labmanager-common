@@ -61,6 +61,14 @@ class Configuration(object):
             # Load default file out of python package
             return os.path.join(resource_filename("lmcommon", "configuration/config"), "labmanager.yaml.default")
 
+    @property
+    def host_cuda_version(self) -> Optional[str]:
+        try:
+            return self.config['container'].get('cuda_version')
+        except KeyError:
+            logger.warning('Missing cuda_version in configuration')
+            return None
+
     def _read_config_file(self, config_file: str) -> Dict[str, Any]:
         """Method to read a config file into a dictionary
 
