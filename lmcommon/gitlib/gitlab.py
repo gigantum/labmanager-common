@@ -190,7 +190,7 @@ class GitLabManager(object):
             raise ValueError(f"Unsupported sort_str: {sort_str}. Use `desc`, `asc`")
 
         query_url = f"https://{self.remote_host}/api/v4/projects?page={page}&" + \
-                    f"per_page={per_page}&order_by={order_by}&sort={sort_str}"
+                    f"per_page={per_page}&order_by={order_by}&sort={sort_str}&membership=true"
 
         # Call API to check for project
         response = requests.get(query_url,
