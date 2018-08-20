@@ -394,8 +394,8 @@ class LabBook(object):
 
     @property
     def cuda_version(self) -> Optional[str]:
-        if self._data and self._data["cuda_version"]:
-            return self._data["cuda_version"]
+        if self._data and self._data.get("cuda_version"):
+            return self._data.get("cuda_version")
         else:
             return None
 

@@ -243,7 +243,7 @@ def start_labbook_container(labbook_root: str, config_path: str,
     # CUDA must be set (not None) and version must match between labbook and labmanager
     cudav = lb.labmanager_config.config["container"].get("cuda_version")
     logger.info(f"Host CUDA version {cudav}, LabBook CUDA ver {lb.cuda_version}")
-    if cudav and lb.cuda_version == cudav:
+    if cudav and float(lb.cuda_version) <= float(cudav):
         logger.info(f"Launching container with GPU support CUDA version {lb.cuda_version}")
         container_id = docker_client.containers.run(tag, detach=True, init=True, name=tag,
                                                     environment=env_var, volumes=volumes_dict,
