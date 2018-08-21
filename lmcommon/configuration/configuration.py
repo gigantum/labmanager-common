@@ -65,7 +65,10 @@ class Configuration(object):
     def host_cuda_version(self) -> Optional[str]:
         v = self.config['container'].get('cuda_version')
         # Make sure it's passed up as a string, as yaml may interpret it as float.
-        return str(v)
+        if v:
+            return str(v)
+        else:
+            return None
 
     def _read_config_file(self, config_file: str) -> Dict[str, Any]:
         """Method to read a config file into a dictionary
