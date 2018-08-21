@@ -216,7 +216,8 @@ class GitLabManager(object):
                          "labbook_name": p.get("name"),
                          "description": "",
                          "created_on": p.get("created_at"),
-                         "modified_on": p.get("last_activity_at")} for p in response.json()]
+                         "modified_on": p.get("last_activity_at"),
+                         "visibility": p.get("visibility")} for p in response.json()]
 
             return labbooks
 
