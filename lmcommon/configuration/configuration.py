@@ -63,11 +63,9 @@ class Configuration(object):
 
     @property
     def host_cuda_version(self) -> Optional[str]:
-        try:
-            return self.config['container'].get('cuda_version')
-        except KeyError:
-            logger.warning('Missing cuda_version in configuration')
-            return None
+        v = self.config['container'].get('cuda_version')
+        # Make sure it's passed up as a string, as yaml may interpret it as float.
+        return str(v)
 
     def _read_config_file(self, config_file: str) -> Dict[str, Any]:
         """Method to read a config file into a dictionary
