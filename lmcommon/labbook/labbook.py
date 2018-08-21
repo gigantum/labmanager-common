@@ -392,6 +392,21 @@ class LabBook(object):
         else:
             return None
 
+    @property
+    def cuda_version(self) -> Optional[str]:
+        if self._data and self._data.get("cuda_version"):
+            return self._data.get("cuda_version")
+        else:
+            return None
+
+    @cuda_version.setter
+    def cuda_version(self, cuda_version: Optional[str] = None) -> None:
+        if self._data:
+            self._data['cuda_version'] = cuda_version
+            self._save_labbook_data()
+        else:
+            raise RuntimeError("LabBook _data cannot be None")
+
     def _set_root_dir(self, new_root_dir: str) -> None:
         """Update the root directory and also reconfigure the git instance
 
@@ -972,7 +987,7 @@ class LabBook(object):
         return favorite_data
 
     def new(self, owner: Dict[str, str], name: str, username: Optional[str] = None,
-            description: Optional[str] = None, bypass_lfs: bool = False) -> str:
+            description: Optional[str] = None, bypass_lfs: bool = False, cuda: bool = False) -> str:
         """Method to create a new minimal LabBook instance on disk
 
         /[LabBook name]
@@ -1015,6 +1030,7 @@ class LabBook(object):
 
         # Build data file contents
         self._data = {
+            "cuda_version": None,
             "labbook": {"id": uuid.uuid4().hex,
                         "name": name,
                         "description": self._santize_input(description or '')},
