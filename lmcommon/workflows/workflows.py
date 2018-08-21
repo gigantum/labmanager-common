@@ -37,13 +37,15 @@ class GitWorkflow(object):
         with self.labbook.lock_labbook():
             core.git_garbage_collect(self.labbook)
 
-    def publish(self, username: str, access_token: Optional[str] = None, remote: str = "origin") -> None:
+    def publish(self, username: str, access_token: Optional[str] = None, remote: str = "origin",
+                public: bool = False) -> None:
         """ Publish this labbook to the remote GitLab instance.
 
         Args:
             username: Subject username
             access_token: Temp token/password to gain permissions on GitLab instance
             remote: Name of Git remote (always "origin" for now).
+            public: Allow public read access
 
         Returns:
             None
@@ -58,7 +60,9 @@ class GitWorkflow(object):
 
             with self.labbook.lock_labbook():
                 self.labbook.sweep_uncommitted_changes()
-                core.create_remote_gitlab_repo(labbook=self.labbook, username=username, access_token=access_token)
+                vis = "public" if public is True else "private"
+                core.create_remote_gitlab_repo(labbook=self.labbook, username=username,
+                                               access_token=access_token, visibility=vis)
                 core.publish_to_remote(labbook=self.labbook, username=username, remote=remote)
         except Exception as e:
             # Unsure what specific exception add_remote creates, so make a catchall.

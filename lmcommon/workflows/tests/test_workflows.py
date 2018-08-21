@@ -42,7 +42,7 @@ def pause_wait_for_redis():
 class TestLabbookShareProtocol(object):
 
     @mock.patch('lmcommon.workflows.core.create_remote_gitlab_repo', new=_MOCK_create_remote_repo)
-    def test_simple_publish_new_one_user(self, pause_wait_for_redis, remote_bare_repo, mock_labbook_lfs_disabled):
+    def  test_simple_publish_new_one_user(self, pause_wait_for_redis, remote_bare_repo, mock_labbook_lfs_disabled):
         # Make sure you cannot clobber a remote branch with your local branch of the same name.
 
         ## 1 - Make initial set of contributions to Labbook.

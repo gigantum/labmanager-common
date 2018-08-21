@@ -18,6 +18,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 import requests
+from enum import Enum
 from typing import List, Optional, Tuple, Dict, Any
 import subprocess
 import pexpect
@@ -65,6 +66,18 @@ def check_and_add_user(admin_service: str, access_token: str, username: str) -> 
 
 class GitLabException(Exception):
     pass
+
+
+class Visibility(Enum):
+    """ Represents access to remote GitLab project"""
+    # Available only to owner and collaborators
+    PRIVATE = "private"
+
+    # Available to anyone via link (even non-users)
+    PUBLIC = "public"
+
+    # Available to any user registered in GitLab
+    INTERNAL = "internal"
 
 
 class GitLabManager(object):
@@ -203,7 +216,8 @@ class GitLabManager(object):
                          "labbook_name": p.get("name"),
                          "description": "",
                          "created_on": p.get("created_at"),
-                         "modified_on": p.get("last_activity_at")} for p in response.json()]
+                         "modified_on": p.get("last_activity_at"),
+                         "visibility": p.get("visibility")} for p in response.json()]
 
             return labbooks
 
@@ -238,6 +252,32 @@ class GitLabManager(object):
             logger.error(response.json())
             raise ValueError(msg)
 
+    def repo_details(self, namespace: str, labbook_name: str) -> Dict[str, Any]:
+        """ Get all properties of a given Gitlab Repository, see API documentation
+            at https://docs.gitlab.com/ee/api/projects.html#get-single-project.
+
+            TODO - Find or create a GitLab Python API project to replace (much) of this.
+
+            Args:
+                namespace: Owner or organization
+                labbook_name: Name of labbook
+
+            Returns:
+                Dict of labbook properties, for keys see above link.
+            """
+        repo_id = self.get_repository_id(namespace, labbook_name)
+        response = requests.get(f"https://{self.remote_host}/api/v4/projects/{repo_id}",
+                                headers={"PRIVATE-TOKEN": self.user_token}, timeout=10)
+        if response.status_code == 200:
+            return response.json()
+        elif response.status_code == 404:
+            raise ValueError(f"Remote GitLab repo {namespace}/{labbook_name} not found")
+        else:
+            msg = f"Failed to check if {namespace}/{labbook_name} exists. Status Code: {response.status_code}"
+            logger.error(msg)
+            logger.error(response.json())
+            raise ValueError(msg)
+
     def fork_labbook(self, username: str, namespace: str, labbook_name: str):
         if self.labbook_exists(namespace, labbook_name):
             raise ValueError(f"Remote repository {namespace}/{labbook_name}")
@@ -255,12 +295,13 @@ class GitLabManager(object):
             logger.error(msg)
             raise GitLabException(f'Failed to fork: {msg}')
 
-    def create_labbook(self, namespace: str, labbook_name: str) -> None:
+    def create_labbook(self, namespace: str, labbook_name: str, visibility: str) -> None:
         """Method to create the remote repository
 
         Args:
             namespace(str): Namespace in gitlab, currently the "owner"
             labbook_name(str): LabBook name (i.e. project name in gitlab)
+            visibility(str): public, private (default), or internal.
 
         Returns:
 
@@ -268,13 +309,19 @@ class GitLabManager(object):
         if self.labbook_exists(namespace, labbook_name):
             raise ValueError("Cannot create remote repository that already exists")
 
+        # Raises ValueError if given visibility is not valid
+        Visibility(visibility)
+
         data = {"name": labbook_name,
                 "issues_enabled": False,
                 "jobs_enabled": False,
                 "wiki_enabled": False,
                 "snippets_enabled": False,
                 "shared_runners_enabled": False,
-                "visibility": "private",
+                # See: https://docs.gitlab.com/ee/api/projects.html#project-merge-method
+                # We want all deconfliction done on client-side.
+                "merge_method": "ff",
+                "visibility": visibility,
                 "public_jobs": False,
                 "request_access_enabled": False
                 }
