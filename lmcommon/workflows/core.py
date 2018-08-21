@@ -91,7 +91,9 @@ def push(labbook: LabBook, remote: str) -> None:
         raise GitLabRemoteError(e)
 
 
-def create_remote_gitlab_repo(labbook: LabBook, username: str, access_token: Optional[str] = None) -> None:
+
+def create_remote_gitlab_repo(labbook: LabBook, username: str, visibility: str,
+                              access_token: Optional[str] = None) -> None:
     """Create a new repository in GitLab,
 
     Note: It may make more sense to factor this out later on. """
@@ -108,9 +110,11 @@ def create_remote_gitlab_repo(labbook: LabBook, username: str, access_token: Opt
 
     try:
         # Add collaborator to remote service
-        mgr = GitLabManager(default_remote, admin_service, access_token=access_token or 'invalid')
+        mgr = GitLabManager(default_remote, admin_service,
+                            access_token=access_token or 'invalid')
         mgr.configure_git_credentials(default_remote, username)
-        mgr.create_labbook(namespace=labbook.owner['username'], labbook_name=labbook.name)
+        mgr.create_labbook(namespace=labbook.owner['username'], labbook_name=labbook.name,
+                           visibility=visibility)
         labbook.add_remote("origin", f"https://{default_remote}/{username}/{labbook.name}.git")
     except Exception as e:
         raise GitLabRemoteError(e)

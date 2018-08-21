@@ -122,7 +122,7 @@ class TestGitLabManager(object):
                             }],
                       status=200)
 
-        gitlab_mngr_fixture.create_labbook("testuser", "new-labbook")
+        gitlab_mngr_fixture.create_labbook("testuser", "new-labbook", visibility="private")
 
         assert gitlab_mngr_fixture.labbook_exists("testuser", "new-labbook") is True
 
@@ -132,7 +132,7 @@ class TestGitLabManager(object):
 
         # Should fail because the repo "already exists"
         with pytest.raises(ValueError):
-            gitlab_mngr_fixture.create_labbook("testuser", "test-labbook")
+            gitlab_mngr_fixture.create_labbook("testuser", "test-labbook", visibility="private")
 
         # Should fail because the call to gitlab failed
         responses.add(responses.POST, 'https://repo.gigantum.io/api/v4/projects',
@@ -142,7 +142,7 @@ class TestGitLabManager(object):
                             },
                       status=400)
         with pytest.raises(ValueError):
-            gitlab_mngr_fixture.create_labbook("testuser", "test-labbook")
+            gitlab_mngr_fixture.create_labbook("testuser", "test-labbook", visibility="private")
 
     @responses.activate
     def test_get_collaborators(self, gitlab_mngr_fixture, property_mocks_fixture):
