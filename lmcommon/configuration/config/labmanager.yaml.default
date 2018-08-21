@@ -5,18 +5,26 @@ from: null
 
 # Core configuration
 core:
-  team_mode: false # Should the LabManager run in Team Mode (multi-user)
-  logging_config: "/etc/gigantum/logging.json" # Location of configuration file for the LabManager logger
-  import_demo_on_first_login: true # Should the app import a labbook into new user's working dirs on first login
+  # Should the LabManager run in Team Mode (multi-user)
+  team_mode: false
+  # Location of configuration file for the LabManager logger
+  logging_config: "/etc/gigantum/logging.json"
+  # Should the app import a labbook into new user's working dirs on first login
+  import_demo_on_first_login: true
 
 # LabBook Container Configuration
 container:
   # If null, no limit
   # To set enter string with a units identification char (e.g. 100000b, 1000k, 128m, 1g)
   memory: null
+
   # If null, no limit
   # To set enter a float for the CPU allocation desired. e.g. 4 CPUs available, 1.5 limits container to 1.5 CPUs
   cpu: null
+
+  # If null, no CUDA/cuDNN support
+  # To set, replace null to a version (either 9.0 or 9.2)
+  cuda_version: null
 
 # Authentication Configuration
 auth:
