@@ -136,8 +136,9 @@ def publish_to_remote(labbook: LabBook, username: str, remote: str) -> None:
     for tr in range(5):
         try:
             labbook.git.fetch(remote=remote)
+            break
         except Exception as e:
-            logger.warning(f"Fetch {i+1}/5 failed for {str(labbook)}: {e}")
+            logger.warning(f"Fetch attempt {tr+1}/5 failed for {str(labbook)}: {e}")
             time.sleep(1)
     else:
         raise ValueError(f"Timed out trying to fetch repo for {str(labbook)}")
