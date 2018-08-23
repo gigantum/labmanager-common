@@ -298,6 +298,8 @@ class GitLabManager(object):
     def create_labbook(self, namespace: str, labbook_name: str, visibility: str) -> None:
         """Method to create the remote repository
 
+        TODO - We should not include namespace in arguments, it should be inferred from self.user_token
+
         Args:
             namespace(str): Namespace in gitlab, currently the "owner"
             labbook_name(str): LabBook name (i.e. project name in gitlab)

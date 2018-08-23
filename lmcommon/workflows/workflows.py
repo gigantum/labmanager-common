@@ -50,26 +50,27 @@ class GitWorkflow(object):
         Returns:
             None
         """
-        try:
-            logger.info(f"Publishing {str(self.labbook)} for user {username} to remote {remote}")
-            if self.labbook.has_remote:
-                raise ValueError("Cannot publish Labbook when remote already set.")
 
-            if self.labbook.active_branch != f'gm.workspace-{username}':
-                raise ValueError(f"Must be on user workspace (gm.workspace-{username}) to sync")
+        logger.info(f"Publishing {str(self.labbook)} for user {username} to remote {remote}")
+        if self.labbook.has_remote:
+            raise ValueError("Cannot publish Labbook when remote already set.")
 
-            with self.labbook.lock_labbook():
+        if self.labbook.active_branch != f'gm.workspace-{username}':
+            raise ValueError(f"Must be on user workspace (gm.workspace-{username}) to sync")
+
+        with self.labbook.lock_labbook():
+            try:
                 self.labbook.sweep_uncommitted_changes()
                 vis = "public" if public is True else "private"
                 core.create_remote_gitlab_repo(labbook=self.labbook, username=username,
                                                access_token=access_token, visibility=vis)
                 core.publish_to_remote(labbook=self.labbook, username=username, remote=remote)
-        except Exception as e:
-            # Unsure what specific exception add_remote creates, so make a catchall.
-            logger.error(f"Caught {e}: {str(self.labbook)} may be in corrupted Git state!")
-            call_subprocess(['git', 'reset', '--hard'], cwd=self.labbook.root_dir)
-            self.labbook.checkout_branch(f"gm.workspace-{username}")
-            raise e
+            except Exception as e:
+                # Unsure what specific exception add_remote creates, so make a catchall.
+                logger.error(f"Publish failed {e}: {str(self.labbook)} may be in corrupted Git state!")
+                call_subprocess(['git', 'reset', '--hard'], cwd=self.labbook.root_dir)
+                self.labbook.checkout_branch(f"gm.workspace-{username}")
+                raise e
 
     def sync(self, username: str, remote: str = "origin", force: bool = False) -> int:
         """ Sync with remote GitLab repo (i.e., pull any upstream changes and push any new changes). Following
