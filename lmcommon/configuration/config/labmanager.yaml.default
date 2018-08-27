@@ -50,6 +50,7 @@ git:
     repo.gigantum.io:
       remote_type: gitlab
       admin_service: usersrv.gigantum.io
+      index_service: api.gigantum.com/read/index
 
 # Embedded Detail Object Database config
 detaildb:
