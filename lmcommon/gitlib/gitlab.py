@@ -265,7 +265,7 @@ class GitLabManager(object):
 
         """
         repo_id = self.get_repository_id(namespace, labbook_name)
-        update_data = {'visibility': visibility}
+        update_data = {'visibility': visibility.value}
         response = requests.put(f"https://{self.remote_host}/api/v4/projects/{repo_id}",
                                 data=update_data, headers={"PRIVATE-TOKEN": self.user_token},
                                 timeout=10)
