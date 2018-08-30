@@ -252,7 +252,7 @@ class GitLabManager(object):
             logger.error(response.json())
             raise ValueError(msg)
 
-    def set_visibility(self, namespace: str, labbook_name: str, visibility: Visibility) -> None:
+    def set_visibility(self, namespace: str, labbook_name: str, visibility: str) -> None:
         """ Change public/private visibility for a given project
 
         Args:
@@ -265,7 +265,7 @@ class GitLabManager(object):
 
         """
         repo_id = self.get_repository_id(namespace, labbook_name)
-        update_data = {'visibility': visibility.value}
+        update_data = {'visibility': visibility}
         response = requests.put(f"https://{self.remote_host}/api/v4/projects/{repo_id}",
                                 data=update_data, headers={"PRIVATE-TOKEN": self.user_token},
                                 timeout=10)
