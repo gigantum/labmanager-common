@@ -154,7 +154,7 @@ class IdentityManager(metaclass=abc.ABCMeta):
         Returns:
             dict
         """
-        key_path = "/mnt/gigantum/.labmanager/identity"
+        key_path = os.path.join(self.config.config['git']['working_directory'], '.labmanager', 'identity')
         if not os.path.exists(key_path):
             os.makedirs(key_path)
 
