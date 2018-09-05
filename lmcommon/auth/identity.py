@@ -154,9 +154,11 @@ class IdentityManager(metaclass=abc.ABCMeta):
         Returns:
             dict
         """
-        key_path = "/mnt/share"
-        key_file = os.path.join(key_path, "jwks.json")
+        key_path = "/mnt/gigantum/.labmanager/identity"
+        if not os.path.exists(key_path):
+            os.makedirs(key_path)
 
+        key_file = os.path.join(key_path, "jwks.json")
         # Check for local cached key data
         if os.path.exists(key_file):
             with open(key_file, 'rt') as jwk_file:
