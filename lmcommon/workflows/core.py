@@ -91,7 +91,6 @@ def push(labbook: LabBook, remote: str) -> None:
         raise GitLabRemoteError(e)
 
 
-
 def create_remote_gitlab_repo(labbook: LabBook, username: str, visibility: str,
                               access_token: Optional[str] = None) -> None:
     """Create a new repository in GitLab,
@@ -131,7 +130,18 @@ def publish_to_remote(labbook: LabBook, username: str, remote: str) -> None:
         raise ValueError('Branch gm.workspace does not exist in local Labbook branches')
 
     git_garbage_collect(labbook)
-    labbook.git.fetch(remote=remote)
+
+    # Try five attempts to fetch - the remote repo could have been created just milliseconds
+    # ago, so may need a few moments to settle before it supports all the git operations.
+    for tr in range(5):
+        try:
+            labbook.git.fetch(remote=remote)
+            break
+        except Exception as e:
+            logger.warning(f"Fetch attempt {tr+1}/5 failed for {str(labbook)}: {e}")
+            time.sleep(1)
+    else:
+        raise ValueError(f"Timed out trying to fetch repo for {str(labbook)}")
 
     # Make sure user's workspace is synced (in case they are working on it on other machines)
     if labbook.get_commits_behind_remote(remote_name=remote)[1] > 0:

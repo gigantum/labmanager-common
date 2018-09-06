@@ -503,7 +503,7 @@ class TestLabBook(object):
             ('//complex/.path/.like/this', 'complex/.path/.like/this')
         ]
         for sample_input, expected_output in vectors:
-            assert LabBook._make_path_relative(sample_input) == expected_output
+            assert LabBook.make_path_relative(sample_input) == expected_output
 
     def test_labbook_key(self, mock_config_file):
         lb = LabBook(mock_config_file[0])
@@ -542,59 +542,6 @@ class TestLabBook(object):
         assert all([len(s[key]) == 0 for key in s.keys()])
 
         assert any(['1 new file(s)' in l['message'] for l in lb.git.log()])
-
-
-    def test_walkdir_with_favorites(self, mock_config_file, sample_src_file):
-        lb = LabBook(mock_config_file[0])
-        lb.new(owner={"username": "test"}, name="test-insert-files-1", description="validate tests.")
-        dirs = ["code/cat_dir", "code/dog_dir"]
-        for d in dirs:
-            lb.makedir(d)
-
-        open('/tmp/dogfile', 'w').write('ddd')
-        open('/tmp/catfile', 'w').write('ccc')
-        FileOperations.insert_file(lb, 'code', sample_src_file)
-        FileOperations.insert_file(lb, 'code', '/tmp/dogfile', 'dog_dir')
-        FileOperations.insert_file(lb, 'code', '/tmp/catfile', 'cat_dir')
-
-        sample_filename = os.path.basename(sample_src_file)
-
-        # Since the file is in a hidden directory, it should not be found.
-        dir_walks = lb.walkdir('code')
-        # Spot check some entries
-        assert len(dir_walks) == 5
-        assert dir_walks[0]['key'] == 'cat_dir/'
-        assert dir_walks[0]['is_dir'] is True
-        assert dir_walks[0]['is_favorite'] is False
-        assert dir_walks[1]['key'] == 'dog_dir/'
-        assert dir_walks[1]['is_dir'] is True
-        assert dir_walks[1]['is_favorite'] is False
-        assert dir_walks[2]['is_favorite'] is False
-        assert dir_walks[2]['is_dir'] is False
-        assert dir_walks[3]['is_favorite'] is False
-        assert dir_walks[3]['is_dir'] is False
-        assert dir_walks[4]['is_favorite'] is False
-        assert dir_walks[4]['is_dir'] is False
-
-        lb.create_favorite("code", sample_filename, description="Fav 1")
-        lb.create_favorite("code", f"dog_dir/dogfile", description="Fav 2")
-        lb.create_favorite("code", f"cat_dir/", description="Fav 3", is_dir=True)
-
-        dir_walks = lb.walkdir('code')
-        # Spot check some entries
-        assert len(dir_walks) == 5
-        assert dir_walks[0]['key'] == 'cat_dir/'
-        assert dir_walks[0]['is_dir'] is True
-        assert dir_walks[0]['is_favorite'] is True
-        assert dir_walks[1]['key'] == 'dog_dir/'
-        assert dir_walks[1]['is_dir'] is True
-        assert dir_walks[1]['is_favorite'] is False
-        assert dir_walks[2]['is_favorite'] is True
-        assert dir_walks[2]['is_dir'] is False
-        assert dir_walks[3]['is_favorite'] is False
-        assert dir_walks[3]['is_dir'] is False
-        assert dir_walks[4]['is_favorite'] is True
-        assert dir_walks[4]['is_dir'] is False
 
     def test_create_labbook_with_author(self, mock_config_file):
         """Test creating an empty labbook with the author set"""
