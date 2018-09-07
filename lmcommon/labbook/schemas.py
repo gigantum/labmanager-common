@@ -18,7 +18,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 from typing import Any, Dict, Optional
-from schema import Schema, SchemaError
+from schema import (Schema, SchemaError, Optional as SchemaOptional,
+                    Or as SchemaOr, Use as SchemaUse)
 
 from lmcommon.logging import LMLogger
 
@@ -33,6 +34,7 @@ LABBOOK_SCHEMA_VERSIONS = {
     #
     # These are all the supported schemas
     1: {
+        SchemaOptional('cuda_version'): SchemaOr(SchemaUse(str), None),
         'labbook': {
             'id': str,
             'name': str,
@@ -60,7 +62,6 @@ def validate_labbook_schema(schema_version: int, lb_data: Optional[Dict[str, Any
         bool: True if schema validates, False otherwise.
 
     """
-
     if not schema_version or schema_version not in LABBOOK_SCHEMA_VERSIONS.keys():
         logger.error(f"schema_version {schema_version} not found in schema versions")
         return False

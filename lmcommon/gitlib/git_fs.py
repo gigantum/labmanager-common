@@ -564,7 +564,6 @@ class GitFilesystem(GitRepoInterface):
             for n in branch_info_dict[key]:
                 if name == n:
                     raise ValueError(f"Existing {key} branch `{n}` already exists")
-        #self.repo.create_head(name)
         self.repo.git.checkout(b=name)
 
     def publish_branch(self, branch_name, remote_name="origin"):
@@ -791,6 +790,7 @@ class GitFilesystem(GitRepoInterface):
 
         Args:
             remote_name(str): Name of the remote repository
+            refspec: ?
             tags(bool): If true, push tags
 
         Returns:

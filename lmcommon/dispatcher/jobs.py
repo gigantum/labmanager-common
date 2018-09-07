@@ -137,7 +137,8 @@ def import_labboook_from_zip(archive_path: str, username: str, owner: str,
         lb_containing_dir: str = os.path.join(lm_working_dir, username, owner, 'labbooks')
 
         if os.path.isdir(os.path.join(lb_containing_dir, inferred_labbook_name)):
-            raise ValueError(f'(Job {p}) LabBook {inferred_labbook_name} already exists at {lb_containing_dir}, cannot overwrite.')
+            raise ValueError(
+                f'(Job {p}) LabBook {inferred_labbook_name} already exists at {lb_containing_dir}, cannot overwrite.')
 
         logger.info(f"(Job {p}) Extracting LabBook from archive {archive_path} into {lb_containing_dir}")
         if lb_containing_dir[-1] != os.path.sep:
@@ -258,7 +259,7 @@ def build_labbook_image(path: str, username: Optional[str] = None,
         raise
 
 
-def start_labbook_container(root: str, config_path:str, username: Optional[str] = None,
+def start_labbook_container(root: str, config_path: str, username: Optional[str] = None,
                             override_image_id: Optional[str] = None) -> str:
     """Return the ID of the LabBook Docker container ID.
 
@@ -286,7 +287,7 @@ def start_labbook_container(root: str, config_path:str, username: Optional[str] 
         raise
 
 
-def stop_labbook_container(image_tag: str):
+def stop_labbook_container(container_id: str):
     """Return a dictionary of metadata pertaining to the given task's Redis key.
 
     TODO - Take labbook as argument rather than image tag.
@@ -299,10 +300,10 @@ def stop_labbook_container(image_tag: str):
     """
 
     logger = LMLogger.get_logger()
-    logger.info(f"Starting stop_labbook_container({image_tag}) in pid {os.getpid()}")
+    logger.info(f"Starting stop_labbook_container({container_id}) in pid {os.getpid()}")
 
     try:
-        stop_container(image_tag)
+        stop_container(container_id)
         return 0
     except Exception as e:
         logger.error("Error on stop_labbook_container in pid {}: {}".format(os.getpid(), e))
@@ -340,8 +341,7 @@ def start_and_run_activity_monitor(module_name, class_name, user, owner, labbook
     """Run method to run the activity monitor. It is a long running job.
 
         Args:
-            dev_env_name(str): Name of the dev env to monitor
-            key(str): The unique string used as the key in redis to track this DevEnvMonitor instance
+
 
     Returns:
         0 to indicate no failure

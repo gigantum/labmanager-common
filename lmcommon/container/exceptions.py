@@ -18,7 +18,6 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-from typing import Any
 
 class ContainerException(Exception):
     pass
@@ -26,4 +25,3 @@ class ContainerException(Exception):
 
 class ContainerBuildException(ContainerException):
     pass
-

@@ -99,7 +99,7 @@ def _create_temp_work_dir(override_dict: dict = None, lfs_enabled: bool = True):
     return config_file, unit_test_working_dir
 
 
-def _MOCK_create_remote_repo2(labbook, username: str, access_token = None) -> None:
+def _MOCK_create_remote_repo2(labbook, username: str, visibility, access_token = None) -> None:
     """ Used to mock out creating a Labbook remote Gitlab repo. This is not a fixture per se,
 
     Usage:

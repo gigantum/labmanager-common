@@ -97,19 +97,15 @@ class TestBranching(object):
         assert lb.is_repo_clean
 
         # Make some changes to the upstream main branch
-        #lb = LabBook(mock_labbook_lfs_disabled[0])
-        #lb.from_name("test", "test", "labbook1")
         bm = BranchManager(lb, username=TEST_USER)
         bm.workon_branch(bm.workspace_branch)
-        lb.makedir('code/sillyfolder', create_activity_record=True)
+        FileOperations.makedir(lb, 'code/sillyfolder', create_activity_record=True)
         assert lb.is_repo_clean
-        lb.makedir('input/newfolder', create_activity_record=True)
+        FileOperations.makedir(lb, 'input/newfolder', create_activity_record=True)
         assert lb.is_repo_clean
 
-        #lb = LabBook(mock_labbook_lfs_disabled[0])
-        #lb.from_name("test", "test", "labbook1")
         bm.workon_branch(full_branch)
-        lb.makedir('output/otherdir', create_activity_record=True)
+        FileOperations.makedir(lb, 'output/otherdir', create_activity_record=True)
         assert lb.is_repo_clean
         bm.merge_from(bm.workspace_branch)
         assert os.path.isdir(os.path.join(lb.root_dir, 'code/sillyfolder'))
@@ -176,22 +172,22 @@ class TestBranching(object):
     def test_create_a_rollback_branch(self, mock_labbook_lfs_disabled):
         test_user_lb = mock_labbook_lfs_disabled[2]
 
-        test_user_lb.makedir(relative_path='code/folder1', create_activity_record=True)
+        FileOperations.makedir(test_user_lb, relative_path='code/folder1', create_activity_record=True)
         commit = test_user_lb.git.commit_hash
-        test_user_lb.makedir(relative_path='code/folder2', create_activity_record=True)
-        test_user_lb.makedir(relative_path='code/folder3', create_activity_record=True)
+        FileOperations.makedir(test_user_lb, relative_path='code/folder2', create_activity_record=True)
+        FileOperations.makedir(test_user_lb, relative_path='code/folder3', create_activity_record=True)
 
         bm = BranchManager(test_user_lb, username=TEST_USER)
         new_b = bm.create_branch('rollback-from-folder-1', revision=commit)
-        test_user_lb.makedir(relative_path='input/branch-folder', create_activity_record=True)
+        FileOperations.makedir(test_user_lb, relative_path='input/branch-folder', create_activity_record=True)
         assert os.path.exists(os.path.join(test_user_lb.root_dir, 'code/folder1'))
         assert not os.path.exists(os.path.join(test_user_lb.root_dir, 'code/folder2'))
         assert not os.path.exists(os.path.join(test_user_lb.root_dir, 'code/folder3'))
 
         assert new_b == bm.active_branch
-        test_user_lb.makedir(relative_path='input/branch-1', create_activity_record=True)
-        test_user_lb.makedir(relative_path='input/branch-2', create_activity_record=True)
-        test_user_lb.makedir(relative_path='input/branch-3', create_activity_record=True)
+        FileOperations.makedir(test_user_lb, relative_path='input/branch-1', create_activity_record=True)
+        FileOperations.makedir(test_user_lb, relative_path='input/branch-2', create_activity_record=True)
+        FileOperations.makedir(test_user_lb, relative_path='input/branch-3', create_activity_record=True)
         assert test_user_lb.is_repo_clean
 
         # Now try pulling upstream changes back into the rollback branch
@@ -211,10 +207,10 @@ class TestBranching(object):
 
     def test_create_rollback_to_invalid_revision(self, mock_labbook_lfs_disabled):
         test_user_lb = mock_labbook_lfs_disabled[2]
-        test_user_lb.makedir(relative_path='code/folder1', create_activity_record=True)
+        FileOperations.makedir(test_user_lb, relative_path='code/folder1', create_activity_record=True)
         commit = test_user_lb.git.commit_hash
-        test_user_lb.makedir(relative_path='code/folder2', create_activity_record=True)
-        test_user_lb.makedir(relative_path='code/folder3', create_activity_record=True)
+        FileOperations.makedir(test_user_lb, relative_path='code/folder2', create_activity_record=True)
+        FileOperations.makedir(test_user_lb, relative_path='code/folder3', create_activity_record=True)
 
         bm = BranchManager(test_user_lb, username=TEST_USER)
         with pytest.raises(InvalidBranchName):

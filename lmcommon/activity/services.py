@@ -140,7 +140,7 @@ def stop_dev_env_monitors(dev_env_key: str, redis_conn: redis.Redis, labbook_nam
 
         _, dev_env_name = dev_env_key.rsplit(":", 1)
         logger.info("Stopped dev tool monitor `{}` for lab book `{}`. PID {}".format(dev_env_name, labbook_name,
-                                                                                    process_id))
+                                                                                     process_id))
         # Remove dev env monitor key
         redis_conn.delete(dev_env_key)
 
@@ -156,7 +156,6 @@ def stop_dev_env_monitors(dev_env_key: str, redis_conn: redis.Redis, labbook_nam
     for am in activity_monitor_keys:
         # Set run flag in redis
         redis_conn.hset(am.decode(), "run", False)
-
         logger.info("Signaled activity monitor for lab book `{}` to stop".format(labbook_name))
 
 

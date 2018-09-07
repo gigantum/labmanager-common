@@ -21,20 +21,19 @@ import glob
 import os
 import re
 import shutil
-from typing import (Any, Dict, List, Optional, Tuple)
 import uuid
 import yaml
 import json
 import time
 import datetime
-import subprocess
+import gitdb
+import redis_lock
 from contextlib import contextmanager
 from pkg_resources import resource_filename
-import gitdb
 from collections import OrderedDict
-
-from git.exc import GitCommandError
+from redis import StrictRedis
 from natsort import natsorted
+from typing import (Any, Dict, List, Optional, Tuple)
 
 from lmcommon.configuration import Configuration
 from lmcommon.configuration.utils import call_subprocess
@@ -46,9 +45,6 @@ from lmcommon.activity import ActivityStore, ActivityType, ActivityRecord, Activ
     ActivityAction
 from lmcommon.activity import ActivityStore
 from lmcommon.labbook.schemas import CURRENT_SCHEMA
-
-from redis import StrictRedis
-import redis_lock
 
 logger = LMLogger.get_logger()
 
@@ -126,7 +122,7 @@ class LabBook(object):
         else:
             return f'<LabBook UNINITIALIZED>'
 
-    def _validate_git(method_ref): #type: ignore
+    def _validate_git(method_ref):  #type: ignore
         """Definition of decorator that validates git operations.
 
         Note! The approach here is taken from Stack Overflow answer https://stackoverflow.com/a/1263782
@@ -139,7 +135,7 @@ class LabBook(object):
             if kwargs.get('create_activity_record') is True:
                 try:
                     _check_git_tracked(self.git)
-                    n = method_ref(self, *args, **kwargs) #type: ignore
+                    n = method_ref(self, *args, **kwargs)  #type: ignore
                 except ValueError:
                     with self.lock_labbook():
                         self.sweep_uncommitted_changes()
@@ -301,7 +297,7 @@ class LabBook(object):
             raise ValueError("No owner assigned to Lab Book.")
 
     @staticmethod
-    def _make_path_relative(path_str: str) -> str:
+    def make_path_relative(path_str: str) -> str:
         while len(path_str or '') >= 1 and path_str[0] == os.path.sep:
             path_str = path_str[1:]
         return path_str
@@ -397,6 +393,21 @@ class LabBook(object):
         else:
             return None
 
+    @property
+    def cuda_version(self) -> Optional[str]:
+        if self._data and self._data.get("cuda_version"):
+            return self._data.get("cuda_version")
+        else:
+            return None
+
+    @cuda_version.setter
+    def cuda_version(self, cuda_version: Optional[str] = None) -> None:
+        if self._data:
+            self._data['cuda_version'] = cuda_version
+            self._save_labbook_data()
+        else:
+            raise RuntimeError("LabBook _data cannot be None")
+
     def _set_root_dir(self, new_root_dir: str) -> None:
         """Update the root directory and also reconfigure the git instance
 
@@ -453,7 +464,7 @@ class LabBook(object):
             logger.error(errmsg)
             raise ValueError(errmsg)
 
-    def _validate_section(self, section: str) -> None:
+    def validate_section(self, section: str) -> None:
         """Simple method to validate a user provided section name
 
         Args:
@@ -725,9 +736,6 @@ class LabBook(object):
         In order to get the section name, which is "lfs.https://repo.location.whatever", we need to search
         by all LFS fields and remove them (and in order to get the section need to strip the variables off the end).
 
-        Args:
-            None
-
         Returns:
             None
         """
@@ -756,293 +764,6 @@ class LabBook(object):
             logger.exception(e)
             raise LabbookException(e)
 
-    @_validate_git
-    def delete_file(self, section: str, relative_path: str, directory: bool = False) -> bool:
-        """Delete file (or directory) from inside lb section.
-
-
-        Part of the intention is to mirror the unix "rm" command. Thus, there
-        needs to be some extra arguments in order to delete a directory, especially
-        one with contents inside of it. In this case, `directory` must be true in order
-        to delete a directory at the given path.
-
-        Args:
-            section(str): Section name (code, input, output)
-            relative_path(str): Relative path from labbook root to target
-            directory(bool): True if relative_path is a directory
-
-        Returns:
-            None
-        """
-        self._validate_section(section)
-        with self.lock_labbook():
-            relative_path = LabBook._make_path_relative(relative_path)
-            target_path = os.path.join(self.root_dir, section, relative_path)
-            if not os.path.exists(target_path):
-                raise ValueError(f"Attempted to delete non-existent path at `{target_path}`")
-            else:
-                target_type = 'file' if os.path.isfile(target_path) else 'directory'
-                logger.info(f"Removing {target_type} at `{target_path}`")
-
-                if shims.in_untracked(self.root_dir, section=section):
-                    logger.info(f"Removing untracked target {target_path}")
-                    if os.path.isdir(target_path):
-                        shutil.rmtree(target_path)
-                    else:
-                        os.remove(target_path)
-                    return True
-
-                commit_msg = f"Removed {target_type} {relative_path}."
-                self.git.remove(target_path, force=True, keep_file=False)
-                assert not os.path.exists(target_path)
-                commit = self.git.commit(commit_msg)
-
-                if os.path.isfile(target_path):
-                    _, ext = os.path.splitext(target_path)
-                else:
-                    ext = 'directory'
-
-                # Get LabBook section
-                activity_type, activity_detail_type, section_str = self.get_activity_type_from_section(section)
-
-                # Create detail record
-                adr = ActivityDetailRecord(activity_detail_type, show=False, importance=0,
-                                           action=ActivityAction.DELETE)
-                adr.add_value('text/plain', commit_msg)
-
-                # Create activity record
-                ar = ActivityRecord(activity_type,
-                                    message=commit_msg,
-                                    linked_commit=commit.hexsha,
-                                    show=True,
-                                    importance=255,
-                                    tags=[ext])
-                ar.add_detail_object(adr)
-
-                # Store
-                ars = ActivityStore(self)
-                ars.create_activity_record(ar)
-
-                if not os.path.exists(target_path):
-                    return True
-                else:
-                    logger.error(f"{target_path} should have been deleted, but remains.")
-                    return False
-
-    @_validate_git
-    def move_file(self, section: str, src_rel_path: str, dst_rel_path: str) -> Dict[str, Any]:
-
-        """Move a file or directory within a labbook, but not outside of it. Wraps
-        underlying "mv" call.
-
-        Args:
-            section(str): Section name (code, input, output)
-            src_rel_path(str): Source file or directory
-            dst_rel_path(str): Target file name and/or directory
-        """
-        self._validate_section(section)
-        # Start with Validations
-        if not src_rel_path:
-            raise ValueError("src_rel_path cannot be None or empty")
-
-        if not dst_rel_path:
-            raise ValueError("dst_rel_path cannot be None or empty")
-
-        is_untracked = shims.in_untracked(self.root_dir, section)
-        with self.lock_labbook():
-            src_rel_path = LabBook._make_path_relative(src_rel_path)
-            dst_rel_path = LabBook._make_path_relative(dst_rel_path)
-
-            src_abs_path = os.path.join(self.root_dir, section, src_rel_path.replace('..', ''))
-            dst_abs_path = os.path.join(self.root_dir, section, dst_rel_path.replace('..', ''))
-
-            if not os.path.exists(src_abs_path):
-                raise ValueError(f"No src file exists at `{src_abs_path}`")
-
-            try:
-                src_type = 'directory' if os.path.isdir(src_abs_path) else 'file'
-                logger.info(f"Moving {src_type} `{src_abs_path}` to `{dst_abs_path}`")
-
-                if not is_untracked:
-                    self.git.remove(src_abs_path, keep_file=True)
-
-                shutil.move(src_abs_path, dst_abs_path)
-
-                if not is_untracked:
-                    commit_msg = f"Moved {src_type} `{src_rel_path}` to `{dst_rel_path}`"
-
-                    if os.path.isdir(dst_abs_path):
-                        self.git.add_all(dst_abs_path)
-                    else:
-                        self.git.add(dst_abs_path)
-
-                    commit = self.git.commit(commit_msg)
-
-                    # Get LabBook section
-                    activity_type, activity_detail_type, section_str = self.get_activity_type_from_section(section)
-
-                    # Create detail record
-                    adr = ActivityDetailRecord(activity_detail_type, show=False, importance=0,
-                                               action=ActivityAction.EDIT)
-                    adr.add_value('text/markdown', commit_msg)
-
-                    # Create activity record
-                    ar = ActivityRecord(activity_type,
-                                        message=commit_msg,
-                                        linked_commit=commit.hexsha,
-                                        show=True,
-                                        importance=255,
-                                        tags=['file-move'])
-                    ar.add_detail_object(adr)
-
-                    # Store
-                    ars = ActivityStore(self)
-                    ars.create_activity_record(ar)
-
-                return self.get_file_info(section, dst_rel_path)
-            except Exception as e:
-                logger.critical("Failed moving file in labbook. Repository may be in corrupted state.")
-                logger.exception(e)
-                raise
-
-    @_validate_git
-    def makedir(self, relative_path: str, make_parents: bool = True, create_activity_record: bool = False) -> None:
-        """Make a new directory inside the labbook directory.
-
-        Args:
-            relative_path(str): Path within the labbook to make directory
-            make_parents(bool): If true, create intermediary directories
-            create_activity_record(bool): If true, create commit and activity record
-
-        Returns:
-            str: Absolute path of new directory
-        """
-        if not relative_path:
-            raise ValueError("relative_path argument cannot be None or empty")
-
-        with self.lock_labbook():
-            relative_path = LabBook._make_path_relative(relative_path)
-            new_directory_path = os.path.join(self.root_dir, relative_path)
-            section = relative_path.split(os.sep)[0]
-            git_untracked = shims.in_untracked(self.root_dir, section)
-            if os.path.exists(new_directory_path):
-                #raise ValueError(f'Directory `{new_directory_path}` already exists')
-                return
-            else:
-                logger.info(f"Making new directory in `{new_directory_path}`")
-                os.makedirs(new_directory_path, exist_ok=make_parents)
-                if git_untracked:
-                    logger.warning(f'New {str(self)} untracked directory `{new_directory_path}`')
-                    return
-                new_dir = ''
-                for d in relative_path.split(os.sep):
-                    new_dir = os.path.join(new_dir, d)
-                    full_new_dir = os.path.join(self.root_dir, new_dir)
-
-                    gitkeep_path = os.path.join(full_new_dir, '.gitkeep')
-                    if not os.path.exists(gitkeep_path):
-                        with open(gitkeep_path, 'w') as gitkeep:
-                            gitkeep.write("This file is necessary to keep this directory tracked by Git"
-                                          " and archivable by compression tools. Do not delete or modify!")
-                        self.git.add(gitkeep_path)
-
-                if create_activity_record:
-                    # Create detail record
-                    activity_type, activity_detail_type, section_str = self.infer_section_from_relative_path(relative_path)
-                    adr = ActivityDetailRecord(activity_detail_type, show=False, importance=0,
-                                               action=ActivityAction.CREATE)
-
-                    msg = f"Created new {section_str} directory `{relative_path}`"
-                    commit = self.git.commit(msg)
-                    adr.add_value('text/markdown', msg)
-
-                    # Create activity record
-                    ar = ActivityRecord(activity_type,
-                                        message=msg,
-                                        linked_commit=commit.hexsha,
-                                        show=True,
-                                        importance=255,
-                                        tags=['directory-create'])
-                    ar.add_detail_object(adr)
-
-                    # Store
-                    ars = ActivityStore(self)
-                    ars.create_activity_record(ar)
-
-    def walkdir(self, section: str, show_hidden: bool = False) -> List[Dict[str, Any]]:
-        """Return a list of all files and directories in a section of the labbook. Never includes the .git or
-         .gigantum directory.
-
-        Args:
-            section(str): The labbook section (code, input, output) to walk
-            show_hidden(bool): If True, include hidden directories (EXCLUDING .git and .gigantum)
-
-        Returns:
-            List[Dict[str, str]]: List of dictionaries containing file and directory metadata
-        """
-        self._validate_section(section)
-
-        keys: List[str] = list()
-        # base_dir is the root directory to search, to account for relative paths inside labbook.
-        base_dir = os.path.join(self.root_dir, section)
-        if not os.path.isdir(base_dir):
-            raise ValueError(f"Labbook walkdir base_dir {base_dir} not an existing directory")
-
-        for root, dirs, files in os.walk(base_dir):
-            # Remove directories we ignore so os.walk does not traverse into them during future iterations
-            if '.git' in dirs:
-                del dirs[dirs.index('.git')]
-            if '.gigantum' in dirs:
-                del dirs[dirs.index('.gigantum')]
-
-            # For more deterministic responses, sort resulting paths alphabetically.
-            # Store directories then files, so pagination loads things in an intuitive order
-            dirs.sort()
-            keys.extend(sorted([os.path.join(root.replace(base_dir, ''), d) for d in dirs]))
-            keys.extend(sorted([os.path.join(root.replace(base_dir, ''), f) for f in files]))
-
-        # Create stats
-        stats: List[Dict[str, Any]] = list()
-        for f_p in keys:
-            if not show_hidden and any([len(p) and p[0] == '.' for p in f_p.split(os.path.sep)]):
-                continue
-            stats.append(self.get_file_info(section, f_p))
-
-        return stats
-
-    def listdir(self, section: str, base_path: Optional[str] = None, show_hidden: bool = False) -> List[Dict[str, Any]]:
-        """Return a list of all files and directories in a directory. Never includes the .git or
-         .gigantum directory.
-
-        Args:
-            section(str): the labbook section to start from
-            base_path(str): Relative base path, if not listing from labbook's root.
-            show_hidden(bool): If True, include hidden directories (EXCLUDING .git and .gigantum)
-
-        Returns:
-            List[Dict[str, str]]: List of dictionaries containing file and directory metadata
-        """
-        self._validate_section(section)
-        # base_dir is the root directory to search, to account for relative paths inside labbook.
-        base_dir = os.path.join(self.root_dir, section, base_path or '')
-        if not os.path.isdir(base_dir):
-            raise ValueError(f"Labbook listdir base_dir {base_dir} not an existing directory")
-
-        stats: List[Dict[str, Any]] = list()
-        for item in os.listdir(base_dir):
-            if item in ['.git', '.gigantum']:
-                # Never include .git or .gigantum
-                continue
-
-            if not show_hidden and any([len(p) and p[0] == '.' for p in item.split('/')]):
-                continue
-
-            # Create tuple (isDir, key)
-            stats.append(self.get_file_info(section, os.path.join(base_path or "", item)))
-
-        # For more deterministic responses, sort resulting paths alphabetically.
-        return sorted(stats, key=lambda a: a['key'])
-
     def create_favorite(self, section: str, relative_path: str,
                         description: Optional[str] = None, is_dir: bool = False) -> Dict[str, Any]:
         """Mark an existing file as a Favorite
@@ -1066,7 +787,7 @@ class LabBook(object):
             target_path_rel = os.path.join(section, relative_path)
 
             # Remove any leading "/" -- without doing so os.path.join will break.
-            target_path_rel = LabBook._make_path_relative(target_path_rel)
+            target_path_rel = LabBook.make_path_relative(target_path_rel)
             target_path = os.path.join(self.root_dir, target_path_rel.replace('..', ''))
 
             if not os.path.exists(target_path):
@@ -1275,7 +996,7 @@ class LabBook(object):
         return favorite_data
 
     def new(self, owner: Dict[str, str], name: str, username: Optional[str] = None,
-            description: Optional[str] = None, bypass_lfs: bool = False) -> str:
+            description: Optional[str] = None, bypass_lfs: bool = False, cuda: bool = False) -> str:
         """Method to create a new minimal LabBook instance on disk
 
         /[LabBook name]
@@ -1298,6 +1019,7 @@ class LabBook(object):
             username(str): Username of the logged in user. Used to store the LabBook in the proper location. If omitted
                            the owner username is used
             description(str): A short description of the LabBook
+            bypass_lfs: If True does not use LFS to track input and output dirs.
 
         Returns:
             str: Path to the LabBook contents
@@ -1317,6 +1039,7 @@ class LabBook(object):
 
         # Build data file contents
         self._data = {
+            "cuda_version": None,
             "labbook": {"id": uuid.uuid4().hex,
                         "name": name,
                         "description": self._santize_input(description or '')},
@@ -1389,7 +1112,12 @@ class LabBook(object):
             ]
 
             for d in dirs:
-                self.makedir(d, make_parents=True)
+                p = os.path.join(self.root_dir, d, '.gitkeep')
+                os.makedirs(os.path.dirname(p), exist_ok=True)
+                with open(p, 'w') as gk:
+                    gk.write("This file is necessary to keep this directory tracked by Git"
+                             " and archivable by compression tools. Do not delete or modify!")
+                self.git.add(p)
 
             # Create labbook.yaml file
             self._save_labbook_data()
@@ -1619,11 +1347,12 @@ class LabBook(object):
 
         return result
 
-    def log(self, username: str = None, max_count: int=10):
+    def log(self, username: str = None, max_count: int = 10):
         """Method to list commit history of a Labbook
 
         Args:
             username(str): Username to filter the query on
+            max_count: Max number of log records to retrieve
 
         Returns:
             dict

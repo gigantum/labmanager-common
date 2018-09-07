@@ -37,7 +37,9 @@ class AptPackageManager(PackageManager):
         """Method to search a package manager for packages based on a string. The string can be a partial string.
 
         Args:
-            search_str(str): The string to search on
+            search_str: The string to search on
+            labbook: Subject LabBook
+            username: username of current user
 
         Returns:
             list(str): The list of package names that match the search string
@@ -58,7 +60,9 @@ class AptPackageManager(PackageManager):
         """Method to list all available versions of a package based on the package name
 
         Args:
-            package_name(str): Name of the package to query
+            package_name: Name of the package to query
+            labbook: Subject LabBook
+            username: Username of current user
 
         Returns:
             list(str): Version strings
@@ -83,7 +87,9 @@ class AptPackageManager(PackageManager):
         """Method to get the latest version string for a package
 
         Args:
-            package_name(str): Name of the package to query
+            package_name: Name of the package to query
+            labbook: Subject LabBook
+            username: username of current user
 
         Returns:
             str: latest version string
@@ -98,7 +104,9 @@ class AptPackageManager(PackageManager):
         """Method to get the latest version string for a list of packages
 
         Args:
-            package_names(list): list of names of the packages to query
+            package_names: list of names of the packages to query
+            labbook: Subject LabBook
+            username: username of current user
 
         Returns:
             list: latest version strings
@@ -158,16 +166,17 @@ class AptPackageManager(PackageManager):
 
         return packages
 
-    def validate_packages(self, package_list: List[Dict[str, str]], labbook: LabBook, username: str) -> List[PackageResult]:
+    def validate_packages(self, package_list: List[Dict[str, str]], labbook: LabBook, username: str) \
+            -> List[PackageResult]:
         """Method to validate a list of packages, and if needed fill in any missing versions
 
         Should check both the provided package name and version. If the version is omitted, it should be generated
         from the latest version.
 
         Args:
-            package_list(list): A list of dictionaries of packages to validate
-            labbook(str): The labbook instance
-            username(str): The username for the logged in user
+            package_list: A list of dictionaries of packages to validate
+            labbook: The labbook instance
+            username: The username for the logged in user
 
         Returns:
             namedtuple: namedtuple indicating if the package and version are valid
