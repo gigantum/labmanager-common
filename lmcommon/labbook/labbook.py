@@ -646,17 +646,16 @@ class LabBook(object):
             logger.info(f"Checking out branch {branch_name}...")
             self.git.checkout(branch_name=branch_name)
 
-            # Clear out checkout context
-            if self._root_dir and os.path.exists(os.path.join(self._root_dir, ".gigantum", ".checkout")):
-                os.remove(os.path.join(self._root_dir, ".gigantum", ".checkout"))
-            self._checkout_id = None
-
-            # TODO ??? RB does this add the checkout id?
             # TODO RB BVB needs to be a launched as a background job 
             # The labbook is fully populated.  Start a background job to index the activity.
             logger.info(f"Updating whoosh indexes.")
             ars = ActivityStore(self)
             ars.index_activity()
+
+            # Clear out checkout context
+            if self._root_dir and os.path.exists(os.path.join(self._root_dir, ".gigantum", ".checkout")):
+                os.remove(os.path.join(self._root_dir, ".gigantum", ".checkout"))
+            self._checkout_id = None
 
         except ValueError as e:
             logger.error(f"Cannot checkout branch {branch_name}: {e}")
