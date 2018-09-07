@@ -32,6 +32,7 @@ from lmcommon.activity.monitors.devenv import DevEnvMonitorManager
 from lmcommon.configuration import Configuration
 from lmcommon.configuration.utils import call_subprocess
 from lmcommon.labbook import LabBook
+from lmcommon.activity import ActivityStore
 from lmcommon.logging import LMLogger
 from lmcommon.workflows import sync_locally
 from lmcommon.container.core import (build_docker_image as build_image,
@@ -168,6 +169,10 @@ def import_labboook_from_zip(archive_path: str, username: str, owner: str,
         lb = LabBook(config_file)
         lb.from_directory(new_lb_path)
         logger.info(f'(Job {p}) Extracted archive resolves to new LabBook {str(lb)}')
+
+        # Index the activity.
+        ars = ActivityStore(lb) 
+        ars.index_activity()
 
         # Ignore execution bit changes (due to moving between windows/mac/linux)
         subprocess.check_output("git config core.fileMode false", cwd=lb.root_dir, shell=True)

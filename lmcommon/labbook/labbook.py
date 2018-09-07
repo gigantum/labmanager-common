@@ -44,6 +44,7 @@ from lmcommon.labbook.schemas import validate_labbook_schema
 from lmcommon.labbook import shims
 from lmcommon.activity import ActivityStore, ActivityType, ActivityRecord, ActivityDetailType, ActivityDetailRecord, \
     ActivityAction
+from lmcommon.activity import ActivityStore
 from lmcommon.labbook.schemas import CURRENT_SCHEMA
 
 from redis import StrictRedis
@@ -638,6 +639,14 @@ class LabBook(object):
             if self._root_dir and os.path.exists(os.path.join(self._root_dir, ".gigantum", ".checkout")):
                 os.remove(os.path.join(self._root_dir, ".gigantum", ".checkout"))
             self._checkout_id = None
+
+            # TODO ??? RB does this add the checkout id?
+            # TODO RB BVB needs to be a launched as a background job 
+            # The labbook is fully populated.  Start a background job to index the activity.
+            logger.info(f"Updating whoosh indexes.")
+            ars = ActivityStore(self)
+            ars.index_activity()
+
         except ValueError as e:
             logger.error(f"Cannot checkout branch {branch_name}: {e}")
             raise LabbookException(e)
@@ -1425,6 +1434,30 @@ class LabBook(object):
                 raise ValueError(f"active_branch should be '{user_workspace_branch}'")
 
             return self.root_dir
+
+    def update_indexes(self) -> None:
+        """Method to incrementally update whoosh indexes for a labbook.
+
+        Args:
+            None
+
+        Returns:
+            None (updates the whoosh index)
+        """
+        ars = ActivityStore(self)
+        ars.index_activity()
+
+    def drop_indexes(self) -> None:
+        """Method to drop whoosh indexes as part of deleting a local labbook.
+
+        Args:
+            None
+
+        Returns:
+            None (removes the whoosh index)
+        """
+        ars = ActivityStore(self)
+        ars.asearch.delete()
 
     def from_key(self, key: str) -> None:
         """Method to populate labbook from a unique key.

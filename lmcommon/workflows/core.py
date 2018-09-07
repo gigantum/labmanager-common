@@ -240,6 +240,14 @@ def sync_with_remote(labbook: LabBook, username: str, remote: str, force: bool) 
 
             updates = 0 if checkpoint == checkpoint2 else 1
 
+        # TODO RB BVB start as a background job
+        # when there are updates, re-index labbook
+        if updates:
+            logger.info(f'Updates in{str(labbook)}. Re-building whoosh index.')
+            labbook.update_indexes()
+        else:
+            logger.info(f'No updates in{str(labbook)}.')
+
         # Return 1 if there have been updates made
         return updates
 

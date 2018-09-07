@@ -20,10 +20,11 @@
 import re
 import uuid
 import datetime
-from typing import (Any, Dict, List, Tuple, Optional)
+from typing import (Any, Dict, List, Tuple, Optional, Iterator)
 
 from lmcommon.activity.detaildb import ActivityDetailDB
 from lmcommon.activity.records import ActivityDetailRecord, ActivityRecord
+from lmcommon.activity.search import ActivitySearch
 from lmcommon.logging import LMLogger
 
 logger = LMLogger.get_logger()
@@ -53,6 +54,9 @@ class ActivityStore(object):
 
         self.detaildb = ActivityDetailDB(labbook.root_dir, labbook.checkout_id,
                                          logfile_limit=labbook.labmanager_config.config['detaildb']['logfile_limit'])
+
+        # connect to an activity search index
+        self.asearch = ActivitySearch(labbook.root_dir, labbook)
 
         # Note record commit messages follow a special structure
         self.note_regex = re.compile(r"(?s)_GTM_ACTIVITY_START_.*?_GTM_ACTIVITY_END_")
@@ -191,6 +195,9 @@ class ActivityStore(object):
         record.username = self.labbook.git.author.name
         record.email = self.labbook.git.author.email
 
+        # add record to whoosh index
+        self.asearch.add(record)
+
         logger.debug(f"Successfully created ActivityRecord {commit.hexsha}")
         return record
 
@@ -315,3 +322,45 @@ class ActivityStore(object):
 
         return record
 
+    def populate_detail_record(self, detail_record: ActivityDetailRecord) -> None:
+        """Populate an existing detail record that is not loaded.
+            This will update the detail_record in place.
+
+            Args:
+                detail_record : the record to be populated
+
+            Returns:
+                 None
+        """
+        # check to make sure that its not already loaded
+        if detail_record.is_loaded:
+            logger.debug(f"Trying to populate an already loaded detail message.")
+            return
+        else:
+            # fetch the detail record.
+            loaded_detail_record = self.get_detail_record(detail_record.key or "")
+            detail_record.data = loaded_detail_record.data
+            detail_record.is_loaded = True
+            return
+
+    def _index_generator(self) -> Iterator[ActivityRecord]:
+        """Generator to get all commits with messages"""
+        # get each commit 
+        for entry in self.labbook.git.log():
+            m = self.note_regex.match(entry["message"])
+            if m:
+                yield ActivityRecord.from_log_str(m.group(0), 
+                                                  entry["commit"], 
+                                                  entry['committed_on'],
+                                                  username=entry['author']['name'], 
+                                                  email=entry['author']['email'])
+
+    def index_activity(self) -> None:
+        """Iterate over labbook and index all activity records with whoosh 
+
+            Args:
+                None
+            Returns:
+                 None
+        """
+        self.asearch.batch_add(self._index_generator())

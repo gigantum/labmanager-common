@@ -15,3 +15,4 @@ blosc==1.5.1
 pexpect==4.3.1
 natsort==5.1.1
 pillow==5.1.0
+whoosh==2.7.4

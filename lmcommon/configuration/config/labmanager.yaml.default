@@ -82,3 +82,9 @@ proxy:
   apparent_proxy_port: 10000
   # All LabManager api traffic has this default prefix.
   labmanager_api_prefix: /api
+
+# Indexing settings
+whoosh:
+  # relative path to directory that contains indexes for all local Labbooks.
+  index_dir: .labmanager/whooshsearch
+

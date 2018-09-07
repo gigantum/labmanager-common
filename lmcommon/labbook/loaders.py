@@ -8,6 +8,7 @@ from lmcommon.configuration.utils import call_subprocess
 from lmcommon.labbook.labbook import LabBook, LabbookException
 from lmcommon.gitlib.gitlab import GitLabManager
 from lmcommon.logging import LMLogger
+from lmcommon.activity import ActivityStore
 
 logger = LMLogger.get_logger()
 
@@ -93,4 +94,11 @@ def from_remote(remote_url: str, username: str, owner: str,
             labbook.remove_remote('origin')
             msg = f"Imported and changed owner to {username}"
             labbook.sweep_uncommitted_changes(extra_msg=msg)
+
+    # TODO RB BVB needs to be a launched as a background job 
+    # The labbook is fully populated.  Start a background job to index the activity.
+    logger.info(f"Updating whoosh indexes.")
+    ars = ActivityStore(labbook)
+    ars.index_activity()
+
     return labbook
