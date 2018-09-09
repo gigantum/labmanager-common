@@ -63,7 +63,7 @@ def publish_labbook(labbook_path: str, username: str, access_token: Optional[str
         raise
 
 
-def sync_labbook(self, labbook_path: str, username: str, remote: str = "origin",
+def sync_labbook(labbook_path: str, username: str, remote: str = "origin",
                  force: bool = False) -> int:
     p = os.getpid()
     logger = LMLogger.get_logger()
