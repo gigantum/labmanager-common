@@ -83,7 +83,8 @@ class ActivityStore(object):
 
         # Check total number of tags
         if len(tags) > self.max_num_tags:
-            raise ValueError(f"{len(tags)} tags provided, but a single Activity Record can only have {self.max_num_tags} tags.")
+            raise ValueError(
+                f"{len(tags)} tags provided, but a single Activity Record can only have {self.max_num_tags} tags.")
 
         # Check tag length
         for tag in tags:
@@ -312,6 +313,4 @@ class ActivityStore(object):
         # Create object
         record = ActivityDetailRecord.from_bytes(detail_bytes[1:], decompress=options['compress'])
         record.key = detail_key
-
         return record
-

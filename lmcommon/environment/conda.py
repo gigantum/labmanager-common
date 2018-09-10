@@ -19,17 +19,12 @@
 # SOFTWARE.
 from typing import (Any, List, Dict, Optional)
 from collections import OrderedDict
-
-
-from io import StringIO
-import requests
 import json
 from natsort import natsorted
 
 from distutils.version import StrictVersion
 from distutils.version import LooseVersion
 
-from contextlib import redirect_stdout
 from lmcommon.environment.packagemanager import PackageManager, PackageResult
 from lmcommon.container.container import ContainerOperations
 from lmcommon.container.exceptions import ContainerException
@@ -54,7 +49,9 @@ class CondaPackageManagerBase(PackageManager):
         """Method to search a package manager for packages based on a string. The string can be a partial string.
 
         Args:
-            search_str(str): The string to search on
+            search_str: The string to search on
+            labbook: Subject LabBook
+            username: username of current user
 
         Returns:
             list(str): The list of package names that match the search string
@@ -88,7 +85,9 @@ class CondaPackageManagerBase(PackageManager):
         """Method to list all available versions of a package based on the package name
 
         Args:
-            package_name(str): Name of the package to query
+            package_name: Name of the package to query
+            labbook: Subject LabBook
+            username: username of current user
 
         Returns:
             list(str): Version strings
@@ -122,7 +121,7 @@ class CondaPackageManagerBase(PackageManager):
             if 'invalid version number' in str(e):
                 try:
                     versions.sort(key=LooseVersion)
-                except:
+                except Exception:
                     versions = natsorted(versions, key=lambda x: x.replace('.', '~') + 'z')
             else:
                 raise e
@@ -135,7 +134,9 @@ class CondaPackageManagerBase(PackageManager):
         """Method to get the latest version string for a package
 
         Args:
-            package_name(str): Name of the package to query
+            package_name: Name of the package to query
+            labbook: Subject LabBook
+            username: username of current user
 
         Returns:
             str: latest version string
@@ -165,7 +166,7 @@ class CondaPackageManagerBase(PackageManager):
                     for p in [x.get('LINK')[0] for x in data.get('actions') if x]:
                         if p.get('name') == package_name:
                             return p.get("version")
-                except:
+                except Exception:
                     for p in [x.get('LINK') for x in data.get('actions') if x]:
                         if p.get('name') == package_name:
                             return p.get("version")
@@ -177,7 +178,9 @@ class CondaPackageManagerBase(PackageManager):
         """Method to get the latest version string for a list of packages
 
         Args:
-            package_names(list): list of names of the packages to query
+            package_names: list of names of the packages to query
+            labbook: Subject LabBook
+            username: username of current user
 
         Returns:
             list: latest version strings
@@ -213,7 +216,7 @@ class CondaPackageManagerBase(PackageManager):
                             for p in [x.get('LINK')[0] for x in data.get('actions') if x]:
                                 if p.get('name') == package_name:
                                     versions[package_name] = p.get("version")
-                        except:
+                        except Exception as e:
                             for p in [x.get('LINK') for x in data.get('actions') if x]:
                                 if p.get('name') == package_name:
                                     versions[package_name] = p.get("version")
@@ -273,7 +276,8 @@ class CondaPackageManagerBase(PackageManager):
         # packages = [x for x in data if data.get(x)]
         # return packages
 
-    def validate_packages(self, package_list: List[Dict[str, str]], labbook: LabBook, username: str) -> List[PackageResult]:
+    def validate_packages(self, package_list: List[Dict[str, str]], labbook: LabBook, username: str) \
+            -> List[PackageResult]:
         """Method to validate a list of packages, and if needed fill in any missing versions
 
         Should check both the provided package name and version. If the version is omitted, it should be generated
@@ -298,7 +302,9 @@ class CondaPackageManagerBase(PackageManager):
         cmd = ['conda', 'install', '--dry-run', '--no-deps', '--json', *pkgs]
 
         try:
-            container_result = ContainerOperations.run_command(' '.join(cmd), labbook, username).decode().strip()
+            cmd_result = ContainerOperations.run_command(' '.join(cmd), labbook, username,
+                                                         override_image_tag=self.fallback_image(labbook))
+            container_result = cmd_result.decode().strip()
         except Exception as e:
             logger.error(e)
             raise ValueError(f"An error occured while validating packages")
@@ -335,7 +341,7 @@ class CondaPackageManagerBase(PackageManager):
             try:
                 for p in [x.get('LINK')[0] for x in data.get('actions') if x]:
                     conda_data[p.get('name')] = p.get('version')
-            except:
+            except Exception:
                 for p in [x.get('LINK') for x in data.get('actions') if x]:
                     conda_data[p.get('name')] = p.get('version')
 

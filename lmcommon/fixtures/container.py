@@ -125,13 +125,10 @@ def build_lb_image_for_env(mock_config_with_repo):
 @pytest.fixture(scope='class')
 def build_lb_image_for_env_conda(mock_config_with_repo):
     """A fixture that installs an old version of matplotlib and latest version of requests to increase code coverage"""
-    # Create a labook
     lb = LabBook(mock_config_with_repo[0])
     labbook_dir = lb.new(name="containerunittestbookenvconda", description="Testing environment functions.",
                          owner={"username": "unittester"})
-    # Create Component Manager
     cm = ComponentManager(lb)
-    # Add a component
     cm.add_component("base", ENV_UNIT_TEST_REPO, ENV_UNIT_TEST_BASE, ENV_UNIT_TEST_REV)
     cm.add_packages('conda3', [{'package': 'matplotlib', 'version': '2.0.0'},
                                {'package': 'requests', 'version': REQUESTS_LATEST_VERSION}])
@@ -148,8 +145,6 @@ def build_lb_image_for_env_conda(mock_config_with_repo):
 
     finally:
         shutil.rmtree(lb.root_dir)
-
-        # Remove image if it's still there
         try:
             client.images.remove(docker_image_id, force=True, noprune=False)
         except:

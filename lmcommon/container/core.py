@@ -20,10 +20,10 @@
 import os
 import docker
 import docker.errors
+import hashlib
 import time
 import json
-from typing import Callable, Optional, List, Tuple, Any, Dict
-from docker import APIClient
+from typing import Callable, Optional
 
 from lmcommon.configuration import get_docker_client
 from lmcommon.logging import LMLogger
@@ -52,6 +52,66 @@ def get_container_ip(lb_key: str) -> str:
     client = get_docker_client()
     container = client.containers.get(lb_key)
     return container.attrs['NetworkSettings']['Networks']['bridge']['IPAddress']
+
+
+def _get_cached_image(env_dir: str, image_name: str) -> Optional[str]:
+    """
+    Get Docker image id for the given environment specification (if it exsits).
+
+    This helps to determine if we can avoid having to rebuild the Docker image
+    by hashing the environemnt specification and determine if it changed. Any
+    change in content or version will cause the checksum to be different,
+    necessitating a rebuild. If there's no change, however, we can avoid potentially
+    costly rebuilds of the image.
+
+    Args:
+        env_dir: Environment directoryt for a LabBook
+        image_name: Name of the LabBook Docker image
+
+    Returns:
+        docker image id (Optional)
+    """
+    # Determine if we need to rebuild by testing if the environment changed
+    cache_dir = '/mnt/gigantum/.labmanager/image-cache'
+    if not os.path.exists(cache_dir):
+        logger.info(f"Making environment cache at {cache_dir}")
+        os.makedirs(cache_dir, exist_ok=True)
+    env_cache_path = os.path.join(cache_dir, f"{image_name}.cache")
+
+    m = hashlib.sha256()
+    for root, dirs, files in os.walk(env_dir):
+        for f in [n for n in files if '.yaml' in n]:
+            m.update(os.path.join(root, f).encode())
+            m.update(open(os.path.join(root, f)).read().encode())
+    env_cksum = m.hexdigest()
+
+    if os.path.exists(env_cache_path):
+        old_env_cksum = open(env_cache_path).read()
+    else:
+        with open(env_cache_path, 'w') as cfile:
+            cfile.write(env_cksum)
+        return None
+
+    if env_cksum == old_env_cksum:
+        try:
+            i = get_docker_client().images.get(name=image_name)
+            return i.id
+        except docker.errors.ImageNotFound:
+            pass
+    else:
+        # Env checksum hash is outdated. Remove it.
+        os.remove(env_cache_path)
+        with open(env_cache_path, 'w') as cfile:
+            cfile.write(env_cksum)
+    return None
+
+
+def _remove_docker_image(image_name: str) -> None:
+    try:
+        get_docker_client().images.get(name=image_name)
+        get_docker_client().images.remove(image_name)
+    except docker.errors.ImageNotFound:
+        logger.warning(f"Attempted to delete Docker image {image_name}, but not found")
 
 
 def build_docker_image(root_dir: str, override_image_tag: Optional[str], nocache: bool = False,
@@ -92,12 +152,12 @@ def build_docker_image(root_dir: str, override_image_tag: Optional[str], nocache
                                                                owner=lb.owner['username'],
                                                                username=username)
 
-    # We need to remove any images pertaining to this labbook before triggering a build.
-    try:
-        get_docker_client().images.get(name=image_name)
-        get_docker_client().images.remove(image_name)
-    except docker.errors.ImageNotFound:
-        pass
+    reuse_image_id = _get_cached_image(env_dir, image_name)
+    if reuse_image_id:
+        logger.info(f"Reusing Docker image for {str(lb)}")
+        if feedback_callback:
+            feedback_callback(f"Using cached image {reuse_image_id}")
+        return reuse_image_id
 
     try:
         image_id = None
@@ -105,10 +165,10 @@ def build_docker_image(root_dir: str, override_image_tag: Optional[str], nocache
         # This builds the image and generates output status text.
         for line in docker.from_env().api.build(path=env_dir, tag=image_name, pull=True, nocache=nocache, forcerm=True):
             ldict = json.loads(line)
-            stream = (json.loads(line).get("stream") or "").strip()
+            stream = (ldict.get("stream") or "").strip()
             if feedback_callback:
                 feedback_callback(stream)
-            status = (json.loads(line).get("status") or "").strip()
+            status = (ldict.get("status") or "").strip()
             if feedback_callback:
                 feedback_callback(status)
 
@@ -117,9 +177,11 @@ def build_docker_image(root_dir: str, override_image_tag: Optional[str], nocache
                 # There is no other (simple) way to grab the image ID
                 image_id = stream.split(' ')[-1]
     except docker.errors.BuildError as e:
+        _remove_docker_image(image_name)
         raise ContainerBuildException(e)
 
     if not image_id:
+        _remove_docker_image(image_name)
         raise ContainerBuildException(f"Cannot determine docker image on LabBook from {root_dir}")
 
     return image_id
@@ -176,9 +238,20 @@ def start_labbook_container(labbook_root: str, config_path: str,
         resource_args["nano_cpus"] = round(cpu_limit * 1e9)
 
     docker_client = get_docker_client()
-    container_id = docker_client.containers.run(tag, detach=True, init=True, name=tag,
-                                                environment=env_var, volumes=volumes_dict,
-                                                **resource_args).id
+
+    # run with nvidia if we have GPU support in the labmanager 
+    # CUDA must be set (not None) and version must match between labbook and labmanager
+    cudav = lb.labmanager_config.config["container"].get("cuda_version")
+    logger.info(f"Host CUDA version {cudav}, LabBook CUDA ver {lb.cuda_version}")
+    if cudav and lb.cuda_version:
+        logger.info(f"Launching container with GPU support CUDA version {lb.cuda_version}")
+        container_id = docker_client.containers.run(tag, detach=True, init=True, name=tag,
+                                                    environment=env_var, volumes=volumes_dict,
+                                                    runtime='nvidia', **resource_args).id
+    else:
+        container_id = docker_client.containers.run(tag, detach=True, init=True, name=tag,
+                                                    environment=env_var, volumes=volumes_dict,
+                                                    **resource_args).id
 
     labmanager_ip = ""
     try:

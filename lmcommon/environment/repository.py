@@ -17,11 +17,9 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-import pickle
-from collections import OrderedDict
-from typing import (Any, List, Dict)
-
 import os
+import pickle
+from typing import (Any, List, Dict)
 
 from lmcommon.configuration import Configuration
 

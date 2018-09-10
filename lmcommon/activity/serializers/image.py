@@ -18,7 +18,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 from lmcommon.activity.serializers.mime import MimeSerializer
-from typing import Any, Optional
+from typing import Any
 import base64
 from PIL import Image
 import io

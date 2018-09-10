@@ -99,10 +99,12 @@ class TestIdentityLocal(object):
         assert os.path.exists(os.path.join(mgr.auth_dir, 'cached_id_jwt')) is False
         mgr._save_user(mock_config_file_with_auth[1]['id_token'])
         assert os.path.exists(os.path.join(mgr.auth_dir, 'cached_id_jwt')) is True
+        assert os.path.exists(os.path.join(mgr.auth_dir, 'jwks.json')) is True
 
         # Load User
         mgr.logout()
         assert os.path.exists(os.path.join(mgr.auth_dir, 'cached_id_jwt')) is False
+        assert os.path.exists(os.path.join(mgr.auth_dir, 'jwks.json')) is False
         assert mgr.user is None
         assert mgr.rsa_key is None
         assert mgr._load_user(None) is None

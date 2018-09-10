@@ -31,7 +31,7 @@ from lmcommon.configuration import get_docker_client
 from lmcommon.dispatcher import jobs
 import lmcommon.fixtures
 from lmcommon.fixtures import mock_config_file, mock_config_with_repo
-from lmcommon.environment import ComponentManager,  RepositoryManager
+from lmcommon.environment import ComponentManager, RepositoryManager
 from lmcommon.labbook import LabBook
 from lmcommon.imagebuilder import ImageBuilder
 

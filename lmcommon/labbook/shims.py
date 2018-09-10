@@ -39,7 +39,7 @@ def process_sweep_status(result_obj: ActivityRecord, status: Dict[str, Any],
                                    action=ActivityAction.CREATE)
         sections.append(section)
         if section == "LabBook Root":
-            msg = f"Created new file `{filename}` in the LabBook Root."
+            msg = f"Created new file `{filename}` in the Project Root."
             msg = f"{msg}Note, it is best practice to use the Code, Input, and Output sections exclusively."
         else:
             msg = f"Created new {section} file `{filename}`"
@@ -131,6 +131,7 @@ def to_workspace_branch(labbook, username: Optional[str] = None) -> str:
             labbook.checkout_branch(f'gm.workspace-{username}', new=True)
 
     return labbook.active_branch
+
 
 def in_untracked(labbook_root: str, section: str) -> bool:
     """ Query whether the given section for a labbook root dir is tracked in Git.

@@ -17,20 +17,18 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-from lmcommon.gitlib import get_git_interface
+import os
+import yaml
 import glob
-from collections import OrderedDict
 import pickle
 import operator
 import requests
 import shutil
-from lmcommon.logging import LMLogger
-
-import os
-import yaml
-
+from collections import OrderedDict
 from typing import (Any, List, Dict, Optional)
 
+from lmcommon.gitlib import get_git_interface
+from lmcommon.logging import LMLogger
 from lmcommon.configuration import Configuration
 
 logger = LMLogger.get_logger()
