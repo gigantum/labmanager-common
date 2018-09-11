@@ -196,6 +196,32 @@ class GitLabManager(object):
             logger.error(response.json())
             raise ValueError(msg)
 
+    def set_visibility(self, namespace: str, labbook_name: str, visibility: str) -> None:
+        """ Change public/private visibility for a given project
+
+        Args:
+            namespace: Owner or organization
+            labbook_name: Name of labbook
+            visibility: One of "public" or "private"
+
+        Returns:
+            None (Exception on failure)
+
+        """
+        repo_id = self.get_repository_id(namespace, labbook_name)
+        update_data = {'visibility': visibility}
+        response = requests.put(f"https://{self.remote_host}/api/v4/projects/{repo_id}",
+                                data=update_data, headers={"PRIVATE-TOKEN": self.user_token},
+                                timeout=10)
+        if response.status_code != 200:
+            msg = f"Could not set visibility for remote project {namespace}/{labbook_name} " \
+                  f"to {visibility}: Status code {response.status_code}"
+            raise ValueError(msg)
+
+        details = self.repo_details(namespace, labbook_name)
+        if details.get('visibility') != visibility:
+            raise ValueError(f"Visibility could not be set for {namespace}/{labbook_name} to {visibility}")
+
     def repo_details(self, namespace: str, labbook_name: str) -> Dict[str, Any]:
         """ Get all properties of a given Gitlab Repository, see API documentation
             at https://docs.gitlab.com/ee/api/projects.html#get-single-project.
