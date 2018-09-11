@@ -171,62 +171,6 @@ class GitLabManager(object):
 
         return user_id
 
-    def list_labbooks(self, order_by: str = 'name', sort_str: str = 'desc',
-                      page: int = 0, per_page: int = 20) -> List[Dict[str, Any]]:
-        """Method to list all remote labbooks for a user
-
-        Args:
-            order_by(str): String specifying how projects should be sorted
-            sort_str(str): string indicating order of results, desc or asc, for descending or ascending respectively
-            page(int): Page to query
-            per_page(int): Number of items to return per page
-
-        Supported sorting modes:
-            - az: naturally sort
-            - created_on: sort by creation date, newest first
-            - modified_on: sort by modification date, newest first
-
-        Returns:
-            bool
-        """
-        # Prep request
-        if order_by == 'name':
-            order_by = 'name'
-        elif order_by == 'created_on':
-            order_by = 'created_at'
-        elif order_by == 'modified_on':
-            order_by = 'last_activity_at'
-        else:
-            raise ValueError(f"Unsupported order_by: {order_by}. Use `name`, `created_on`, `modified_on`")
-
-        if sort_str not in ['desc', 'asc']:
-            raise ValueError(f"Unsupported sort_str: {sort_str}. Use `desc`, `asc`")
-
-        query_url = f"https://{self.remote_host}/api/v4/projects?page={page}&" + \
-                    f"per_page={per_page}&order_by={order_by}&sort={sort_str}&membership=true"
-
-        # Call API to check for project
-        response = requests.get(query_url,
-                                headers={"PRIVATE-TOKEN": self.user_token}, timeout=30)
-
-        if response.status_code == 200:
-            # TODO: Add description after async task to populate description in GitLab is implemented
-            labbooks = [{"id": p.get("id"),
-                         "namespace": p.get("namespace").get("name"),
-                         "labbook_name": p.get("name"),
-                         "description": "",
-                         "created_on": p.get("created_at"),
-                         "modified_on": p.get("last_activity_at"),
-                         "visibility": p.get("visibility")} for p in response.json()]
-
-            return labbooks
-
-        else:
-            msg = f"Failed to list Projects. Status Code: {response.status_code}"
-            logger.error(msg)
-            logger.error(response.json())
-            raise ValueError(msg)
-
     def labbook_exists(self, namespace: str, labbook_name: str) -> bool:
         """Method to check if the remote repository already exists
 
@@ -251,6 +195,32 @@ class GitLabManager(object):
             logger.error(msg)
             logger.error(response.json())
             raise ValueError(msg)
+
+    def set_visibility(self, namespace: str, labbook_name: str, visibility: str) -> None:
+        """ Change public/private visibility for a given project
+
+        Args:
+            namespace: Owner or organization
+            labbook_name: Name of labbook
+            visibility: One of "public" or "private"
+
+        Returns:
+            None (Exception on failure)
+
+        """
+        repo_id = self.get_repository_id(namespace, labbook_name)
+        update_data = {'visibility': visibility}
+        response = requests.put(f"https://{self.remote_host}/api/v4/projects/{repo_id}",
+                                data=update_data, headers={"PRIVATE-TOKEN": self.user_token},
+                                timeout=10)
+        if response.status_code != 200:
+            msg = f"Could not set visibility for remote project {namespace}/{labbook_name} " \
+                  f"to {visibility}: Status code {response.status_code}"
+            raise ValueError(msg)
+
+        details = self.repo_details(namespace, labbook_name)
+        if details.get('visibility') != visibility:
+            raise ValueError(f"Visibility could not be set for {namespace}/{labbook_name} to {visibility}")
 
     def repo_details(self, namespace: str, labbook_name: str) -> Dict[str, Any]:
         """ Get all properties of a given Gitlab Repository, see API documentation
