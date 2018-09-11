@@ -23,6 +23,7 @@ import os
 
 
 from lmcommon.labbook import LabBook, LabbookException
+from lmcommon.files import FileOperations
 from lmcommon.fixtures import (mock_config_file, mock_labbook_lfs_disabled, remote_labbook_repo)
 
 # Note, I believe most of these tests are deprecated and OBE.
@@ -128,10 +129,11 @@ class TestLabBook(object):
         # This is 2, in order to account for the activity entry.
         assert r[1] == 0
 
+
         remote_lb = LabBook(mock_config_file[0])
         remote_lb.from_directory(remote_labbook_repo)
         remote_lb.checkout_branch("testing-branch")
-        remote_lb.delete_file("code", "codefile.c")
+        FileOperations.delete_file(remote_lb, "code", "codefile.c")
 
         r = lb.get_commits_behind_remote("origin")
         assert r[0] == 'testing-branch'

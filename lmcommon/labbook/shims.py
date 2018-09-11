@@ -39,7 +39,7 @@ def process_sweep_status(result_obj: ActivityRecord, status: Dict[str, Any],
                                    action=ActivityAction.CREATE)
         sections.append(section)
         if section == "LabBook Root":
-            msg = f"Created new file `{filename}` in the LabBook Root."
+            msg = f"Created new file `{filename}` in the Project Root."
             msg = f"{msg}Note, it is best practice to use the Code, Input, and Output sections exclusively."
         else:
             msg = f"Created new {section} file `{filename}`"

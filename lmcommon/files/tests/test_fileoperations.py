@@ -121,7 +121,7 @@ class TestFileOps(object):
         assert os.path.exists(os.path.join(lb.root_dir, 'input', 'unittestfile'))
         hash_2 = lb.git.commit_hash
 
-        deleted = lb.delete_file(section='input', relative_path='unittestfile')
+        deleted = FileOperations.delete_file(lb, section='input', relative_path='unittestfile')
         hash_3 = lb.git.commit_hash
         assert deleted is True
         target_path = os.path.join(lb.root_dir, 'input', 'unittestfile')
@@ -130,7 +130,7 @@ class TestFileOps(object):
         # Hash_2 == hash_3 because we delete a file in an UNTRACKED section
         assert hash_2 == hash_3
 
-        lb.makedir('input/sample-untracked-dir/nested-dir')
+        FileOperations.makedir(lb, 'input/sample-untracked-dir/nested-dir')
         hash_4 = lb.git.commit_hash
         assert hash_3 == hash_4
         with open('/tmp/unittestfile', 'wb') as f:
@@ -139,13 +139,13 @@ class TestFileOps(object):
         hash_5 = lb.git.commit_hash
         assert hash_4 == hash_5
 
-        lb.move_file(section='input', src_rel_path='sample-untracked-dir/nested-dir/unittestfile', dst_rel_path='unittestfile')
+        FileOperations.move_file(lb, section='input', src_rel_path='sample-untracked-dir/nested-dir/unittestfile', dst_rel_path='unittestfile')
         assert not os.path.exists(os.path.join(lb.root_dir, 'input', 'sample-untracked-dir/nested-dir/unittestfile'))
         assert os.path.exists(os.path.join(lb.root_dir, 'input', 'unittestfile'))
         hash_6 = lb.git.commit_hash
         assert hash_5 == hash_6
 
-        lb.delete_file(section='input', relative_path='sample-untracked-dir/nested-dir', directory=True)
+        FileOperations.delete_file(lb, section='input', relative_path='sample-untracked-dir/nested-dir')
         hash_7 = lb.git.commit_hash
         assert hash_6 == hash_7
 

@@ -58,7 +58,7 @@ class TestLabbookFileOperations(object):
     def test_insert_file_success_2(self, mock_config_file, sample_src_file):
         lb = LabBook(mock_config_file[0])
         lb.new(owner={"username": "test"}, name="test-insert-files-4", description="validate tests.")
-        lb.makedir("output/testdir")
+        FO.makedir(lb, "output/testdir")
         new_file_data = FO.insert_file(lb, "output", sample_src_file, "testdir")
         base_name = os.path.basename(new_file_data['key'])
         assert os.path.exists(os.path.join(lb.root_dir, 'output', 'testdir', base_name))
@@ -104,7 +104,7 @@ class TestLabbookFileOperations(object):
         base_name = os.path.basename(new_file_data['key'])
 
         assert os.path.exists(os.path.join(lb.root_dir, 'code', base_name))
-        lb.delete_file('code', base_name)
+        FO.delete_file(lb, 'code', base_name)
         assert not os.path.exists(os.path.join(lb.root_dir, 'code', base_name))
 
     def test_remove_file_fail(self, mock_config_file, sample_src_file):
@@ -113,19 +113,19 @@ class TestLabbookFileOperations(object):
         FO.insert_file(lb, "code", sample_src_file)
         new_file_path = os.path.join('blah', 'invalid.txt')
         with pytest.raises(ValueError):
-            lb.delete_file('code', new_file_path)
+            FO.delete_file(lb, 'code', new_file_path)
 
     def test_remove_dir(self, mock_config_file, sample_src_file):
         lb = LabBook(mock_config_file[0])
         lb.new(owner={"username": "test"}, name="test-remove-dir-1", description="validate tests.")
-        lb.makedir("output/testdir")
+        FO.makedir(lb, "output/testdir")
         new_file_path = FO.insert_file(lb, "output", sample_src_file, "testdir")
         base_name = os.path.basename(new_file_path['key'])
 
         assert os.path.exists(os.path.join(lb.root_dir, 'output', 'testdir', base_name))
         # Note! Now that remove() uses force=True, no special action is needed for directories.
         # Delete the directory
-        lb.delete_file("output", "testdir", directory=True)
+        FO.delete_file(lb, "output", "testdir")
         assert not os.path.exists(os.path.join(lb.root_dir, 'output', 'testdir', base_name))
         assert not os.path.exists(os.path.join(lb.root_dir, 'output', 'testdir'))
 
@@ -142,7 +142,7 @@ class TestLabbookFileOperations(object):
 
         # move to rename
         moved_rel_path = os.path.join(f'{base_name}.MOVED')
-        lb.move_file('code', new_file_data['key'], moved_rel_path)
+        FO.move_file(lb, 'code', new_file_data['key'], moved_rel_path)
         assert not os.path.exists(os.path.join(lb.root_dir, 'code', base_name))
         assert os.path.exists(os.path.join(lb.root_dir, 'code', f'{base_name}.MOVED'))
         assert os.path.isfile(os.path.join(lb.root_dir, 'code', f'{base_name}.MOVED'))
@@ -157,7 +157,7 @@ class TestLabbookFileOperations(object):
         # make new subdir
         os.makedirs(os.path.join(lb.root_dir, 'code', 'subdir'))
 
-        moved_abs_data = lb.move_file('code',
+        moved_abs_data = FO.move_file(lb, 'code',
                                       base_name,
                                       os.path.join('subdir', base_name))
 
@@ -179,10 +179,10 @@ class TestLabbookFileOperations(object):
 
         # make new subdir with a file in it
         os.makedirs(os.path.join(lb.root_dir, 'code', 'subdir'))
-        lb.move_file("code", base_name, os.path.join('subdir', base_name))
+        FO.move_file(lb, "code", base_name, os.path.join('subdir', base_name))
 
         # Move entire directory
-        lb.move_file("code", 'subdir', 'subdir_moved')
+        FO.move_file(lb, "code", 'subdir', 'subdir_moved')
 
         assert not os.path.exists(os.path.join(lb.root_dir, 'code', 'subdir'))
         assert os.path.exists(os.path.join(lb.root_dir, 'code', 'subdir_moved'))
@@ -197,7 +197,7 @@ class TestLabbookFileOperations(object):
         long_dir = "code/non/existant/dir/should/now/be/made"
         dirs = ["code/cat_dir", "code/dog_dir", "code/mouse_dir/", "code/mouse_dir/new_dir", long_dir]
         for d in dirs:
-            lb.makedir(d)
+            FO.makedir(lb, d)
             assert os.path.isdir(os.path.join(lb.root_dir, d))
             assert os.path.isfile(os.path.join(lb.root_dir, d, '.gitkeep'))
         score = 0
@@ -206,7 +206,7 @@ class TestLabbookFileOperations(object):
                 if f == '.gitkeep':
                     score += 1
         # Ensure that count of .gitkeep files equals the number of subdirs, excluding the code dir.
-        assert score == len(LabBook._make_path_relative(long_dir).split(os.sep)) - 1
+        assert score == len(LabBook.make_path_relative(long_dir).split(os.sep)) - 1
 
     def test_makedir_record(self, mock_config_file):
         # Note that "score" refers to the count of .gitkeep files.
@@ -215,12 +215,12 @@ class TestLabbookFileOperations(object):
 
         assert os.path.exists(os.path.join(lb.root_dir, 'code', 'test')) is False
 
-        lb.makedir("code/test", create_activity_record=True)
+        FO.makedir(lb, "code/test", create_activity_record=True)
 
         assert os.path.exists(os.path.join(lb.root_dir, 'code', 'test')) is True
         assert lb.is_repo_clean is True
 
-        lb.makedir("code/test2", create_activity_record=False)
+        FO.makedir(lb, "code/test2", create_activity_record=False)
         assert os.path.exists(os.path.join(lb.root_dir, 'code', 'test2')) is True
         assert lb.is_repo_clean is False
 
@@ -229,13 +229,13 @@ class TestLabbookFileOperations(object):
         lb.new(owner={"username": "test"}, name="test-insert-files-1", description="validate tests.")
         dirs = ["code/cat_dir", "code/dog_dir", "code/mouse_dir/", "code/mouse_dir/new_dir", "code/.hidden_dir"]
         for d in dirs:
-            lb.makedir(d)
+            FO.makedir(lb, d)
 
         for d in ['.hidden_dir/', '', 'dog_dir', 'mouse_dir/new_dir/']:
             open('/tmp/myfile.c', 'w').write('data')
             FO.insert_file(lb, 'code', '/tmp/myfile.c', d)
 
-        dir_walks_hidden = lb.walkdir('code', show_hidden=True)
+        dir_walks_hidden = FO.walkdir(lb, 'code', show_hidden=True)
         assert any([os.path.basename('/tmp/myfile.c') in d['key'] for d in dir_walks_hidden])
         assert not any(['.git' in d['key'].split(os.path.sep) for d in dir_walks_hidden])
         assert not any(['.gigantum' in d['key'] for d in dir_walks_hidden])
@@ -253,7 +253,7 @@ class TestLabbookFileOperations(object):
         assert dir_walks_hidden[13]['is_dir'] is False
 
         # Since the file is in a hidden directory, it should not be found.
-        dir_walks = lb.walkdir('code')
+        dir_walks = FO.walkdir(lb, 'code')
         # Spot check some entries
         assert len(dir_walks) == 7
         assert dir_walks[0]['key'] == 'cat_dir/'
@@ -277,7 +277,7 @@ class TestLabbookFileOperations(object):
         lb.new(owner={"username": "test"}, name="test-listdir", description="validate tests.")
         dirs = ["code/new_dir", ".hidden_dir"]
         for d in dirs:
-            lb.makedir(d)
+            FO.makedir(lb, d)
         write_test_file(lb.root_dir, 'test1.txt')
         write_test_file(lb.root_dir, 'test2.txt')
         write_test_file(lb.root_dir, '.hidden.txt')
@@ -286,17 +286,17 @@ class TestLabbookFileOperations(object):
         write_test_file(lb.root_dir, 'code/new_dir/tester.txt')
 
         # List just the code dir
-        data = lb.listdir("code", base_path='')
+        data = FO.listdir(lb, "code", base_path='')
         assert len(data) == 3
         assert data[0]['key'] == 'new_dir/'
         assert data[1]['key'] == 'test_subdir1.txt'
         assert data[2]['key'] == 'test_subdir2.txt'
 
-        data = lb.listdir("input", base_path='')
+        data = FO.listdir(lb, "input", base_path='')
         assert len(data) == 0
 
         # List just the code/subdir dir
-        data = lb.listdir("code", base_path='new_dir')
+        data = FO.listdir(lb, "code", base_path='new_dir')
         assert len(data) == 1
         assert data[0]['key'] == 'new_dir/tester.txt'
 
@@ -305,14 +305,14 @@ class TestLabbookFileOperations(object):
         lb.new(owner={"username": "test"}, name="test-listdir", description="validate tests.")
 
         with pytest.raises(ValueError):
-            lb.listdir("code", base_path='blah')
+            FO.listdir(lb, "code", base_path='blah')
 
     def test_walkdir_with_favorites(self, mock_config_file, sample_src_file):
         lb = LabBook(mock_config_file[0])
         lb.new(owner={"username": "test"}, name="test-insert-files-1", description="validate tests.")
         dirs = ["code/cat_dir", "code/dog_dir"]
         for d in dirs:
-            lb.makedir(d)
+            FO.makedir(lb, d)
 
         sfile = '/tmp/testwalkdirwithfavorites.file'
         for d in ['', 'dog_dir', 'cat_dir']:
@@ -322,7 +322,7 @@ class TestLabbookFileOperations(object):
         sample_filename = os.path.basename(sfile)
 
         # Since the file is in a hidden directory, it should not be found.
-        dir_walks = lb.walkdir('code')
+        dir_walks = FO.walkdir(lb, 'code')
         # Spot check some entries
         assert len(dir_walks) == 5
         assert dir_walks[0]['key'] == 'cat_dir/'
@@ -342,7 +342,7 @@ class TestLabbookFileOperations(object):
         lb.create_favorite("code", f"dog_dir/{sample_filename}", description="Fav 2")
         lb.create_favorite("code", f"cat_dir/", description="Fav 3", is_dir=True)
 
-        dir_walks = lb.walkdir('code')
+        dir_walks = FO.walkdir(lb, 'code')
         # Spot check some entries
         assert len(dir_walks) == 5
         assert dir_walks[0]['key'] == 'cat_dir/'

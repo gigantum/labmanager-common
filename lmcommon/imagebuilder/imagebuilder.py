@@ -171,16 +171,19 @@ class ImageBuilder(object):
 
     def _entrypoint_hooks(self):
         """ Contents of docker setup that must be at end of Dockerfile. """
+
+        env_vars = "ENV LB_HOME=/mnt/labbook"
+        env_vars = f"{env_vars} LB_CODE=/mnt/labbook/code"
+        env_vars = f"{env_vars} LB_INPUT=/mnt/labbook/input"
+        env_vars = f"{env_vars} LB_OUTPUT=/mnt/labbook/output"
+        env_vars = f"{env_vars} PROJECT_ROOT=/mnt/labbook"
+        env_vars = f"{env_vars} PROJECT_CODE=/mnt/labbook/code"
+        env_vars = f"{env_vars} PROJECT_INPUT=/mnt/labbook/input"
+        env_vars = f"{env_vars} PROJECT_OUTPUT=/mnt/labbook/output"
+
         return [
             '## Entrypoint hooks',
-            'ENV LB_HOME=/mnt/labbook',
-            'ENV LB_CODE=/mnt/labbook/code',
-            'ENV LB_INPUT=/mnt/labbook/input',
-            'ENV LB_OUTPUT=/mnt/labbook/output',
-            'ENV PROJECT_ROOT=/mnt/labbook',
-            'ENV PROJECT_CODE=/mnt/labbook/code',
-            'ENV PROJECT_INPUT=/mnt/labbook/input',
-            'ENV PROJECT_OUTPUT=/mnt/labbook/output',
+            env_vars,
             "# Run Environment",
             'ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]',
             'WORKDIR /mnt/labbook',

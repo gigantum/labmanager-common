@@ -132,6 +132,9 @@ class LocalIdentityManager(IdentityManager):
         data_file = os.path.join(self.auth_dir, 'cached_id_jwt')
         if os.path.exists(data_file):
             os.remove(data_file)
+        data_file = os.path.join(self.auth_dir, 'jwks.json')
+        if os.path.exists(data_file):
+            os.remove(data_file)
 
         self.user = None
         self.rsa_key = None

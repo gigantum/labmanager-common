@@ -171,7 +171,7 @@ exec gosu giguser "$@"
             short_message = f"Wrote custom Docker snippet `{name}`"
             self.labbook.git.add(docker_file)
             commit = self.labbook.git.commit(short_message)
-            adr = ActivityDetailRecord(ActivityDetailType.ENVIRONMENT, show=True, action=ActivityAction.CREATE)
+            adr = ActivityDetailRecord(ActivityDetailType.ENVIRONMENT, show=False, action=ActivityAction.CREATE)
             adr.add_value('text/plain', '\n'.join(docker_content))
             ar = ActivityRecord(ActivityType.ENVIRONMENT,
                                 message=short_message,
@@ -393,6 +393,7 @@ exec gosu giguser "$@"
             cf.write(yaml.dump(component_data, default_flow_style=False))
 
         if component_class == 'base':
+            self.labbook.cuda_version = component_data.get('cuda_version')
             for manager in component_data['package_managers']:
                 packages = list()
                 # Build dictionary of packages
