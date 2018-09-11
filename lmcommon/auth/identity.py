@@ -165,8 +165,14 @@ class IdentityManager(metaclass=abc.ABCMeta):
                 jwks = json.load(jwk_file)
 
         else:
-            url = "https://" + self.config.config['auth']['provider_domain'] + "/.well-known/jwks.json"
-            response = requests.get(url)
+            try:
+                url = "https://" + self.config.config['auth']['provider_domain'] + "/.well-known/jwks.json"
+                response = requests.get(url)
+            except Exception as err:
+                logger.info(type(err))
+                logger.info(err)
+                raise AuthenticationError(str(err), 401)
+
             if response.status_code != 200:
                 raise AuthenticationError("Failed to load public RSA key to validate Bearer token", 401)
 
