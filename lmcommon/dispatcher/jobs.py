@@ -33,7 +33,7 @@ from lmcommon.configuration import Configuration
 from lmcommon.configuration.utils import call_subprocess
 from lmcommon.labbook import LabBook
 from lmcommon.logging import LMLogger
-from lmcommon.workflows import sync_locally
+from lmcommon.workflows import sync_locally, GitWorkflow
 from lmcommon.container.core import (build_docker_image as build_image,
                                      start_labbook_container as start_container,
                                      stop_labbook_container as stop_container)
@@ -43,6 +43,42 @@ from lmcommon.container.core import (build_docker_image as build_image,
 #
 # None of the following methods can use global variables.
 # ANY use of globals will cause the following methods to fail.
+
+
+def publish_labbook(labbook_path: str, username: str, access_token: str,
+                    remote: Optional[str] = None, public: bool = False) -> None:
+    p = os.getpid()
+    logger = LMLogger.get_logger()
+    logger.info(f"(Job {p}) Starting publish_labbook({labbook_path})")
+
+    try:
+        labbook: LabBook = LabBook()
+        labbook.from_directory(labbook_path)
+
+        wf = GitWorkflow(labbook)
+        wf.publish(username=username, access_token=access_token, remote=remote or "origin",
+                   public=public)
+    except Exception as e:
+        logger.exception(f"(Job {p}) Error on publish_labbook: {e}")
+        raise
+
+
+def sync_labbook(labbook_path: str, username: str, remote: str = "origin",
+                 force: bool = False) -> int:
+    p = os.getpid()
+    logger = LMLogger.get_logger()
+    logger.info(f"(Job {p}) Starting sync_labbook({labbook_path})")
+
+    try:
+        labbook: LabBook = LabBook()
+        labbook.from_directory(labbook_path)
+
+        wf = GitWorkflow(labbook)
+        cnt = wf.sync(username=username, remote=remote, force=force)
+        return cnt
+    except Exception as e:
+        logger.exception(f"(Job {p}) Error on sync_labbook: {e}")
+        raise
 
 
 def export_labbook_as_zip(labbook_path: str, lb_export_directory: str) -> str:

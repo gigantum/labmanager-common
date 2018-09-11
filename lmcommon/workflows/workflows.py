@@ -17,6 +17,7 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
+import time
 from typing import Optional
 
 from lmcommon.configuration.utils import call_subprocess
@@ -62,9 +63,13 @@ class GitWorkflow(object):
             try:
                 self.labbook.sweep_uncommitted_changes()
                 vis = "public" if public is True else "private"
+                t0 = time.time()
                 core.create_remote_gitlab_repo(labbook=self.labbook, username=username,
                                                access_token=access_token, visibility=vis)
+                logger.info(f"Created remote repo for {str(self.labbook)} in {time.time()-t0:.1f}sec")
+                t0 = time.time()
                 core.publish_to_remote(labbook=self.labbook, username=username, remote=remote)
+                logger.info(f"Published {str(self.labbook)} in {time.time()-t0:.1f}sec")
             except Exception as e:
                 # Unsure what specific exception add_remote creates, so make a catchall.
                 logger.error(f"Publish failed {e}: {str(self.labbook)} may be in corrupted Git state!")
