@@ -45,8 +45,8 @@ from lmcommon.container.core import (build_docker_image as build_image,
 # ANY use of globals will cause the following methods to fail.
 
 
-def publish_labbook(labbook_path: str, username: str, access_token: Optional[str] = None,
-                    remote: Optional[str] = "origin", public: bool = False) -> str:
+def publish_labbook(labbook_path: str, username: str, access_token: str,
+                    remote: Optional[str] = None, public: bool = False) -> None:
     p = os.getpid()
     logger = LMLogger.get_logger()
     logger.info(f"(Job {p}) Starting publish_labbook({labbook_path})")
@@ -56,7 +56,7 @@ def publish_labbook(labbook_path: str, username: str, access_token: Optional[str
         labbook.from_directory(labbook_path)
 
         wf = GitWorkflow(labbook)
-        wf.publish(username=username, access_token=access_token, remote=remote,
+        wf.publish(username=username, access_token=access_token, remote=remote or "origin",
                    public=public)
     except Exception as e:
         logger.exception(f"(Job {p}) Error on publish_labbook: {e}")
@@ -74,7 +74,8 @@ def sync_labbook(labbook_path: str, username: str, remote: str = "origin",
         labbook.from_directory(labbook_path)
 
         wf = GitWorkflow(labbook)
-        wf.sync(username=username, remote=remote, force=force)
+        cnt = wf.sync(username=username, remote=remote, force=force)
+        return cnt
     except Exception as e:
         logger.exception(f"(Job {p}) Error on sync_labbook: {e}")
         raise
